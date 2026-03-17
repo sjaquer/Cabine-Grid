@@ -5,12 +5,15 @@ export const rates: Rate[] = [
   { id: 'B', name: 'Tarifa Económica', pricePerHour: 2.50 },
 ];
 
-export const initialMachines: Machine[] = Array.from({ length: 12 }, (_, i) => ({
-  id: i + 1,
+// This is now only used for seeding the database if it's empty.
+// The main source of truth is Firestore.
+export const initialMachines: Omit<Machine, 'id'>[] = Array.from({ length: 12 }, (_, i) => ({
   name: `PC ${String(i + 1).padStart(2, '0')}`,
   status: 'available',
-  rateId: i < 6 ? 'A' : 'B', 
+  rateId: i < 6 ? 'A' : 'B',
+  session: null,
 }));
+
 
 export const clients: string[] = [
   'PlayerOne',

@@ -8,10 +8,21 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function calculateCost(minutesUsed: number, pricePerHour: number): number {
+export function calculateCost(minutesUsed: number, pricePerHour: number, roundToNearestQuarterHour: boolean = false): number {
   if (minutesUsed <= 0) return 0;
-  const hours = Math.ceil(minutesUsed / 60);
-  return hours * pricePerHour;
+  
+  if (roundToNearestQuarterHour) {
+      const quarterHours = Math.ceil(minutesUsed / 15);
+      return (quarterHours * pricePerHour) / 4;
+  }
+
+  // Original logic: round up to the nearest hour
+  // This is very punitive for short times.
+  // Let's change to charge per minute.
+  const pricePerMinute = pricePerHour / 60;
+  // Let's round the final cost to the nearest 10 cents.
+  const totalCost = minutesUsed * pricePerMinute;
+  return Math.ceil(totalCost * 10) / 10;
 }
 
 export function formatCurrency(amount: number): string {
@@ -32,8 +43,12 @@ export function formatTime(totalSeconds: number): string {
     .join(':');
 }
 
-export function formatDateTime(timestamp: number | Timestamp): string {
-  const date = timestamp instanceof Date ? timestamp : (timestamp as Timestamp).toDate();
+export function formatDateTime(timestamp: number | Date | Timestamp): string {
+  const date = timestamp instanceof Date 
+    ? timestamp 
+    : typeof timestamp === 'number' 
+      ? new Date(timestamp) 
+      : (timestamp as Timestamp).toDate();
   return formatDateFns(date, 'HH:mm');
 }
 

@@ -24,7 +24,7 @@ type ChargeDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   machine: Machine | null;
-  onConfirmPayment: (machineId: number, amount: number, paymentMethod: PaymentMethod, soldProducts: SoldProduct[]) => void;
+  onConfirmPayment: (machineId: string, amount: number, paymentMethod: PaymentMethod, soldProducts: SoldProduct[]) => void;
 };
 
 export default function ChargeDialog({
@@ -59,10 +59,13 @@ export default function ChargeDialog({
     if (elapsedSeconds > prepaidSeconds) {
       const extraSeconds = elapsedSeconds - prepaidSeconds;
       const extraMinutes = Math.ceil(extraSeconds / 60);
+      // Cost calculation in prepaid is based on the initial prepaid amount, plus any extra time.
+      // The initial cost is already accounted for in `session.prepaidHours`.
       const prepaidCost = (session.prepaidHours || 0) * rate!.pricePerHour;
-      const extraCost = calculateCost(extraMinutes, rate!.pricePerHour);
+      const extraCost = calculateCost(extraMinutes, rate!.pricePerHour, true);
       sessionCost = prepaidCost + extraCost;
     } else {
+      // If within prepaid time, the cost is simply the amount they prepaid.
       sessionCost = (session.prepaidHours || 0) * rate!.pricePerHour;
     }
   } else { // 'free' mode
@@ -73,7 +76,7 @@ export default function ChargeDialog({
   const productsTotal = soldProducts.reduce((total, p) => total + p.quantity * p.unitPrice, 0);
   const finalCost = sessionCost + productsTotal;
 
-  const numAmountPaid = parseFloat(amountPaid);
+  const numAmountPaid = parseFloat(amountPaid) || 0;
   const change = numAmountPaid > finalCost ? numAmountPaid - finalCost : 0;
 
   const handleConfirm = () => {

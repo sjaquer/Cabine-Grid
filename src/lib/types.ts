@@ -24,11 +24,11 @@ export type Session = {
 };
 
 export type Machine = {
-  id: number;
+  id: string;
   name: string;
   status: MachineStatus;
   rateId?: Rate['id'];
-  session?: Session;
+  session?: Session | null;
 };
 
 export type Product = {

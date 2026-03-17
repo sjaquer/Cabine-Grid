@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, Clock, Hash, Smartphone, Landmark, ShoppingCart, User, Package } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Badge } from "../ui/badge";
+import type { Timestamp } from "firebase/firestore";
 
 type SalesHistorySheetProps = {
   isOpen: boolean;
@@ -100,7 +101,7 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
                   <AccordionItem value={sale.id} key={sale.id}>
                      <AccordionTrigger className="px-4 hover:no-underline hover:bg-muted/50">
                         <div className="flex-1 grid grid-cols-4 sm:grid-cols-6 gap-2 text-left text-sm">
-                           <div className="font-medium flex items-center gap-2"><Clock className="w-3 h-3 text-muted-foreground" />{formatDateTime(sale.endTime)}</div>
+                           <div className="font-medium flex items-center gap-2"><Clock className="w-3 h-3 text-muted-foreground" />{formatDateTime(sale.endTime as Timestamp)}</div>
                            <div className="font-semibold">{sale.machineName}</div>
                            <div className="hidden sm:block">{sale.clientName || 'Ocasional'}</div>
                            <div className="hidden sm:block capitalize">{sale.paymentMethod}</div>

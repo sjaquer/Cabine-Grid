@@ -8,12 +8,12 @@ import {
 } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 
-import { useAuth as useFirebaseAuth, useFirestore } from '../provider';
-
+import { useFirebaseAuthInstance, useFirestore } from '../provider';
 import type { UserProfile } from '@/lib/types';
-
+import { useMemoFirebase } from '../provider';
+import { useDoc } from '../firestore/use-doc';
 
 export interface AuthContextValue {
   user: User | null;
@@ -25,41 +25,41 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const auth = useFirebaseAuth();
+  const auth = useFirebaseAuthInstance();
   const firestore = useFirestore();
 
   const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Subscribe to auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      if (firebaseUser) {
-        const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-        const unsubProfile = onSnapshot(userDocRef, (doc) => {
-          if (doc.exists()) {
-            setUserProfile({ uid: doc.id, ...doc.data() } as UserProfile);
-          } else {
-            setUserProfile(null);
-          }
-          setLoading(false);
-        });
-        return () => unsubProfile();
-      } else {
-        setUserProfile(null);
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [auth, firestore]);
+  }, [auth]);
+
+  // Create a memoized reference to the user's profile document
+  const userDocRef = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [user, firestore]);
+  
+  // Use the useDoc hook to get the user profile in real-time
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
   const logout = async () => {
     await signOut(auth);
   };
 
-  const value = { user, userProfile, loading, logout };
+  const value = { 
+    user, 
+    userProfile: userProfile as UserProfile | null, 
+    loading: loading || isProfileLoading, 
+    logout 
+  };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
