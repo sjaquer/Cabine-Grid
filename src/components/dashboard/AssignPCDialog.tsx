@@ -238,7 +238,7 @@ export default function AssignPCDialog({
                     <FormItem>
                         <FormLabel>{prepaidInputMode === 'amount' ? 'Monto a Pagar (PEN)' : 'Horas a Jugar'}</FormLabel>
                         <FormControl>
-                        <Input type="number" step="0.5" placeholder={prepaidInputMode === 'amount' ? 'Ej: 10.00' : 'Ej: 1.5'} {...field} />
+                        <Input type="number" step="0.5" placeholder={prepaidInputMode === 'amount' ? 'Ej: 10.00' : 'Ej: 1.5'} {...field} value={field.value ?? ''} />
                         </FormControl>
                         {calculatedValue && <FormDescription>Equivale a: {calculatedValue}</FormDescription>}
                         <FormMessage />
