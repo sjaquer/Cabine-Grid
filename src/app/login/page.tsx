@@ -5,8 +5,7 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/firebase/firebase';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth as useFirebaseAuth, useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -32,6 +31,7 @@ type LoginFields = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const { user } = useAuth();
+  const auth = useFirebaseAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);

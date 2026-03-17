@@ -4,6 +4,7 @@ import * as React from "react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import type { Sale } from "@/lib/types"
 import { format, getHours } from "date-fns"
+import type { Timestamp } from "firebase/firestore"
 
 import {
   Card,
@@ -31,7 +32,8 @@ export default function SalesChart({ sales }: SalesChartProps) {
     }));
 
     sales.forEach(sale => {
-      const hour = getHours(new Date(sale.endTime));
+      const saleDate = (sale.endTime as Timestamp).toDate();
+      const hour = getHours(saleDate);
       if (hourlySales[hour]) {
         hourlySales[hour].total += sale.amount;
       }

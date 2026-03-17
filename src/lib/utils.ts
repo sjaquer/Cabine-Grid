@@ -1,6 +1,8 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { format as formatDateFns } from "date-fns"
+import type { Timestamp } from "firebase/firestore";
+
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -30,8 +32,9 @@ export function formatTime(totalSeconds: number): string {
     .join(':');
 }
 
-export function formatDateTime(timestamp: number): string {
-  return formatDateFns(new Date(timestamp), 'HH:mm');
+export function formatDateTime(timestamp: number | Timestamp): string {
+  const date = timestamp instanceof Date ? timestamp : (timestamp as Timestamp).toDate();
+  return formatDateFns(date, 'HH:mm');
 }
 
 export function formatDuration(minutes: number): string {

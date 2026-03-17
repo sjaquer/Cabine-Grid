@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { Machine, Sale, PaymentMethod, SoldProduct, UserProfile } from "@/lib/types";
 import { initialMachines, rates } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
@@ -10,14 +10,14 @@ import PCGrid from "./PCGrid";
 import AssignPCDialog, { type AssignPCFormValues } from "./AssignPCDialog";
 import ChargeDialog from "./ChargeDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
-import { useAuth } from "@/hooks/use-auth";
-import { collection, addDoc, onSnapshot, query, where, Timestamp } from "firebase/firestore";
-import { db } from "@/firebase/firebase";
+import { useAuth, useCollection, useFirestore } from '@/firebase';
+import { collection, addDoc, query, where, Timestamp } from "firebase/firestore";
+
 
 export default function Dashboard() {
   const { user, userProfile } = useAuth();
+  const firestore = useFirestore();
   const [machines, setMachines] = useState<Machine[]>(initialMachines);
-  const [sales, setSales] = useState<Sale[]>([]);
   
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
   const [machineToAssign, setMachineToAssign] = useState<Machine | null>(null);
@@ -29,24 +29,17 @@ export default function Dashboard() {
   
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Fetch sales for today from Firestore
-    if (!user) return;
-    
+  const salesQuery = useMemo(() => {
+    if (!user) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfToday = Timestamp.fromDate(today);
 
-    const salesRef = collection(db, "sales");
-    const q = query(salesRef, where("endTime", ">=", startOfToday));
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const salesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
-      setSales(salesData.sort((a, b) => b.endTime - a.endTime));
-    });
+    return query(collection(firestore, "sales"), where("endTime", ">=", startOfToday));
+  }, [firestore, user]);
 
-    return () => unsubscribe();
-  }, [user]);
+  const { data: sales, loading: salesLoading } = useCollection<Sale>(salesQuery);
+  const sortedSales = useMemo(() => sales ? [...sales].sort((a, b) => b.endTime - a.endTime) : [], [sales]);
 
 
   useEffect(() => {
@@ -149,8 +142,8 @@ export default function Dashboard() {
     const newSale = {
       machineName: machine.name,
       clientName: session.client || "Ocasional",
-      startTime: session.startTime,
-      endTime,
+      startTime: Timestamp.fromMillis(session.startTime),
+      endTime: Timestamp.fromMillis(endTime),
       totalMinutes,
       amount,
       rate,
@@ -163,7 +156,7 @@ export default function Dashboard() {
     };
     
     try {
-      await addDoc(collection(db, "sales"), newSale);
+      await addDoc(collection(firestore, "sales"), newSale);
 
       setMachines(prev =>
         prev.map(m => 
@@ -191,7 +184,7 @@ export default function Dashboard() {
 
   const availableMachines = machines.filter(m => m.status === 'available').length;
   const occupiedMachines = machines.length - availableMachines;
-  const dailySales = sales.reduce((sum, sale) => sum + sale.amount, 0);
+  const dailySales = sortedSales.reduce((sum, sale) => sum + sale.amount, 0);
 
   return (
     <div className="flex flex-col h-screen bg-secondary">
@@ -223,7 +216,7 @@ export default function Dashboard() {
       <SalesHistorySheet 
         isOpen={isHistorySheetOpen}
         onOpenChange={setHistorySheetOpen}
-        sales={sales}
+        sales={sortedSales}
         userProfile={userProfile}
       />
     </div>

@@ -1,0 +1,219 @@
+{
+  "entities": {
+    "Machine": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Machine",
+      "type": "object",
+      "description": "Represents a single computer station available for use in the LAN center.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Machine entity."
+        },
+        "machineNumber": {
+          "type": "string",
+          "description": "A human-readable identifier for the machine, e.g., 'PC 01'."
+        },
+        "tariffType": {
+          "type": "string",
+          "description": "The tariff plan assigned to this machine ('A' or 'B').",
+          "format": "enum"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current operational status of the machine ('Free' or 'Occupied').",
+          "format": "enum"
+        },
+        "currentSessionId": {
+          "type": "string",
+          "description": "Reference to the currently active session on this machine. Null if the machine is 'Free'. (Relationship: Machine 1:1 Session)"
+        }
+      },
+      "required": [
+        "id",
+        "machineNumber",
+        "tariffType",
+        "status"
+      ]
+    },
+    "Customer": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Customer",
+      "type": "object",
+      "description": "Represents a customer who uses the LAN center machines.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Customer entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the customer."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the customer.",
+          "format": "email"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The phone number of the customer."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Session": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Session",
+      "type": "object",
+      "description": "Represents a single usage period of a machine by a customer.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Session entity."
+        },
+        "machineId": {
+          "type": "string",
+          "description": "Reference to the Machine where the session took place. (Relationship: Machine 1:N Session)"
+        },
+        "customerId": {
+          "type": "string",
+          "description": "Reference to the Customer who initiated the session. (Relationship: Customer 1:N Session)"
+        },
+        "startTime": {
+          "type": "string",
+          "description": "The date and time when the session officially started.",
+          "format": "date-time"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "The date and time when the session officially ended and payment was processed. Null if the session is still active.",
+          "format": "date-time"
+        },
+        "sessionType": {
+          "type": "string",
+          "description": "The mode of usage for the session ('Free' for pay-as-you-go, 'Prepaid' for fixed duration).",
+          "format": "enum"
+        },
+        "prepaidMinutes": {
+          "type": "number",
+          "description": "The total number of minutes prepaid by the customer, applicable only for 'Prepaid' sessions."
+        },
+        "tariffType": {
+          "type": "string",
+          "description": "The tariff plan applied to this session ('A' or 'B'). Stored for historical context.",
+          "format": "enum"
+        },
+        "calculatedCost": {
+          "type": "number",
+          "description": "The total amount calculated to be charged for the session based on tariff and duration."
+        },
+        "actualPaidAmount": {
+          "type": "number",
+          "description": "The actual amount received from the customer for this session."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the session ('Active', 'Finished', 'Cancelled').",
+          "format": "enum"
+        },
+        "paymentDateTime": {
+          "type": "string",
+          "description": "The date and time when the payment for this session was recorded.",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Any additional notes or remarks about the session."
+        }
+      },
+      "required": [
+        "id",
+        "machineId",
+        "customerId",
+        "startTime",
+        "sessionType",
+        "tariffType",
+        "status"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/admin_users/{uid}",
+        "definition": {
+          "entityName": "AdminUser",
+          "schema": {
+            "$ref": "#/backend/entities/AdminUser"
+          },
+          "description": "A collection used for Database Access Control (DBAC). The existence of a document at `/admin_users/{uid}` signifies that the corresponding user (identified by {uid}) has administrative privileges for the application. This is a logical entity for authorization; the document content itself may be minimal (e.g., { 'isAdmin': true }).",
+          "params": [
+            {
+              "name": "uid",
+              "description": "The unique identifier of the Firebase authenticated user who holds administrative privileges."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/machines/{machineId}",
+        "definition": {
+          "entityName": "Machine",
+          "schema": {
+            "$ref": "#/backend/entities/Machine"
+          },
+          "description": "A top-level collection storing the current state and configuration for all individual LAN center machines. Accessible only by authenticated administrators. Includes `currentSessionId` to link to an active session for quick lookup.",
+          "params": [
+            {
+              "name": "machineId",
+              "description": "The unique identifier for a specific machine."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/customers/{customerId}",
+        "definition": {
+          "entityName": "Customer",
+          "schema": {
+            "$ref": "#/backend/entities/Customer"
+          },
+          "description": "A top-level collection containing profiles for all customers of the LAN center. Accessible only by authenticated administrators for search, selection, and management.",
+          "params": [
+            {
+              "name": "customerId",
+              "description": "The unique identifier for a specific customer."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/sessions/{sessionId}",
+        "definition": {
+          "entityName": "Session",
+          "schema": {
+            "$ref": "#/backend/entities/Session"
+          },
+          "description": "A top-level collection storing all active and historical usage sessions. Includes `machineId` and `customerId` as foreign keys to link to the respective entities. The `tariffType` is denormalized from the machine at the start of the session for historical accuracy and to ensure authorization independence for session data. Accessible only by authenticated administrators.",
+          "params": [
+            {
+              "name": "sessionId",
+              "description": "The unique identifier for a specific session."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed for a LAN center management web application, primarily accessed by authenticated administrators. It follows a flat collection model for `machines`, `customers`, and `sessions` to ensure query flexibility and adherence to security principles, especially 'Authorization Independence' and 'QAPs (Rules are not Filters)'.\n\n**Authorization Independence:** For this administrative application, the core authorization mechanism relies on a Database Access Control (DBAC) pattern using a dedicated `/admin_users/{uid}` collection. Any user attempting to access data in `/machines`, `/customers`, or `/sessions` must have their `request.auth.uid` present as a document ID in the `/admin_users` collection. This completely removes any need for hierarchical authorization dependencies (`get()`) within the core data collections (Machine, Customer, Session). Each document is inherently authorized by the administrator's role, not by its relationship to a parent document's attributes. This approach simplifies security rules significantly, making them robust and easy to debug, as authorization is a simple existence check.\n\n**QAPs (Rules are not Filters):**\n1.  **`/machines`:** This collection allows administrators to `list` all machines, which is crucial for displaying the real-time dashboard grid. Since all machine documents share the same security posture (admin-readable/writable), no filtering is performed by security rules, fully supporting QAPs.\n2.  **`/customers`:** This collection allows administrators to `list` all customers for quick search and selection. All customer documents have the same security posture (admin-readable/writable), making `list` operations compliant with QAPs.\n3.  **`/sessions`:** This collection stores all active and historical sessions. Administrators can `list` all sessions to generate daily sales reports or find active sessions. All session documents are admin-readable/writable, ensuring `list` operations are secure and efficient. Queries can then apply client-side filtering (e.g., by `status`, `startTime`, `machineId`, `customerId`) without violating QAPs.\n\n**Denormalization:** The `Session` entity denormalizes `tariffType` from `Machine`. While this is primarily for historical data integrity (ensuring the session's tariff remains consistent even if the machine's tariff changes), it also contributes to authorization independence by making the session document self-contained, reducing the need to `get()` the parent `Machine` document for session-specific logic, even for potential future read rules.\n\n**Structural Segregation:** Each top-level collection (`machines`, `customers`, `sessions`) contains documents with a homogeneous security posture (all are admin-managed). This prevents mixing different access levels within a single collection, simplifying rule definitions and ensuring clarity of intent."
+  }
+}

@@ -1,4 +1,5 @@
 import type { User as FirebaseUser } from "firebase/auth";
+import type { Timestamp } from "firebase/firestore";
 
 export type Rate = {
   id: 'A' | 'B';
@@ -48,8 +49,8 @@ export type Sale = {
   id: string;
   machineName: string;
   clientName?: string;
-  startTime: number;
-  endTime: number;
+  startTime: Timestamp;
+  endTime: Timestamp;
   totalMinutes: number;
   amount: number;
   rate: Rate;

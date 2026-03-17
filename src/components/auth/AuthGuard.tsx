@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Skeleton } from '../ui/skeleton';

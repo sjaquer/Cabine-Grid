@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
 import {
   DropdownMenu,

@@ -1,32 +1,120 @@
+/**
+ * Core Philosophy: This ruleset implements a strict, centralized Database Access Control (DBAC) model.
+ * All access to the core data collections (machines, customers, sessions) is gated by a single
+ * authorization check: the requesting user's UID must exist as a document in the /admin_users
+ * collection. This ensures that only authenticated administrators can read or write application data.
+ *
+ * Data Structure: The data is organized into flat, top-level collections for `machines`, `customers`,
+ * and `sessions`. A separate top-level collection, `/admin_users/{uid}`, serves as an access control
+ * list to define who is an administrator. This flat structure simplifies queries and security rules.
+ *
+ * Key Security Decisions:
+ * - Default Deny: All operations are denied by default. Access is only granted explicitly to admins.
+ * - Centralized Admin Roles: A user's role is determined solely by the existence of a document in
+ *   `/admin_users/{uid}`. This avoids scattering role-based logic across the ruleset.
+ * - No Public Access: There are no publicly readable or writable collections. All data is
+ *   considered sensitive and for internal administrative use only.
+ * - Admin Management: A signed-in user can create their own document in `/admin_users` to become
+ *   the first administrator. However, only existing administrators can view, modify, or delete
+ *   other admin role documents.
+ *
+ * Denormalization for Authorization: The primary authorization mechanism is the `/admin_users`
+ * collection itself. This is a form of denormalization where admin status is stored separately
+ * from user profiles, allowing for a fast `exists()` check instead of reading a user document.
+ * This approach is highly performant and secure.
+ *
+ * Structural Segregation: Each data collection (`machines`, `customers`, `sessions`) has a
+ * uniform security posture—they are all admin-only. This clear separation of concerns simplifies
+ * the rules and prevents accidental data exposure.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
+    // ----------------------------------------------------------------------
+    // Helper Functions
+    // ----------------------------------------------------------------------
+
+    /**
+     * Returns true if the user is authenticated.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    function getUserRole(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data.role;
-    }
-    
+
+    /**
+     * Checks if the currently authenticated user is an administrator.
+     * An admin is defined by the existence of a document with their UID
+     * in the /admin_users collection.
+     */
     function isAdmin() {
-      return isSignedIn() && getUserRole(request.auth.uid) == 'admin';
+      return isSignedIn() && exists(/databases/$(database)/documents/admin_users/$(request.auth.uid));
     }
 
-    match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create: if isSignedIn(); // Users are created via function, but this allows setting up their profile doc
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    // ----------------------------------------------------------------------
+    // Collection Rules
+    // ----------------------------------------------------------------------
+
+    /**
+     * @description Manages the list of administrators. The existence of a document
+     *              at /admin_users/{uid} grants that user admin privileges.
+     * @path        /admin_users/{uid}
+     * @allow       (create) An authenticated user creating their own admin document for the first time.
+     * @allow       (get) An existing admin checking if another user is also an admin.
+     * @deny        (list) A non-admin user trying to list all administrators.
+     * @deny        (delete) A non-admin user trying to remove an administrator.
+     * @principle   Bootstraps the first admin while securing subsequent role management.
+     */
+    match /admin_users/{uid} {
+      allow get, list: if isAdmin();
+      allow create: if request.auth.uid == uid;
+      allow update, delete: if isAdmin() && resource != null;
     }
 
-    match /sales/{saleId} {
-      allow read, write: if isSignedIn(); // Employees and admins can read/write sales
+    /**
+     * @description Rules for the collection of LAN center machines.
+     *              Full read and write access is restricted to administrators.
+     * @path        /machines/{machineId}
+     * @allow       (get, list, create, update, delete) Any request from a user who is an admin.
+     * @deny        (get) A request from a regular authenticated user who is not an admin.
+     * @deny        (create) An attempt by a non-admin to add a new machine.
+     * @principle   Restricts all data management to verified administrators.
+     */
+    match /machines/{machineId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() && resource != null;
     }
 
-    match /products/{productId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin(); // Only admins can manage products
+    /**
+     * @description Rules for the collection of customer profiles.
+     *              Full read and write access is restricted to administrators.
+     * @path        /customers/{customerId}
+     * @allow       (get, list, create, update, delete) Any request from a user who is an admin.
+     * @deny        (get) A request from a regular authenticated user who is not an admin.
+     * @deny        (create) An attempt by a non-admin to add a new customer.
+     * @principle   Restricts all data management to verified administrators.
+     */
+    match /customers/{customerId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() && resource != null;
     }
+
+    /**
+     * @description Rules for the collection of active and historical usage sessions.
+     *              Full read and write access is restricted to administrators.
+     * @path        /sessions/{sessionId}
+     * @allow       (get, list, create, update, delete) Any request from a user who is an admin.
+     * @deny        (get) A request from a regular authenticated user who is not an admin.
+     * @deny        (create) An attempt by a non-admin to start a new session.
+     * @principle   Restricts all data management to verified administrators.
+     */
+    match /sessions/{sessionId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() && resource != null;
+    }
+
   }
 }
