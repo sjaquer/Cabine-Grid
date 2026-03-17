@@ -1,38 +1,54 @@
 import { Button } from "@/components/ui/button";
-import { Cpu, History, PlusCircle, DollarSign } from "lucide-react";
+import { Cpu, History, CircleUser, Monitor, MonitorCheck } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 type HeaderProps = {
   dailySales: number;
-  onAssignClick: () => void;
+  availableMachines: number;
+  occupiedMachines: number;
   onHistoryClick: () => void;
 };
 
-export default function Header({ dailySales, onAssignClick, onHistoryClick }: HeaderProps) {
+export default function Header({ dailySales, availableMachines, occupiedMachines, onHistoryClick }: HeaderProps) {
   return (
     <header className="px-4 lg:px-6 h-16 flex items-center border-b shrink-0 bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-      <div className="flex items-center gap-2">
-        <Cpu className="h-6 w-6 text-primary" />
-        <h1 className="text-lg font-bold font-headline tracking-wider text-primary-foreground">
-          CyberGrid Console
-        </h1>
+      <div className="flex items-center gap-2 mr-6">
+        <Cpu className="h-8 w-8 text-primary" />
+        <span className="text-lg font-bold font-headline tracking-wider sr-only sm:not-sr-only">
+          CyberGrid
+        </span>
       </div>
+
+       <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-2">
+            <MonitorCheck className="h-5 w-5 text-status-available" />
+            <span className="font-semibold">
+              Libres: <span className="text-foreground font-bold">{availableMachines}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Monitor className="h-5 w-5 text-status-occupied" />
+            <span className="font-semibold">
+              Ocupadas: <span className="text-foreground font-bold">{occupiedMachines}</span>
+            </span>
+          </div>
+       </div>
+
       <div className="ml-auto flex items-center gap-4">
-        <div className="flex items-center gap-2 p-2 rounded-md bg-secondary/50">
-           <DollarSign className="h-5 w-5 text-status-available" />
+        <div className="flex items-center gap-2 p-2 rounded-md bg-secondary">
            <span className="font-semibold text-sm">
-             Recaudado Hoy: <span className="text-status-available font-bold">{formatCurrency(dailySales)}</span>
+             Ventas del Día: <span className="text-primary font-bold">{formatCurrency(dailySales)}</span>
            </span>
         </div>
         
-        <Button variant="outline" size="sm" onClick={onHistoryClick}>
+        <Button variant="ghost" size="sm" onClick={onHistoryClick}>
           <History className="mr-2 h-4 w-4" />
           Historial
         </Button>
-        
-        <Button size="sm" onClick={onAssignClick}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Asignar PC
+
+        <Button variant="ghost" size="icon">
+          <CircleUser className="h-5 w-5" />
+          <span className="sr-only">User Profile</span>
         </Button>
       </div>
     </header>

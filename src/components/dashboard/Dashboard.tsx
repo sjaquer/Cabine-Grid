@@ -14,10 +14,15 @@ import SalesHistorySheet from "./SalesHistorySheet";
 export default function Dashboard() {
   const [machines, setMachines] = useState<Machine[]>(initialMachines);
   const [sales, setSales] = useState<Sale[]>([]);
+  
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [machineToAssign, setMachineToAssign] = useState<Machine | null>(null);
+
   const [isChargeDialogOpen, setChargeDialogOpen] = useState(false);
+  const [machineToCharge, setMachineToCharge] = useState<Machine | null>(null);
+
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
-  const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -30,8 +35,12 @@ export default function Dashboard() {
             const elapsedSeconds = (Date.now() - startTime) / 1000;
             const remainingSeconds = prepaidSeconds - elapsedSeconds;
 
-            if (remainingSeconds <= 300 && m.status !== 'warning') { // Within 5 mins or time up
+            if (remainingSeconds <= 300 && m.status !== 'warning' && remainingSeconds > 0) {
               return { ...m, status: 'warning' };
+            }
+             if (remainingSeconds <= 0 && m.status !== 'occupied') {
+               // Optional: Auto-end session when time is up. For now, just change status.
+               // For simplicity, we keep it occupied but let the UI show time is up.
             }
           }
           return m;
@@ -41,28 +50,36 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleOpenAssignDialog = () => setAssignDialogOpen(true);
-
-  const handleOpenChargeDialog = (machine: Machine) => {
-    setSelectedMachine(machine);
-    setChargeDialogOpen(true);
+  const handleCardAction = (machine: Machine) => {
+    if (machine.status === 'available') {
+      setMachineToAssign(machine);
+      setAssignDialogOpen(true);
+    } else if (machine.status === 'occupied' || machine.status === 'warning') {
+      setMachineToCharge(machine);
+      setChargeDialogOpen(true);
+    }
   };
-  
-  const handleOpenHistorySheet = () => setHistorySheetOpen(true);
+
+  const handleAssignDialogChange = (open: boolean) => {
+    setAssignDialogOpen(open);
+    if (!open) {
+      setMachineToAssign(null);
+    }
+  }
 
   const handleChargeDialogChange = (open: boolean) => {
     setChargeDialogOpen(open);
     if (!open) {
-      setSelectedMachine(null);
+      setMachineToCharge(null);
     }
   }
 
   const handleAssignPC = (values: AssignPCFormValues) => {
-    const machineName = machines.find(m => m.id === Number(values.machineId))?.name || `ID ${values.machineId}`;
-    
+    if (!machineToAssign) return;
+
     setMachines(prev =>
       prev.map(m => {
-        if (m.id === Number(values.machineId)) {
+        if (m.id === machineToAssign.id) {
           return {
             ...m,
             status: "occupied",
@@ -83,9 +100,9 @@ export default function Dashboard() {
 
     toast({
       title: "Sesión Iniciada",
-      description: `${machineName} asignada a ${values.client}.`,
+      description: `${machineToAssign.name} asignada a ${values.client}.`,
     });
-    setAssignDialogOpen(false);
+    handleAssignDialogChange(false);
   };
 
   const handleConfirmPayment = (machineId: number, amount: number) => {
@@ -113,7 +130,7 @@ export default function Dashboard() {
     setMachines(prev =>
       prev.map(m => 
         m.id === machineId 
-          ? { ...m, status: "available", session: undefined } 
+          ? { ...initialMachines.find(im => im.id === machineId)! }
           : m
       )
     );
@@ -122,34 +139,36 @@ export default function Dashboard() {
       title: "Pago Confirmado",
       description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}.`,
     });
-    setChargeDialogOpen(false);
+    handleChargeDialogChange(false);
   };
 
-  const availableMachines = machines.filter(m => m.status === 'available');
+  const availableMachines = machines.filter(m => m.status === 'available').length;
+  const occupiedMachines = machines.length - availableMachines;
   const dailySales = sales.reduce((sum, sale) => sum + sale.amount, 0);
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-secondary">
       <Header 
         dailySales={dailySales}
-        onAssignClick={handleOpenAssignDialog}
-        onHistoryClick={handleOpenHistorySheet}
+        availableMachines={availableMachines}
+        occupiedMachines={occupiedMachines}
+        onHistoryClick={() => setHistorySheetOpen(true)}
       />
       <main className="flex-1 overflow-y-auto">
-        <PCGrid machines={machines} onFinishSession={handleOpenChargeDialog} />
+        <PCGrid machines={machines} onCardAction={handleCardAction} />
       </main>
       
       <AssignPCDialog 
         isOpen={isAssignDialogOpen} 
-        onOpenChange={setAssignDialogOpen}
-        availableMachines={availableMachines}
+        onOpenChange={handleAssignDialogChange}
+        machine={machineToAssign}
         onAssign={handleAssignPC}
       />
       
       <ChargeDialog 
         isOpen={isChargeDialogOpen}
         onOpenChange={handleChargeDialogChange}
-        machine={selectedMachine}
+        machine={machineToCharge}
         onConfirmPayment={handleConfirmPayment}
       />
 

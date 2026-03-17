@@ -1,6 +1,7 @@
 "use client";
 
 import { z } from "zod";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Machine } from "@/lib/types";
@@ -55,14 +56,14 @@ export type AssignPCFormValues = z.infer<typeof formSchema>;
 type AssignPCDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  availableMachines: Machine[];
+  machine: Machine | null;
   onAssign: (values: AssignPCFormValues) => void;
 };
 
 export default function AssignPCDialog({
   isOpen,
   onOpenChange,
-  availableMachines,
+  machine,
   onAssign,
 }: AssignPCDialogProps) {
   const form = useForm<AssignPCFormValues>({
@@ -72,6 +73,15 @@ export default function AssignPCDialog({
       rateId: "A",
     },
   });
+
+  useEffect(() => {
+    if (machine) {
+      form.setValue('machineId', String(machine.id));
+      form.setValue('rateId', machine.rateId || 'A');
+    } else {
+        form.reset();
+    }
+  }, [machine, form]);
 
   const { formState: { isSubmitting } } = form;
   const usageMode = form.watch("usageMode");
@@ -85,70 +95,44 @@ export default function AssignPCDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="font-headline">Asignar PC a Cliente</DialogTitle>
+          <DialogTitle className="font-headline">Asignar {machine?.name}</DialogTitle>
           <DialogDescription>
-            Seleccione una PC disponible y configure la sesión del cliente.
+            Configure la sesión del cliente para esta cabina.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="machineId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>PC Disponible</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar PC..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {availableMachines.map((machine) => (
-                          <SelectItem key={machine.id} value={String(machine.id)}>
-                            {machine.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="client"
-                render={({ field }) => (
-                   <FormItem>
-                    <FormLabel>Cliente</FormLabel>
-                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar cliente..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {clients.map((client) => (
-                          <SelectItem key={client} value={client}>
-                            {client}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+             <FormField
+              control={form.control}
+              name="client"
+              render={({ field }) => (
+                 <FormItem>
+                  <FormLabel>Cliente</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar un cliente..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client} value={client}>
+                          {client}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="rateId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Tarifa</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar tarifa..." />
@@ -204,15 +188,17 @@ export default function AssignPCDialog({
                   <FormItem>
                     <FormLabel>Horas Prepago</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="Ej: 1.5" {...field} />
+                      <Input type="number" step="0.5" placeholder="Ej: 1.5" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             )}
-            <DialogFooter>
-              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Iniciando...' : 'Iniciar Sesión'}</Button>
+            <DialogFooter className="pt-4">
+              <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+                {isSubmitting ? 'Iniciando...' : 'Iniciar Sesión'}
+              </Button>
             </DialogFooter>
           </form>
         </Form>
