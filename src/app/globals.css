@@ -76,3 +76,13 @@ body {
     @apply bg-secondary text-foreground;
   }
 }
+
+.auth-form {
+    width: 100%;
+    max-width: 32rem;
+    padding: 2rem;
+    border-radius: var(--radius);
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}

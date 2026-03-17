@@ -1,3 +1,5 @@
+import type { User as FirebaseUser } from "firebase/auth";
+
 export type Rate = {
   id: 'A' | 'B';
   name: string;
@@ -13,10 +15,11 @@ export type MachineStatus = 'available' | 'occupied' | 'warning';
 export type Session = {
   id: string;
   client?: string;
-  startTime: number; // Date.now() timestamp
+  startTime: number;
   usageMode: UsageMode;
   rateId: Rate['id'];
   prepaidHours?: number;
+  userId?: string;
 };
 
 export type Machine = {
@@ -26,6 +29,20 @@ export type Machine = {
   rateId?: Rate['id'];
   session?: Session;
 };
+
+export type Product = {
+  id: string;
+  name: string;
+  price: number;
+  category: 'drink' | 'snack' | 'other';
+}
+
+export type SoldProduct = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+}
 
 export type Sale = {
   id: string;
@@ -37,4 +54,22 @@ export type Sale = {
   amount: number;
   rate: Rate;
   paymentMethod: PaymentMethod;
+  soldProducts?: SoldProduct[];
+  operator?: {
+    id?: string;
+    email?: string | null;
+  }
+};
+
+export type UserProfile = {
+  uid: string;
+  email: string;
+  role: 'admin' | 'employee';
+}
+
+export type AuthContextType = {
+  user: FirebaseUser | null;
+  userProfile: UserProfile | null;
+  loading: boolean;
+  logout: () => Promise<void>;
 };

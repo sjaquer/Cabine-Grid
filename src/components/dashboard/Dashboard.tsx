@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Machine, Sale, PaymentMethod } from "@/lib/types";
+import type { Machine, Sale, PaymentMethod, SoldProduct, UserProfile } from "@/lib/types";
 import { initialMachines, rates } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -10,8 +10,12 @@ import PCGrid from "./PCGrid";
 import AssignPCDialog, { type AssignPCFormValues } from "./AssignPCDialog";
 import ChargeDialog from "./ChargeDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
+import { useAuth } from "@/hooks/use-auth";
+import { collection, addDoc, onSnapshot, query, where, Timestamp } from "firebase/firestore";
+import { db } from "@/firebase/firebase";
 
 export default function Dashboard() {
+  const { user, userProfile } = useAuth();
   const [machines, setMachines] = useState<Machine[]>(initialMachines);
   const [sales, setSales] = useState<Sale[]>([]);
   
@@ -26,6 +30,26 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Fetch sales for today from Firestore
+    if (!user) return;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfToday = Timestamp.fromDate(today);
+
+    const salesRef = collection(db, "sales");
+    const q = query(salesRef, where("endTime", ">=", startOfToday));
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const salesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+      setSales(salesData.sort((a, b) => b.endTime - a.endTime));
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+
+  useEffect(() => {
     const interval = setInterval(() => {
       setMachines(prevMachines =>
         prevMachines.map(m => {
@@ -37,10 +61,6 @@ export default function Dashboard() {
 
             if (remainingSeconds <= 300 && remainingSeconds > 0) {
               return { ...m, status: 'warning' };
-            }
-             if (remainingSeconds <= 0) {
-               // When time is up, it stays occupied but the timer will show negative values
-               // The UI on the card handles visual cues
             }
           }
           return m;
@@ -102,6 +122,7 @@ export default function Dashboard() {
               usageMode: values.usageMode,
               rateId: values.rateId,
               prepaidHours: prepaidHours,
+              userId: user?.uid
             },
           };
         }
@@ -116,7 +137,7 @@ export default function Dashboard() {
     handleAssignDialogChange(false);
   };
 
-  const handleConfirmPayment = (machineId: number, amount: number, paymentMethod: PaymentMethod) => {
+  const handleConfirmPayment = async (machineId: number, amount: number, paymentMethod: PaymentMethod, soldProducts: SoldProduct[]) => {
     const machine = machines.find(m => m.id === machineId);
     if (!machine || !machine.session) return;
     
@@ -125,33 +146,47 @@ export default function Dashboard() {
     const totalMinutes = Math.ceil((endTime - session.startTime) / (1000 * 60));
     const rate = rates.find(r => r.id === session.rateId)!;
     
-    const newSale: Sale = {
-      id: crypto.randomUUID(),
+    const newSale = {
       machineName: machine.name,
-      clientName: session.client,
+      clientName: session.client || "Ocasional",
       startTime: session.startTime,
       endTime,
       totalMinutes,
       amount,
       rate,
       paymentMethod,
+      soldProducts,
+      operator: {
+        id: user?.uid,
+        email: user?.email,
+      }
     };
     
-    setSales(prev => [newSale, ...prev]);
-    
-    setMachines(prev =>
-      prev.map(m => 
-        m.id === machineId 
-          ? { ...initialMachines.find(im => im.id === machineId)!, rateId: m.rateId }
-          : m
-      )
-    );
-    
-    toast({
-      title: "Pago Confirmado",
-      description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}.`,
-    });
-    handleChargeDialogChange(false);
+    try {
+      await addDoc(collection(db, "sales"), newSale);
+
+      setMachines(prev =>
+        prev.map(m => 
+          m.id === machineId 
+            ? { ...initialMachines.find(im => im.id === machineId)!, rateId: m.rateId }
+            : m
+        )
+      );
+      
+      toast({
+        title: "Pago Confirmado",
+        description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}.`,
+      });
+      handleChargeDialogChange(false);
+
+    } catch (error) {
+      console.error("Error adding document: ", error);
+      toast({
+        variant: "destructive",
+        title: "Error al guardar la venta",
+        description: "Hubo un problema al registrar la venta en la base de datos.",
+      });
+    }
   };
 
   const availableMachines = machines.filter(m => m.status === 'available').length;
@@ -165,6 +200,7 @@ export default function Dashboard() {
         availableMachines={availableMachines}
         occupiedMachines={occupiedMachines}
         onHistoryClick={() => setHistorySheetOpen(true)}
+        userProfile={userProfile}
       />
       <main className="flex-1 overflow-y-auto">
         <PCGrid machines={machines} onCardAction={handleCardAction} />
@@ -188,6 +224,7 @@ export default function Dashboard() {
         isOpen={isHistorySheetOpen}
         onOpenChange={setHistorySheetOpen}
         sales={sales}
+        userProfile={userProfile}
       />
     </div>
   );
