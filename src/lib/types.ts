@@ -6,11 +6,13 @@ export type Rate = {
 
 export type UsageMode = 'free' | 'prepaid';
 
+export type PaymentMethod = 'efectivo' | 'yape' | 'otro';
+
 export type MachineStatus = 'available' | 'occupied' | 'warning';
 
 export type Session = {
   id: string;
-  client: string;
+  client?: string;
   startTime: number; // Date.now() timestamp
   usageMode: UsageMode;
   rateId: Rate['id'];
@@ -28,10 +30,11 @@ export type Machine = {
 export type Sale = {
   id: string;
   machineName: string;
-  clientName: string;
+  clientName?: string;
   startTime: number;
   endTime: number;
   totalMinutes: number;
   amount: number;
   rate: Rate;
+  paymentMethod: PaymentMethod;
 };

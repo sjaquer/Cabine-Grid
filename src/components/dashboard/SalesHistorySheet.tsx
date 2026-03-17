@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, Clock, Hash } from "lucide-react";
+import { DollarSign, Clock, Hash, Smartphone, Landmark } from "lucide-react";
 
 
 type SalesHistorySheetProps = {
@@ -33,10 +33,14 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales }: Sales
   const totalSales = sales.reduce((sum, sale) => sum + sale.amount, 0);
   const totalSessions = sales.length;
   const averageMinutes = totalSessions > 0 ? sales.reduce((sum, sale) => sum + sale.totalMinutes, 0) / totalSessions : 0;
+  
+  const cashSales = sales.filter(s => s.paymentMethod === 'efectivo').reduce((sum, s) => sum + s.amount, 0);
+  const yapeSales = sales.filter(s => s.paymentMethod === 'yape').reduce((sum, s) => sum + s.amount, 0);
+
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-3xl w-full flex flex-col gap-6">
+      <SheetContent className="sm:max-w-4xl w-full flex flex-col gap-6 p-4 sm:p-6">
         <SheetHeader>
           <SheetTitle className="font-headline text-2xl">Historial de Ventas del Día</SheetTitle>
           <SheetDescription>
@@ -44,7 +48,7 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales }: Sales
           </SheetDescription>
         </SheetHeader>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Recaudado</CardTitle>
@@ -65,11 +69,20 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales }: Sales
             </Card>
              <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Duración Promedio</CardTitle>
-                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-medium">Ventas Yape/Plin</CardTitle>
+                    <Smartphone className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">{formatDuration(averageMinutes)}</div>
+                    <div className="text-2xl font-bold">{formatCurrency(yapeSales)}</div>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ventas Efectivo</CardTitle>
+                    <Landmark className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{formatCurrency(cashSales)}</div>
                 </CardContent>
             </Card>
         </div>
@@ -82,11 +95,11 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales }: Sales
               <TableHeader>
                 <TableRow>
                   <TableHead>PC</TableHead>
-                  <TableHead>Cliente</TableHead>
+                  <TableHead className="hidden sm:table-cell">Cliente</TableHead>
                   <TableHead>Inicio</TableHead>
                   <TableHead>Fin</TableHead>
-                  <TableHead>Duración</TableHead>
-                  <TableHead>Tarifa</TableHead>
+                  <TableHead className="hidden sm:table-cell">Duración</TableHead>
+                  <TableHead>Método</TableHead>
                   <TableHead className="text-right">Monto</TableHead>
                 </TableRow>
               </TableHeader>
@@ -94,11 +107,11 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales }: Sales
                 {sales.length > 0 ? sales.map((sale) => (
                   <TableRow key={sale.id}>
                     <TableCell className="font-medium">{sale.machineName}</TableCell>
-                    <TableCell>{sale.clientName}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{sale.clientName || 'Ocasional'}</TableCell>
                     <TableCell>{formatDateTime(sale.startTime)}</TableCell>
                     <TableCell>{formatDateTime(sale.endTime)}</TableCell>
-                    <TableCell>{formatTime(sale.totalMinutes * 60)}</TableCell>
-                    <TableCell>{sale.rate.name}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{formatTime(sale.totalMinutes * 60)}</TableCell>
+                    <TableCell className="capitalize">{sale.paymentMethod}</TableCell>
                     <TableCell className="text-right font-mono">{formatCurrency(sale.amount)}</TableCell>
                   </TableRow>
                 )) : (

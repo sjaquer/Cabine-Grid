@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Machine, Sale } from "@/lib/types";
+import type { Machine, Sale, PaymentMethod } from "@/lib/types";
 import { initialMachines, rates } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -29,18 +29,18 @@ export default function Dashboard() {
     const interval = setInterval(() => {
       setMachines(prevMachines =>
         prevMachines.map(m => {
-          if (m.session?.usageMode === 'prepaid') {
+          if (m.session?.usageMode === 'prepaid' && m.status === 'occupied') {
             const { startTime, prepaidHours } = m.session;
             const prepaidSeconds = (prepaidHours || 0) * 3600;
             const elapsedSeconds = (Date.now() - startTime) / 1000;
             const remainingSeconds = prepaidSeconds - elapsedSeconds;
 
-            if (remainingSeconds <= 300 && m.status !== 'warning' && remainingSeconds > 0) {
+            if (remainingSeconds <= 300 && remainingSeconds > 0) {
               return { ...m, status: 'warning' };
             }
-             if (remainingSeconds <= 0 && m.status !== 'occupied') {
-               // Optional: Auto-end session when time is up. For now, just change status.
-               // For simplicity, we keep it occupied but let the UI show time is up.
+             if (remainingSeconds <= 0) {
+               // When time is up, it stays occupied but the timer will show negative values
+               // The UI on the card handles visual cues
             }
           }
           return m;
@@ -77,6 +77,17 @@ export default function Dashboard() {
   const handleAssignPC = (values: AssignPCFormValues) => {
     if (!machineToAssign) return;
 
+    let prepaidHours: number | undefined;
+
+    if (values.usageMode === 'prepaid' && values.prepaidValue) {
+      const rate = rates.find(r => r.id === values.rateId)!;
+      if (values.prepaidInputMode === 'time') {
+        prepaidHours = values.prepaidValue;
+      } else { // 'amount'
+        prepaidHours = values.prepaidValue / rate.pricePerHour;
+      }
+    }
+
     setMachines(prev =>
       prev.map(m => {
         if (m.id === machineToAssign.id) {
@@ -90,7 +101,7 @@ export default function Dashboard() {
               startTime: Date.now(),
               usageMode: values.usageMode,
               rateId: values.rateId,
-              prepaidHours: values.prepaidHours,
+              prepaidHours: prepaidHours,
             },
           };
         }
@@ -100,12 +111,12 @@ export default function Dashboard() {
 
     toast({
       title: "Sesión Iniciada",
-      description: `${machineToAssign.name} asignada a ${values.client}.`,
+      description: `${machineToAssign.name} asignada a ${values.client || 'un cliente ocasional'}.`,
     });
     handleAssignDialogChange(false);
   };
 
-  const handleConfirmPayment = (machineId: number, amount: number) => {
+  const handleConfirmPayment = (machineId: number, amount: number, paymentMethod: PaymentMethod) => {
     const machine = machines.find(m => m.id === machineId);
     if (!machine || !machine.session) return;
     
@@ -123,6 +134,7 @@ export default function Dashboard() {
       totalMinutes,
       amount,
       rate,
+      paymentMethod,
     };
     
     setSales(prev => [newSale, ...prev]);
@@ -130,7 +142,7 @@ export default function Dashboard() {
     setMachines(prev =>
       prev.map(m => 
         m.id === machineId 
-          ? { ...initialMachines.find(im => im.id === machineId)! }
+          ? { ...initialMachines.find(im => im.id === machineId)!, rateId: m.rateId }
           : m
       )
     );

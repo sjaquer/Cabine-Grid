@@ -1,7 +1,7 @@
 "use client";
 
 import { z } from "zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Machine } from "@/lib/types";
@@ -20,6 +20,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -34,22 +35,24 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const formSchema = z.object({
-  machineId: z.string().min(1, "Debe seleccionar una PC."),
-  client: z.string().min(1, "Debe seleccionar un cliente."),
-  rateId: z.enum(["A", "B"], { required_error: "Debe seleccionar una tarifa." }),
-  usageMode: z.enum(["free", "prepaid"]),
-  prepaidHours: z.coerce.number().optional(),
-}).refine(data => {
-    if (data.usageMode === 'prepaid') {
-      return data.prepaidHours && data.prepaidHours > 0;
-    }
-    return true;
-}, {
-    message: "Debe ingresar un número de horas válido.",
-    path: ["prepaidHours"],
-});
+    machineId: z.string().min(1, "Debe seleccionar una PC."),
+    client: z.string().optional(),
+    rateId: z.enum(["A", "B"], { required_error: "Debe seleccionar una tarifa." }),
+    usageMode: z.enum(["free", "prepaid"]),
+    prepaidInputMode: z.enum(['time', 'amount']).default('time'),
+    prepaidValue: z.coerce.number({ invalid_type_error: 'Debe ser un número' }).positive("Debe ser mayor a 0").optional(),
+  }).refine(data => {
+      if (data.usageMode === 'prepaid') {
+        return !!data.prepaidValue;
+      }
+      return true;
+  }, {
+      message: "Debe ingresar un valor.",
+      path: ["prepaidValue"],
+  });
 
 export type AssignPCFormValues = z.infer<typeof formSchema>;
 
@@ -71,6 +74,7 @@ export default function AssignPCDialog({
     defaultValues: {
       usageMode: "free",
       rateId: "A",
+      prepaidInputMode: 'amount',
     },
   });
 
@@ -79,12 +83,34 @@ export default function AssignPCDialog({
       form.setValue('machineId', String(machine.id));
       form.setValue('rateId', machine.rateId || 'A');
     } else {
-        form.reset();
+        form.reset({
+            usageMode: "free",
+            rateId: "A",
+            prepaidInputMode: 'amount',
+            client: undefined,
+            prepaidValue: undefined,
+        });
     }
-  }, [machine, form]);
-
+  }, [machine, form, isOpen]);
+  
   const { formState: { isSubmitting } } = form;
   const usageMode = form.watch("usageMode");
+  const prepaidInputMode = form.watch("prepaidInputMode");
+  const prepaidValue = form.watch("prepaidValue");
+  const rateId = form.watch("rateId");
+  const selectedRate = rates.find(r => r.id === rateId);
+  
+  let calculatedValue = "";
+  if (selectedRate && prepaidValue) {
+    if (prepaidInputMode === 'amount') {
+      const hours = prepaidValue / selectedRate.pricePerHour;
+      calculatedValue = `${hours.toFixed(2)} horas`;
+    } else { // time
+      const amount = prepaidValue * selectedRate.pricePerHour;
+      calculatedValue = formatCurrency(amount);
+    }
+  }
+
 
   function onSubmit(values: AssignPCFormValues) {
     onAssign(values);
@@ -107,11 +133,11 @@ export default function AssignPCDialog({
               name="client"
               render={({ field }) => (
                  <FormItem>
-                  <FormLabel>Cliente</FormLabel>
+                  <FormLabel>Cliente (Opcional)</FormLabel>
                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar un cliente..." />
+                        <SelectValue placeholder="Cliente ocasional" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -160,19 +186,19 @@ export default function AssignPCDialog({
                     <RadioGroup
                       onValueChange={field.onChange}
                       defaultValue={field.value}
-                      className="flex space-x-4"
+                      className="grid grid-cols-2 gap-4"
                     >
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="free" />
-                        </FormControl>
-                        <FormLabel className="font-normal">Tiempo Libre</FormLabel>
+                      <FormItem>
+                        <RadioGroupItem value="free" id="free" className="peer sr-only" />
+                        <Label htmlFor="free" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                          Tiempo Libre
+                        </Label>
                       </FormItem>
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="prepaid" />
-                        </FormControl>
-                        <FormLabel className="font-normal">Prepago</FormLabel>
+                       <FormItem>
+                        <RadioGroupItem value="prepaid" id="prepaid" className="peer sr-only" />
+                        <Label htmlFor="prepaid" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                          Prepago
+                        </Label>
                       </FormItem>
                     </RadioGroup>
                   </FormControl>
@@ -181,19 +207,44 @@ export default function AssignPCDialog({
               )}
             />
             {usageMode === "prepaid" && (
-              <FormField
-                control={form.control}
-                name="prepaidHours"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Horas Prepago</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.5" placeholder="Ej: 1.5" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+             <div className="p-4 border rounded-md space-y-4">
+                <FormField
+                    control={form.control}
+                    name="prepaidInputMode"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Método de Prepago</FormLabel>
+                            <FormControl>
+                                <Tabs
+                                    value={field.value}
+                                    onValueChange={field.onChange}
+                                    className="w-full"
+                                >
+                                    <TabsList className="grid w-full grid-cols-2">
+                                        <TabsTrigger value="amount">Por Monto</TabsTrigger>
+                                        <TabsTrigger value="time">Por Tiempo</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="prepaidValue"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>{prepaidInputMode === 'amount' ? 'Monto a Pagar (PEN)' : 'Horas a Jugar'}</FormLabel>
+                        <FormControl>
+                        <Input type="number" step="0.5" placeholder={prepaidInputMode === 'amount' ? 'Ej: 10.00' : 'Ej: 1.5'} {...field} />
+                        </FormControl>
+                        {calculatedValue && <FormDescription>Equivale a: {calculatedValue}</FormDescription>}
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+             </div>
             )}
             <DialogFooter className="pt-4">
               <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">

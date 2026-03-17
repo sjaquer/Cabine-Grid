@@ -12,14 +12,11 @@ type HeaderProps = {
 export default function Header({ dailySales, availableMachines, occupiedMachines, onHistoryClick }: HeaderProps) {
   return (
     <header className="px-4 lg:px-6 h-16 flex items-center border-b shrink-0 bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-      <div className="flex items-center gap-2 mr-6">
+      <div className="flex items-center gap-2 mr-auto sm:mr-6">
         <Cpu className="h-8 w-8 text-primary" />
-        <span className="text-lg font-bold font-headline tracking-wider sr-only sm:not-sr-only">
-          CyberGrid
-        </span>
       </div>
 
-       <div className="flex items-center gap-6 text-sm">
+       <div className="hidden sm:flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
             <MonitorCheck className="h-5 w-5 text-status-available" />
             <span className="font-semibold">
@@ -34,16 +31,16 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
           </div>
        </div>
 
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex items-center gap-2 sm:gap-4">
         <div className="flex items-center gap-2 p-2 rounded-md bg-secondary">
            <span className="font-semibold text-sm">
-             Ventas del Día: <span className="text-primary font-bold">{formatCurrency(dailySales)}</span>
+             Ventas: <span className="text-primary font-bold">{formatCurrency(dailySales)}</span>
            </span>
         </div>
         
         <Button variant="ghost" size="sm" onClick={onHistoryClick}>
           <History className="mr-2 h-4 w-4" />
-          Historial
+          <span className="hidden sm:inline">Historial</span>
         </Button>
 
         <Button variant="ghost" size="icon">
