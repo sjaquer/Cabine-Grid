@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Database, Loader2, Package } from "lucide-react";
+import { ArrowLeft, Database, Loader2, Package, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MachineManager from "@/components/admin/MachineManager";
@@ -449,6 +449,12 @@ export default function AdminPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h1 className="text-2xl font-headline font-bold">Panel de Administración</h1>
               <div className="flex items-center gap-2">
+                <Link href="/reportes">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    Reportes
+                  </Button>
+                </Link>
                 <Link href="/inventario">
                   <Button variant="outline" size="sm" className="gap-2">
                     <Package className="w-4 h-4" />

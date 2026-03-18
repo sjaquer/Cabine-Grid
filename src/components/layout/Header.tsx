@@ -168,6 +168,14 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
               </Badge>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {(userProfile?.role === "admin" || userProfile?.role === "manager") && (
+              <DropdownMenuItem asChild>
+                <Link href="/reportes">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  <span>Reportes Ejecutivos</span>
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem asChild>
               <Link href="/inventario">
                 <Package className="mr-2 h-4 w-4" />
