@@ -40,6 +40,11 @@ const locationSchema = z.object({
   name: z.string().min(1, "El nombre es requerido").min(3, "Mínimo 3 caracteres").max(100, "Máximo 100 caracteres"),
   address: z.string().min(5, "Dirección requerida").max(200, "Dirección máximo 200 caracteres"),
   phone: z.string().max(20, "Teléfono inválido").optional().or(z.literal("")),
+  fractionMinutes: z.coerce
+    .number()
+    .int("Debe ser un número entero")
+    .min(1, "Mínimo 1 minuto")
+    .max(60, "Máximo 60 minutos"),
 });
 
 type LocationFormValues = z.infer<typeof locationSchema>;
@@ -66,6 +71,7 @@ export default function LocationManager({
       name: "",
       address: "",
       phone: "",
+      fractionMinutes: 5,
     },
   });
 
@@ -76,13 +82,14 @@ export default function LocationManager({
           name: values.name,
           address: values.address,
           phone: values.phone || undefined,
+          fractionMinutes: values.fractionMinutes,
         });
       } else {
         await onAdd({
           name: values.name,
           address: values.address,
           phone: values.phone || undefined,
-          fractionMinutes: 5,
+          fractionMinutes: values.fractionMinutes,
           isActive: true,
         });
       }
@@ -101,6 +108,7 @@ export default function LocationManager({
     form.setValue("name", location.name);
     form.setValue("address", location.address);
     form.setValue("phone", location.phone || "");
+    form.setValue("fractionMinutes", location.fractionMinutes || 5);
     setIsOpen(true);
   };
 
@@ -172,6 +180,19 @@ export default function LocationManager({
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="fractionMinutes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Prórroga antes de cobrar hora completa (min)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={1} max={60} step={1} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <DialogFooter>
                   <Button type="submit">
                     {editingId ? "Guardar Cambios" : "Crear Local"}
@@ -190,6 +211,7 @@ export default function LocationManager({
               <TableHead>Nombre</TableHead>
               <TableHead>Dirección</TableHead>
               <TableHead>Teléfono</TableHead>
+              <TableHead>Prórroga</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -214,6 +236,7 @@ export default function LocationManager({
                     <span className="text-muted-foreground">-</span>
                   )}
                 </TableCell>
+                <TableCell>{location.fractionMinutes || 5} min</TableCell>
                 <TableCell>
                   <Badge variant={location.isActive ? "default" : "secondary"}>
                     {location.isActive ? "Activo" : "Inactivo"}

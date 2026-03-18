@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Machine, PaymentMethod } from "@/lib/types";
-import { formatCurrency, formatTime } from "@/lib/utils";
+import { formatCurrency, formatDuration, formatTime } from "@/lib/utils";
 import { sanitizeString } from "@/lib/sanitize";
 import {
   Dialog,
@@ -51,40 +51,25 @@ export default function ChargeDialog({
   const { session } = machine;
   const hourlyRate = session.hourlyRate || 0;
   const elapsedSeconds = (Date.now() - session.startTime) / 1000;
-  const elapsedMinutes = Math.ceil(elapsedSeconds / 60);
-  
-  let hoursToCharge = 0;
-  let chargeDescription = "";
+  const elapsedMinutes = Math.max(0, Math.ceil(elapsedSeconds / 60));
+  const graceMinutes = Math.max(1, Math.floor(fractionMinutes || 5));
 
-  if (session.usageMode === 'prepaid' && session.prepaidHours) {
-    // Modo prepaid: sin fracciones, solo cobrar tiempo extra
-    const prepaidSeconds = session.prepaidHours * 3600;
-    const extraSeconds = Math.max(0, elapsedSeconds - prepaidSeconds);
-    const extraMinutes = Math.ceil(extraSeconds / 60);
+  // Regla solicitada:
+  // - Hasta la prórroga (X min): cobrar tiempo real en minutos.
+  // - Pasado X min: cobrar hora completa (redondeado hacia arriba por horas).
+  const billedMinutes = elapsedMinutes === 0
+    ? 0
+    : elapsedMinutes <= graceMinutes
+      ? elapsedMinutes
+      : Math.ceil(elapsedMinutes / 60) * 60;
+  const billedHours = billedMinutes / 60;
 
-    hoursToCharge = extraMinutes <= fractionMinutes ? 0 : Math.ceil(extraMinutes / 60);
-    chargeDescription = `(${session.prepaidHours}h prepagadas + ${hoursToCharge}h extra)`;
-  } else {
-    // Modo free: aplicar lógica de fracciones
-    let remainingMinutes = elapsedMinutes;
-    
-    while (remainingMinutes > 0) {
-      if (remainingMinutes <= fractionMinutes) {
-        hoursToCharge += 1;
-        break;
-      } else {
-        hoursToCharge += 1;
-        remainingMinutes -= 60;
-      }
-    }
+  const sessionCostRaw = billedHours * hourlyRate;
+  const sessionCost = Math.round(sessionCostRaw * 100) / 100;
 
-    if (hoursToCharge === 0) {
-      hoursToCharge = 1;
-    }
-    chargeDescription = "(sistema de fracciones)";
-  }
-  
-  const sessionCost = hoursToCharge * hourlyRate;
+  const chargeDescription = session.usageMode === 'prepaid' && session.prepaidHours
+    ? `(prepago ${session.prepaidHours}h, prórroga ${graceMinutes} min; luego hora completa)`
+    : `(prórroga ${graceMinutes} min; luego hora completa)`;
 
   const soldProducts = session.soldProducts ?? [];
   const productsTotal = soldProducts.reduce((total, p) => total + p.quantity * p.unitPrice, 0);
@@ -129,9 +114,9 @@ export default function ChargeDialog({
                         <span className="font-mono font-bold text-sm md:text-base bg-secondary/50 px-2 py-0.5 rounded w-max mx-auto">{formatTime(Math.floor(elapsedSeconds))}</span>
                     </div>
                     <div className="flex flex-col gap-1 text-right sm:text-center lg:text-right">
-                        <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Horas a Cobrar</span>
+                        <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Tiempo a Cobrar</span>
                         <div className="flex flex-col items-end sm:items-center lg:items-end gap-0.5">
-                          <span className="font-mono font-bold text-base md:text-lg text-primary">{hoursToCharge} {hoursToCharge === 1 ? 'hora' : 'horas'}</span>
+                          <span className="font-mono font-bold text-base md:text-lg text-primary">{formatDuration(billedMinutes)}</span>
                           <span className="text-[10px] text-muted-foreground font-normal">{chargeDescription}</span>
                         </div>
                     </div>
