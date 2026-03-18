@@ -30,10 +30,6 @@ service cloud.firestore {
       return getRole() == 'operator';
     }
 
-    function isViewOnly() {
-      return getRole() == 'view-only';
-    }
-
     function isAdminOrManager() {
       return isAdmin() || isManager();
     }
@@ -44,15 +40,6 @@ service cloud.firestore {
 
     function hasPrivilegedClearance() {
       return true;
-    }
-
-    function locationInScope(locationId) {
-      return isAdminOrManager() || (
-        isOperator() &&
-        locationId is string &&
-        get(userDocPath()).data.locationIds is list &&
-        locationId in get(userDocPath()).data.locationIds
-      );
     }
 
     function saleLooksValid() {
@@ -91,10 +78,7 @@ service cloud.firestore {
 
     match /machines/{machineId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if canOperate() && hasPrivilegedClearance() && (
-        !('locationId' in request.resource.data) ||
-        locationInScope(request.resource.data.locationId)
-      );
+      allow create, update, delete: if canOperate() && hasPrivilegedClearance();
     }
 
     match /products/{productId} {
@@ -109,33 +93,21 @@ service cloud.firestore {
 
     match /sales/{saleId} {
       allow read: if isSignedIn();
-      allow create: if canOperate() && saleLooksValid() && (
-        !('locationId' in request.resource.data) ||
-        locationInScope(request.resource.data.locationId)
-      );
-      allow update: if canOperate() && saleLooksValid() && (
-        !('locationId' in request.resource.data) ||
-        locationInScope(request.resource.data.locationId)
-      );
+      allow create: if canOperate() && saleLooksValid();
+      allow update: if canOperate() && saleLooksValid();
       allow delete: if isAdminOrManager();
     }
 
     match /inventory/{inventoryId} {
       allow read: if isSignedIn();
-      allow create: if canOperate() && hasNonNegativeStock() && (
-        request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
-      );
-      allow update: if canOperate() && hasNonNegativeStock() && (
-        request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
-      );
+      allow create: if canOperate() && hasNonNegativeStock();
+      allow update: if canOperate() && hasNonNegativeStock();
       allow delete: if canOperate() && hasPrivilegedClearance();
     }
 
     match /inventoryMovements/{movementId} {
       allow read: if isSignedIn();
       allow create: if canOperate() && (
-        request.resource.data.locationId is string &&
-        locationInScope(request.resource.data.locationId) &&
         request.resource.data.quantity is number &&
         request.resource.data.quantity > 0 &&
         request.resource.data.quantity <= 200
@@ -145,9 +117,7 @@ service cloud.firestore {
 
     match /inventoryDiscrepancies/{discrepancyId} {
       allow read: if isSignedIn();
-      allow create: if canOperate() && (
-        request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
-      );
+      allow create: if canOperate() && request.resource.data.locationId is string;
       allow update, delete: if isAdminOrManager() && hasPrivilegedClearance();
     }
 
@@ -155,7 +125,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if canOperate() && (
         request.resource.data.locationId == null ||
-        (request.resource.data.locationId is string && locationInScope(request.resource.data.locationId))
+        request.resource.data.locationId is string
       );
       allow update, delete: if isAdmin() && hasPrivilegedClearance();
     }
@@ -173,24 +143,15 @@ service cloud.firestore {
     }
 
     match /sensitiveApprovals/{approvalId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate() && (
-        request.resource.data.locationId == null ||
-        (request.resource.data.locationId is string && locationInScope(request.resource.data.locationId))
-      );
-      allow update: if isAdmin() && hasPrivilegedClearance();
-      allow delete: if isAdmin() && hasPrivilegedClearance();
+      allow read, write: if false;
     }
 
     match /fraudAlerts/{alertId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate();
-      allow update, delete: if isAdmin() && hasPrivilegedClearance();
+      allow read, write: if false;
     }
 
     match /dailySnapshots/{snapshotId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin() && hasPrivilegedClearance();
+      allow read, write: if false;
     }
 
     match /appSettings/{settingId} {

@@ -416,24 +416,7 @@ export default function Dashboard() {
         },
       });
 
-      if (amount >= 200) {
-        await addDoc(collection(firestore, "fraudAlerts"), {
-          type: "high-sale-amount",
-          severity: amount >= 500 ? "high" : "medium",
-          locationId: effectiveLocationId || null,
-          saleId: saleRef.id,
-          operator,
-          details: {
-            amount,
-            paymentMethod,
-            machineName: machine.name,
-            receiptNumber,
-          },
-          status: "open",
-          createdAt: serverTimestamp(),
-        });
-      }
-      
+
       toast({
         title: "Pago Confirmado",
         description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${receiptNumber}.`,

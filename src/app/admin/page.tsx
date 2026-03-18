@@ -12,7 +12,6 @@ import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
 import UserManager from "@/components/admin/UserManager";
 import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
-import SensitiveApprovalsManager from "@/components/admin/SensitiveApprovalsManager";
 import type { Machine, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { initialMachines, products as defaultProducts, rates } from "@/lib/data";
@@ -27,8 +26,6 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  getDoc,
-  runTransaction,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
@@ -69,17 +66,12 @@ export default function AdminPage() {
     () => (canAccessAdmin ? query(collection(firestore, "shiftClosures")) : null),
     [firestore, canAccessAdmin]
   );
-  const approvalsQuery = useMemoFirebase(
-    () => (canAccessAdmin ? query(collection(firestore, "sensitiveApprovals")) : null),
-    [firestore, canAccessAdmin]
-  );
 
   const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
   const { data: closuresData } = useCollection<any>(closuresQuery);
-  const { data: approvalsData } = useCollection<any>(approvalsQuery);
 
   const machines = useMemo(() => (machinesData ?? []) as Machine[], [machinesData]);
   const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
@@ -95,10 +87,6 @@ export default function AdminPage() {
   const closures = useMemo(
     () => (closuresData ?? []).sort((a, b) => (b.shiftEnd?.toMillis?.() || 0) - (a.shiftEnd?.toMillis?.() || 0)),
     [closuresData]
-  );
-  const approvals = useMemo(
-    () => (approvalsData ?? []).filter((x) => (x.status || "pending") === "pending"),
-    [approvalsData]
   );
 
   const auditActor = {
@@ -198,28 +186,6 @@ export default function AdminPage() {
   };
 
   const handleEditProduct = async (id: string, updates: Partial<Product>) => {
-    const current = products.find((p) => p.id === id);
-    const priceChanged = typeof updates.price === "number" && typeof current?.price === "number" && updates.price !== current.price;
-
-    if (priceChanged && userProfile?.role !== "admin") {
-      await addDoc(collection(firestore, "sensitiveApprovals"), {
-        type: "product.price.change",
-        status: "pending",
-        targetCollection: "products",
-        targetId: id,
-        locationId: null,
-        requestedBy: {
-          id: user?.uid || null,
-          email: user?.email || null,
-        },
-        payload: { updates },
-        note: `Solicitud de cambio de precio para producto ${current?.name || id}`,
-        createdAt: serverTimestamp(),
-      });
-      toast({ title: "Solicitud enviada", description: "El cambio de precio requiere aprobación de admin." });
-      return;
-    }
-
     await updateDoc(doc(firestore, "products", id), updates);
     await logAuditAction(firestore, {
       action: 'product.update',
@@ -229,119 +195,6 @@ export default function AdminPage() {
       details: { updates },
     });
     toast({ title: "Producto actualizado" });
-  };
-
-  const handleApproveSensitive = async (approvalId: string) => {
-    if (userProfile?.role !== "admin") {
-      toast({ variant: "destructive", title: "Solo admin puede aprobar" });
-      return;
-    }
-
-    const approvalRef = doc(firestore, "sensitiveApprovals", approvalId);
-    const snapshot = await getDoc(approvalRef);
-    if (!snapshot.exists()) return;
-
-    const approval = snapshot.data() as any;
-
-    if (approval.type === "product.price.change") {
-      await updateDoc(doc(firestore, approval.targetCollection, approval.targetId), {
-        ...(approval.payload?.updates || {}),
-        updateAt: serverTimestamp(),
-      });
-    }
-
-    if (approval.type === "inventory.adjust.large") {
-      const payload = approval.payload || {};
-      const inventoryRef = doc(firestore, "inventory", `${payload.locationId}_${payload.productId}`);
-      const movementRef = doc(collection(firestore, "inventoryMovements"));
-      await runTransaction(firestore, async (transaction) => {
-        const invSnap = await transaction.get(inventoryRef);
-        const currentStock = invSnap.exists() ? Number(invSnap.data().stock || 0) : 0;
-        const qty = Number(payload.quantity || 0);
-        const type = payload.type as "entry" | "exit";
-        const nextStock = type === "entry" ? currentStock + qty : currentStock - qty;
-        if (nextStock < 0) {
-          throw new Error("No se puede aprobar: stock quedaría negativo.");
-        }
-
-        transaction.set(inventoryRef, {
-          locationId: payload.locationId,
-          productId: payload.productId,
-          productName: payload.productName,
-          minStock: payload.minStock ?? 5,
-          stock: nextStock,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-
-        transaction.set(movementRef, {
-          locationId: payload.locationId,
-          productId: payload.productId,
-          productName: payload.productName,
-          quantity: qty,
-          type,
-          note: `Aprobado por admin. ${approval.note || ""}`,
-          source: "approval",
-          createdAt: serverTimestamp(),
-          operator: approval.requestedBy || null,
-        });
-      });
-    }
-
-    await updateDoc(approvalRef, {
-      status: "approved",
-      reviewedAt: serverTimestamp(),
-      reviewedBy: { id: user?.uid || null, email: user?.email || null },
-    });
-
-    await logAuditAction(firestore, {
-      action: "sensitive.approval.approve",
-      target: "sensitiveApprovals",
-      targetId: approvalId,
-      actor: auditActor,
-      details: { type: approval.type },
-    });
-
-    toast({ title: "Solicitud aprobada" });
-  };
-
-  const handleRejectSensitive = async (approvalId: string) => {
-    if (userProfile?.role !== "admin") {
-      toast({ variant: "destructive", title: "Solo admin puede rechazar" });
-      return;
-    }
-    await updateDoc(doc(firestore, "sensitiveApprovals", approvalId), {
-      status: "rejected",
-      reviewedAt: serverTimestamp(),
-      reviewedBy: { id: user?.uid || null, email: user?.email || null },
-    });
-    await logAuditAction(firestore, {
-      action: "sensitive.approval.reject",
-      target: "sensitiveApprovals",
-      targetId: approvalId,
-      actor: auditActor,
-    });
-    toast({ title: "Solicitud rechazada" });
-  };
-
-  const handleCreateDailySnapshot = async () => {
-    if (userProfile?.role !== "admin") {
-      toast({ variant: "destructive", title: "Solo admin puede generar snapshots" });
-      return;
-    }
-    const now = new Date();
-    const key = now.toISOString().slice(0, 10);
-    await setDoc(doc(firestore, "dailySnapshots", key), {
-      dateKey: key,
-      generatedAt: serverTimestamp(),
-      generatedBy: { id: user?.uid || null, email: user?.email || null },
-      totals: {
-        machines: machines.length,
-        locations: locations.length,
-        products: products.length,
-        users: users.length,
-      },
-    }, { merge: true });
-    toast({ title: "Snapshot diario generado" });
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -649,11 +502,6 @@ export default function AdminPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h1 className="text-2xl font-headline font-bold">Panel de Administración</h1>
               <div className="flex items-center gap-2">
-                {userProfile?.role === "admin" && (
-                  <Button variant="secondary" size="sm" onClick={handleCreateDailySnapshot}>
-                    Snapshot Diario
-                  </Button>
-                )}
                 <Link href="/reportes">
                   <Button variant="outline" size="sm" className="gap-2">
                     <BarChart3 className="w-4 h-4" />
@@ -679,12 +527,11 @@ export default function AdminPage() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Tabs defaultValue="machines" className="w-full">
-            <TabsList className="grid w-full grid-cols-6 mb-8">
+            <TabsList className="grid w-full grid-cols-5 mb-8">
               <TabsTrigger value="machines">Cabinas</TabsTrigger>
               <TabsTrigger value="locations">Locales</TabsTrigger>
               <TabsTrigger value="products">Productos</TabsTrigger>
               <TabsTrigger value="closures">Cierres</TabsTrigger>
-              <TabsTrigger value="approvals">Aprobaciones</TabsTrigger>
               {userProfile?.role === "admin" && (
                 <TabsTrigger value="users">Usuarios</TabsTrigger>
               )}
@@ -724,15 +571,6 @@ export default function AdminPage() {
                 closures={closures}
                 userProfile={userProfile}
                 onReopenShift={handleReopenShift}
-              />
-            </TabsContent>
-
-            <TabsContent value="approvals" className="space-y-6">
-              <SensitiveApprovalsManager
-                approvals={approvals}
-                userProfile={userProfile}
-                onApprove={handleApproveSensitive}
-                onReject={handleRejectSensitive}
               />
             </TabsContent>
 

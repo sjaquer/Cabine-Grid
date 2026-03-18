@@ -206,30 +206,6 @@ export default function InventoryPage() {
 
     const safeQty = Math.max(1, Math.floor(qty || 0));
 
-    if (safeQty > 20 && userProfile?.role !== "admin") {
-      await addDoc(collection(firestore, "sensitiveApprovals"), {
-        type: "inventory.adjust.large",
-        status: "pending",
-        locationId: selectedLocationId,
-        requestedBy: {
-          id: user?.uid || null,
-          email: user?.email || null,
-        },
-        payload: {
-          locationId: selectedLocationId,
-          productId: row.productId,
-          productName: row.productName,
-          minStock: row.minStock,
-          quantity: safeQty,
-          type,
-        },
-        note: note.trim() || `Ajuste ${type} de ${safeQty} requiere aprobación`,
-        createdAt: serverTimestamp(),
-      });
-      toast({ title: "Solicitud enviada", description: "Ajustes mayores a 20 unidades requieren aprobación de admin." });
-      return;
-    }
-
     const actionKey = `${row.productId}:${type}:${safeQty}`;
     setBusyActionKey(actionKey);
 
