@@ -15,7 +15,7 @@ import type { Machine, Sale, UserProfile } from '@/lib/types';
 import { useMemoFirebase } from '../provider';
 import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
-import { clearShiftStart, ensureShiftStart, getShiftStart } from '@/lib/shift-session';
+import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftLocation, getShiftStart } from '@/lib/shift-session';
 
 export interface AuthContextValue {
   user: User | null;
@@ -63,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user && userProfile && (userProfile.role === 'operator' || userProfile.role === 'manager')) {
       const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
       const shiftEndMs = Date.now();
+      const shiftLocationId = getShiftLocation(user.uid);
 
       try {
         const salesRef = collection(firestore, 'sales');
@@ -78,15 +79,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }));
 
         // Evita mezclar ventas entre operadores en el mismo lapso.
-        const operatorShiftSales = allShiftSales.filter((sale) => sale.operator?.id === user.uid);
+        const operatorShiftSales = allShiftSales.filter((sale) => {
+          if (sale.operator?.id !== user.uid) return false;
+          if (!shiftLocationId) return true;
+          return sale.locationId === shiftLocationId;
+        });
 
         const machinesRef = collection(firestore, 'machines');
         const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
         const machinesSnap = await getDocs(machinesQuery);
-        const openMachines: Machine[] = machinesSnap.docs.map((snapshot) => ({
+        const allOpenMachines: Machine[] = machinesSnap.docs.map((snapshot) => ({
           id: snapshot.id,
           ...(snapshot.data() as Omit<Machine, 'id'>),
         }));
+
+        const openMachines = shiftLocationId
+          ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
+          : allOpenMachines;
 
         buildShiftReportPdf({
           userProfile,
@@ -99,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Error generando cierre de turno:', error);
       }
 
+      clearShiftLocation(user.uid);
       clearShiftStart(user.uid);
     }
 

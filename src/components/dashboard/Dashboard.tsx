@@ -15,6 +15,7 @@ import { useAuth, useCollection, useFirestore, useMemoFirebase } from '@/firebas
 import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc, increment, serverTimestamp } from "firebase/firestore";
 import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { setShiftLocation } from "@/lib/shift-session";
 
 
 export default function Dashboard() {
@@ -94,6 +95,12 @@ export default function Dashboard() {
       return availableLocations[0].id;
     });
   }, [availableLocations]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (!selectedLocationId) return;
+    setShiftLocation(user.uid, selectedLocationId);
+  }, [user?.uid, selectedLocationId]);
 
   const visibleMachines = useMemo(() => {
     if (!selectedLocationId || !hasMachinesWithLocation) {
