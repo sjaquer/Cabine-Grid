@@ -2,13 +2,14 @@
 
 import { useAuth, useDoc, useFirestore, useMemoFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { UserRole } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { doc } from "firebase/firestore";
 
 type AppSecuritySettings = {
+  requireVerifiedEmailForFullAccess?: boolean;
   requireMfaForFullAccess?: boolean;
 };
 
@@ -26,8 +27,6 @@ export default function RoleGuard({
   const { user, userProfile, loading } = useAuth();
   const firestore = useFirestore();
   const router = useRouter();
-  const [hasSecondFactorSession, setHasSecondFactorSession] = useState(false);
-  const [isTokenLoading, setIsTokenLoading] = useState(false);
 
   const securitySettingsRef = useMemoFirebase(() => doc(firestore, "appSettings", "security"), [firestore]);
   const { data: securitySettings, isLoading: isSecurityLoading } = useDoc<AppSecuritySettings>(securitySettingsRef);
@@ -38,49 +37,11 @@ export default function RoleGuard({
     }
   }, [user, loading, router]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const isEmailVerificationRequired =
+    securitySettings?.requireVerifiedEmailForFullAccess ?? Boolean(securitySettings?.requireMfaForFullAccess);
+  const canAccessFullApp = !isEmailVerificationRequired || Boolean(user?.emailVerified);
 
-    const resolveSecondFactorClaim = async () => {
-      if (!user) {
-        if (isMounted) {
-          setHasSecondFactorSession(false);
-          setIsTokenLoading(false);
-        }
-        return;
-      }
-
-      setIsTokenLoading(true);
-      try {
-        const tokenResult = await user.getIdTokenResult();
-        const firebaseClaims = tokenResult.claims?.firebase as
-          | { sign_in_second_factor?: unknown }
-          | undefined;
-        if (isMounted) {
-          setHasSecondFactorSession(Boolean(firebaseClaims?.sign_in_second_factor));
-        }
-      } catch {
-        if (isMounted) {
-          setHasSecondFactorSession(false);
-        }
-      } finally {
-        if (isMounted) {
-          setIsTokenLoading(false);
-        }
-      }
-    };
-
-    void resolveSecondFactorClaim();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user]);
-
-  const isTwoStepRequired = Boolean(securitySettings?.requireMfaForFullAccess);
-  const canAccessFullApp = !isTwoStepRequired || hasSecondFactorSession;
-
-  if (loading || isSecurityLoading || isTokenLoading) {
+  if (loading || isSecurityLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="space-y-4 w-full max-w-md">
@@ -100,9 +61,9 @@ export default function RoleGuard({
     return (
       <div className="flex items-center justify-center h-screen p-4">
         <div className="w-full max-w-lg rounded-lg border bg-card p-6 text-center space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">Verificacion en 2 pasos requerida</h1>
+          <h1 className="text-2xl font-bold text-foreground">Correo verificado requerido</h1>
           <p className="text-muted-foreground">
-            Esta cuenta necesita volver a iniciar sesion y completar el codigo de 2 pasos para acceder a todas las secciones.
+            Esta cuenta necesita verificar su correo para acceder a todas las secciones.
           </p>
           <Button onClick={() => router.push("/login")}>Ir al login</Button>
         </div>

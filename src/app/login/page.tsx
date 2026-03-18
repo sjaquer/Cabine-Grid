@@ -4,12 +4,7 @@ import { useState, useEffect } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  getMultiFactorResolver,
-  signInWithEmailAndPassword,
-  TotpMultiFactorGenerator,
-  type MultiFactorResolver,
-} from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useFirebaseAuthInstance, useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 
@@ -25,14 +20,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido.'),
@@ -47,9 +34,6 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [isVerifyingSecondStep, setIsVerifyingSecondStep] = useState(false);
-  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
-  const [mfaCode, setMfaCode] = useState('');
 
   // Redirect to home if already logged in
   useEffect(() => {
@@ -76,30 +60,6 @@ export default function LoginPage() {
       });
       router.push('/');
     } catch (error: any) {
-      if (error?.code === 'auth/multi-factor-auth-required') {
-        const resolver = getMultiFactorResolver(auth, error);
-        const hasTotpFactor = resolver.hints.some(
-          (hint) => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID
-        );
-
-        if (!hasTotpFactor) {
-          toast({
-            variant: 'destructive',
-            title: 'Segundo factor no compatible',
-            description: 'Esta cuenta usa un metodo de 2 pasos que esta pantalla aun no soporta.',
-          });
-          return;
-        }
-
-        setMfaResolver(resolver);
-        setMfaCode('');
-        toast({
-          title: 'Verificacion requerida',
-          description: 'Ingresa el codigo de 6 digitos de tu app autenticadora para continuar.',
-        });
-        return;
-      }
-
       toast({
         variant: 'destructive',
         title: 'Error de inicio de sesión',
@@ -107,48 +67,6 @@ export default function LoginPage() {
       });
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleVerifySecondStep = async () => {
-    if (!mfaResolver) return;
-    const code = mfaCode.trim();
-    if (code.length < 6) {
-      toast({
-        variant: 'destructive',
-        title: 'Codigo invalido',
-        description: 'Ingresa un codigo de 6 digitos.',
-      });
-      return;
-    }
-
-    setIsVerifyingSecondStep(true);
-    try {
-      const totpHint = mfaResolver.hints.find(
-        (hint) => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID
-      );
-      if (!totpHint) {
-        throw new Error('No se encontro un factor TOTP para esta cuenta.');
-      }
-
-      const assertion = TotpMultiFactorGenerator.assertionForSignIn(totpHint.uid, code);
-      await mfaResolver.resolveSignIn(assertion);
-
-      toast({
-        title: 'Inicio de sesión exitoso',
-        description: 'Segundo paso verificado correctamente.',
-      });
-      setMfaResolver(null);
-      setMfaCode('');
-      router.push('/');
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'No se pudo verificar el codigo',
-        description: error?.message || 'El codigo no es valido o expiro.',
-      });
-    } finally {
-      setIsVerifyingSecondStep(false);
     }
   };
 
@@ -233,41 +151,6 @@ export default function LoginPage() {
           </p>
         </section>
       </div>
-
-      <Dialog open={Boolean(mfaResolver)} onOpenChange={(open) => {
-        if (!open) {
-          setMfaResolver(null);
-          setMfaCode('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Verificacion en 2 pasos</DialogTitle>
-            <DialogDescription>
-              Ingresa el codigo de 6 digitos generado por tu app autenticadora.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <FormLabel htmlFor="mfa-login-code">Codigo</FormLabel>
-            <Input
-              id="mfa-login-code"
-              inputMode="numeric"
-              maxLength={6}
-              value={mfaCode}
-              onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="123456"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMfaResolver(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleVerifySecondStep} disabled={isVerifyingSecondStep || mfaCode.trim().length < 6}>
-              {isVerifyingSecondStep ? 'Verificando...' : 'Verificar y entrar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </main>
   );
 }

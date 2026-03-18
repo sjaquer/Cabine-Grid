@@ -51,8 +51,9 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
   const totalMachines = availableMachines + occupiedMachines;
   const utilizationRate = totalMachines > 0 ? ((occupiedMachines / totalMachines) * 100).toFixed(0) : "0";
   const requiresFormalClose = userProfile?.role === "operator" || userProfile?.role === "manager";
-  const enrolledFactors = Number((user as any)?.multiFactor?.enrolledFactors?.length || 0);
-  const needsMfaEnrollment = (userProfile?.role === "admin" || userProfile?.role === "manager") && enrolledFactors === 0;
+  const needsEmailVerification =
+    (userProfile?.role === "admin" || userProfile?.role === "manager") &&
+    !Boolean(user?.emailVerified);
 
   const handleLogoutClick = async () => {
     if (requiresFormalClose) {
@@ -138,8 +139,8 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
       </div>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-4">
-        {needsMfaEnrollment && (
-          <Badge variant="secondary" className="hidden md:inline-flex">2FA pendiente</Badge>
+        {needsEmailVerification && (
+          <Badge variant="secondary" className="hidden md:inline-flex">Correo sin verificar</Badge>
         )}
         <Button variant="ghost" size="sm" onClick={onHistoryClick} className="hidden sm:flex">
           <History className="mr-2 h-4 w-4" />

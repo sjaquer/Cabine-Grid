@@ -48,17 +48,15 @@ import { initializeApp, deleteApp } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
   deleteUser,
-  EmailAuthProvider,
   getAuth,
-  multiFactor,
-  reauthenticateWithCredential,
+  sendEmailVerification,
   signOut,
-  TotpMultiFactorGenerator,
 } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { logAuditAction } from "@/lib/audit-log";
 
 type AppSecuritySettings = {
+  requireVerifiedEmailForFullAccess?: boolean;
   requireMfaForFullAccess?: boolean;
 };
 
@@ -68,15 +66,9 @@ export default function AdminPage() {
   const { toast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
-  const [hasSecondFactorOverride, setHasSecondFactorOverride] = useState<boolean | null>(null);
-  const [isMfaDialogOpen, setIsMfaDialogOpen] = useState(false);
-  const [mfaPassword, setMfaPassword] = useState("");
-  const [mfaCode, setMfaCode] = useState("");
-  const [totpSecret, setTotpSecret] = useState<any | null>(null);
-  const [totpQrUrl, setTotpQrUrl] = useState("");
-  const [totpSecretKey, setTotpSecretKey] = useState("");
-  const [isPreparingMfa, setIsPreparingMfa] = useState(false);
-  const [isConfirmingMfa, setIsConfirmingMfa] = useState(false);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [isSendingVerificationEmail, setIsSendingVerificationEmail] = useState(false);
+  const [isCheckingVerificationEmail, setIsCheckingVerificationEmail] = useState(false);
 
   const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
@@ -113,9 +105,9 @@ export default function AdminPage() {
     () => (approvalsData ?? []).filter((x) => (x.status || "pending") === "pending"),
     [approvalsData]
   );
-  const requireMfaForFullAccess = Boolean(securitySettings?.requireMfaForFullAccess);
-  const currentUserHasMfa = user ? multiFactor(user).enrolledFactors.length > 0 : false;
-  const hasSecondFactorEnabled = hasSecondFactorOverride ?? currentUserHasMfa;
+  const requireVerifiedEmailForFullAccess =
+    securitySettings?.requireVerifiedEmailForFullAccess ?? Boolean(securitySettings?.requireMfaForFullAccess);
+  const hasVerifiedEmail = Boolean(user?.emailVerified);
 
   const auditActor = {
     id: user?.uid,
@@ -360,17 +352,17 @@ export default function AdminPage() {
     toast({ title: "Snapshot diario generado" });
   };
 
-  const handleToggleRequireMfaForFullAccess = async (checked: boolean) => {
+  const handleToggleRequireVerifiedEmailForFullAccess = async (checked: boolean) => {
     if (userProfile?.role !== "admin") {
       toast({ variant: "destructive", title: "Solo admin puede cambiar esta configuracion" });
       return;
     }
 
-    if (checked && !hasSecondFactorEnabled) {
-      setIsMfaDialogOpen(true);
+    if (checked && !hasVerifiedEmail) {
+      setIsEmailDialogOpen(true);
       toast({
-        title: "Primero activa 2 pasos",
-        description: "Te abrimos el asistente para configurarlo ahora mismo.",
+        title: "Primero verifica tu correo",
+        description: "Te abrimos el asistente para enviar y confirmar el email de verificacion.",
       });
       return;
     }
@@ -380,6 +372,7 @@ export default function AdminPage() {
       await setDoc(
         securitySettingsRef,
         {
+          requireVerifiedEmailForFullAccess: checked,
           requireMfaForFullAccess: checked,
           updatedAt: serverTimestamp(),
           updatedBy: {
@@ -391,18 +384,18 @@ export default function AdminPage() {
       );
 
       await logAuditAction(firestore, {
-        action: "security.mfa.require_full_access.toggle",
+        action: "security.email.require_full_access.toggle",
         target: "appSettings",
         targetId: "security",
         actor: auditActor,
-        details: { requireMfaForFullAccess: checked },
+        details: { requireVerifiedEmailForFullAccess: checked },
       });
 
       toast({
-        title: checked ? "2 pasos requerido activado" : "2 pasos requerido desactivado",
+        title: checked ? "Verificacion de correo requerida activada" : "Verificacion de correo requerida desactivada",
         description: checked
-          ? "Ahora todos deben tener 2 pasos para ver toda la app."
-          : "Se desactivo la exigencia global de 2 pasos.",
+          ? "Ahora todos deben tener su correo verificado para ver toda la app."
+          : "Se desactivo la exigencia global de verificacion de correo.",
       });
     } catch (error) {
       console.error(error);
@@ -416,88 +409,145 @@ export default function AdminPage() {
     }
   };
 
-  const resetMfaAssistant = () => {
-    setMfaPassword("");
-    setMfaCode("");
-    setTotpSecret(null);
-    setTotpQrUrl("");
-    setTotpSecretKey("");
-    setIsPreparingMfa(false);
-    setIsConfirmingMfa(false);
-  };
-
-  const handleGenerateMfaSecret = async () => {
-    if (!user || !user.email) {
-      toast({ variant: "destructive", title: "Sesion invalida", description: "Vuelve a iniciar sesion para configurar 2 pasos." });
-      return;
-    }
-    if (!mfaPassword.trim()) {
-      toast({ variant: "destructive", title: "Falta contraseña", description: "Ingresa tu contraseña para validar la operacion." });
+  const handleSendVerificationEmail = async () => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Sesion invalida", description: "Vuelve a iniciar sesion e intentalo otra vez." });
       return;
     }
 
-    setIsPreparingMfa(true);
-    try {
-      const credential = EmailAuthProvider.credential(user.email, mfaPassword.trim());
-      await reauthenticateWithCredential(user, credential);
+    if (user.emailVerified) {
+      toast({
+        title: "Correo ya verificado",
+        description: "Esta cuenta ya tiene el correo verificado.",
+      });
+      return;
+    }
 
-      const mfaSession = await multiFactor(user).getSession();
-      const secret = await TotpMultiFactorGenerator.generateSecret(mfaSession);
-      const qrUrl = secret.generateQrCodeUrl(user.email, "Cabine Grid");
-
-      setTotpSecret(secret);
-      setTotpQrUrl(qrUrl);
-      setTotpSecretKey(secret.secretKey);
-      toast({ title: "Asistente listo", description: "Escanea el QR en tu app autenticadora y coloca el codigo de 6 digitos." });
-    } catch (error) {
-      console.error(error);
+    if (!firebaseConfig.authDomain) {
       toast({
         variant: "destructive",
-        title: "No se pudo preparar 2 pasos",
-        description: "Verifica tu contraseña y vuelve a intentar.",
+        title: "Falta configuracion de authDomain",
+        description: "Configura NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN en .env.local y reinicia la app.",
       });
-    } finally {
-      setIsPreparingMfa(false);
-    }
-  };
-
-  const handleConfirmMfaEnrollment = async () => {
-    if (!user || !totpSecret) return;
-    const trimmedCode = mfaCode.trim();
-    if (trimmedCode.length < 6) {
-      toast({ variant: "destructive", title: "Codigo invalido", description: "Ingresa el codigo de 6 digitos de tu app autenticadora." });
       return;
     }
 
-    setIsConfirmingMfa(true);
+    setIsSendingVerificationEmail(true);
     try {
-      const assertion = TotpMultiFactorGenerator.assertionForEnrollment(totpSecret, trimmedCode);
-      await multiFactor(user).enroll(assertion, "Cabine Grid Authenticator");
+      const continueUrl = `${window.location.origin}/login?emailVerified=1`;
+      await sendEmailVerification(user, {
+        url: continueUrl,
+        handleCodeInApp: false,
+      });
+
+      toast({
+        title: "Correo enviado",
+        description: "Revisa bandeja principal, spam y promociones. Luego abre el enlace y vuelve a Comprobar verificacion.",
+      });
+    } catch (error) {
+      console.error(error);
+
+      const firebaseErrorCode =
+        typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : "";
+
+      if (firebaseErrorCode === "auth/too-many-requests") {
+        toast({
+          variant: "destructive",
+          title: "Demasiados intentos",
+          description: "Firebase limito temporalmente los envios. Espera unos minutos e intentalo de nuevo.",
+        });
+        return;
+      }
+
+      if (firebaseErrorCode === "auth/unauthorized-continue-uri") {
+        toast({
+          variant: "destructive",
+          title: "URL no autorizada",
+          description: "Agrega este dominio en Firebase Authentication > Settings > Authorized domains.",
+        });
+        return;
+      }
+
+      if (firebaseErrorCode === "auth/invalid-continue-uri") {
+        toast({
+          variant: "destructive",
+          title: "Continue URL invalida",
+          description: "La URL de retorno no es valida para Firebase Auth. Revisa dominio y protocolo.",
+        });
+        return;
+      }
+
+      if (firebaseErrorCode === "auth/network-request-failed") {
+        toast({
+          variant: "destructive",
+          title: "Error de red",
+          description: "No se pudo contactar a Firebase. Verifica conexion, VPN o firewall.",
+        });
+        return;
+      }
+
+      if (firebaseErrorCode === "auth/quota-exceeded") {
+        toast({
+          variant: "destructive",
+          title: "Cuota de envios excedida",
+          description: "El proyecto alcanzo el limite de correos de autenticacion. Revisa cuota en Firebase/Google Cloud.",
+        });
+        return;
+      }
+
+      toast({
+        variant: "destructive",
+        title: "No se pudo enviar el correo",
+        description: firebaseErrorCode || "Intenta nuevamente en unos segundos.",
+      });
+    } finally {
+      setIsSendingVerificationEmail(false);
+    }
+  };
+
+  const handleRefreshEmailVerificationStatus = async () => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Sesion invalida", description: "Vuelve a iniciar sesion e intentalo otra vez." });
+      return;
+    }
+
+    setIsCheckingVerificationEmail(true);
+    try {
+      await user.reload();
       await user.getIdToken(true);
 
-      setHasSecondFactorOverride(true);
+      if (!user.emailVerified) {
+        toast({
+          variant: "destructive",
+          title: "Correo aun no verificado",
+          description: "Abre el enlace del correo y luego vuelve a presionar Comprobar.",
+        });
+        return;
+      }
+
       await logAuditAction(firestore, {
-        action: "security.mfa.enroll",
+        action: "security.email.verify",
         target: "users",
         targetId: user.uid,
         actor: auditActor,
       });
 
       toast({
-        title: "2 pasos activado",
-        description: "Tu cuenta ya quedo protegida. Ahora puedes activar la exigencia global.",
+        title: "Correo verificado",
+        description: "Tu cuenta ya esta verificada. Ahora puedes activar la exigencia global.",
       });
-      setIsMfaDialogOpen(false);
-      resetMfaAssistant();
+      setIsEmailDialogOpen(false);
     } catch (error) {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Codigo incorrecto o expirado",
-        description: "Genera un nuevo codigo en tu app y vuelve a intentar.",
+        title: "No se pudo comprobar verificacion",
+        description: "Vuelve a intentarlo en unos segundos.",
       });
     } finally {
-      setIsConfirmingMfa(false);
+      setIsCheckingVerificationEmail(false);
     }
   };
 
@@ -838,9 +888,9 @@ export default function AdminPage() {
           {userProfile?.role === "admin" && (
             <Card className="mb-6">
               <CardHeader>
-                <CardTitle>Seguridad de 2 pasos</CardTitle>
+                <CardTitle>Verificacion por correo</CardTitle>
                 <CardDescription>
-                  Exige verificacion en 2 pasos para ver todo Cabine Grid.
+                  Exige correo verificado para ver todo Cabine Grid.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -849,29 +899,29 @@ export default function AdminPage() {
                     <div>
                       <p className="font-medium text-foreground">Estado de tu cuenta admin</p>
                       <p className="text-sm text-muted-foreground">
-                        {hasSecondFactorEnabled
-                          ? "Tu cuenta ya tiene verificacion de 2 pasos activa."
-                          : "Tu cuenta aun no tiene 2 pasos. Puedes activarlo desde aqui mismo."}
+                        {hasVerifiedEmail
+                          ? "Tu cuenta ya tiene correo verificado."
+                          : "Tu cuenta aun no tiene correo verificado. Puedes enviarlo desde aqui mismo."}
                       </p>
                     </div>
-                    <Button variant="outline" onClick={() => setIsMfaDialogOpen(true)}>
-                      {hasSecondFactorEnabled ? "Revisar configuracion 2 pasos" : "Activar 2 pasos ahora"}
+                    <Button variant="outline" onClick={() => setIsEmailDialogOpen(true)}>
+                      {hasVerifiedEmail ? "Revisar verificacion" : "Verificar correo ahora"}
                     </Button>
                   </div>
 
                   <div className="flex items-center justify-between gap-4 border-t pt-4">
                     <div>
-                    <p className="font-medium text-foreground">Requerir 2 pasos para acceso total</p>
+                    <p className="font-medium text-foreground">Requerir correo verificado para acceso total</p>
                     <p className="text-sm text-muted-foreground">
-                      Si esta activo, cualquier usuario sin 2 pasos quedara bloqueado hasta volver a iniciar sesion con verificacion.
+                      Si esta activo, cualquier usuario sin correo verificado quedara bloqueado hasta confirmar su email.
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     {isSavingSecurity && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
                     <Switch
-                      checked={requireMfaForFullAccess}
+                      checked={Boolean(requireVerifiedEmailForFullAccess)}
                       disabled={isSavingSecurity}
-                      onCheckedChange={handleToggleRequireMfaForFullAccess}
+                      onCheckedChange={handleToggleRequireVerifiedEmailForFullAccess}
                     />
                   </div>
                 </div>
@@ -880,97 +930,48 @@ export default function AdminPage() {
             </Card>
           )}
 
-          <Dialog open={isMfaDialogOpen} onOpenChange={(open) => {
-            setIsMfaDialogOpen(open);
-            if (!open) {
-              resetMfaAssistant();
-            }
-          }}>
+          <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
             <DialogContent className="sm:max-w-xl">
               <DialogHeader>
-                <DialogTitle>Activar verificacion en 2 pasos</DialogTitle>
+                <DialogTitle>Verificar correo de la cuenta</DialogTitle>
                 <DialogDescription>
-                  Configura tu app autenticadora para proteger esta cuenta admin sin salir del panel.
+                  Envia el correo de verificacion y confirma el enlace para habilitar acceso completo.
                 </DialogDescription>
               </DialogHeader>
 
-              {hasSecondFactorEnabled ? (
+              {hasVerifiedEmail ? (
                 <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  Ya tienes 2 pasos activo en esta cuenta. Si inicias sesion nuevamente, se te pedira el codigo del autenticador.
+                  Esta cuenta ya tiene el correo verificado.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="mfa-password">1) Confirma tu contraseña</Label>
-                    <Input
-                      id="mfa-password"
-                      type="password"
-                      value={mfaPassword}
-                      onChange={(event) => setMfaPassword(event.target.value)}
-                      placeholder="Tu contraseña actual"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Button onClick={handleGenerateMfaSecret} disabled={isPreparingMfa}>
-                      {isPreparingMfa ? "Preparando..." : "2) Generar QR de autenticador"}
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      Compatible con Google Authenticator, Microsoft Authenticator o Authy.
-                    </p>
-                  </div>
-
-                  {totpQrUrl && (
-                    <div className="space-y-3 rounded-md border p-4">
-                      <p className="text-sm font-medium">3) Escanea este QR en tu app autenticadora</p>
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(totpQrUrl)}`}
-                        alt="QR para configurar 2 pasos"
-                        className="h-56 w-56 rounded border"
-                      />
-                      <div className="space-y-2">
-                        <Label htmlFor="mfa-secret-key">Clave manual (si no puedes escanear)</Label>
-                        <div className="flex gap-2">
-                          <Input id="mfa-secret-key" value={totpSecretKey} readOnly />
-                          <Button
-                            variant="outline"
-                            type="button"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(totpSecretKey);
-                              toast({ title: "Clave copiada" });
-                            }}
-                          >
-                            Copiar
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="mfa-code">4) Ingresa el codigo de 6 digitos</Label>
-                        <Input
-                          id="mfa-code"
-                          inputMode="numeric"
-                          maxLength={6}
-                          value={mfaCode}
-                          onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                          placeholder="123456"
-                        />
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-sm text-muted-foreground">
+                    Paso 1: presiona Enviar correo. Paso 2: abre el enlace que te llega por email.
+                    Paso 3: vuelve aqui y presiona Comprobar verificacion.
+                  </p>
                 </div>
               )}
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsMfaDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>
                   Cerrar
                 </Button>
-                {!hasSecondFactorEnabled && (
-                  <Button
-                    onClick={handleConfirmMfaEnrollment}
-                    disabled={!totpSecret || mfaCode.trim().length < 6 || isConfirmingMfa}
-                  >
-                    {isConfirmingMfa ? "Activando..." : "Confirmar y activar 2 pasos"}
-                  </Button>
+                {!hasVerifiedEmail && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={handleSendVerificationEmail}
+                      disabled={isSendingVerificationEmail}
+                    >
+                      {isSendingVerificationEmail ? "Enviando..." : "Enviar correo"}
+                    </Button>
+                    <Button
+                      onClick={handleRefreshEmailVerificationStatus}
+                      disabled={isCheckingVerificationEmail}
+                    >
+                      {isCheckingVerificationEmail ? "Comprobando..." : "Comprobar verificacion"}
+                    </Button>
+                  </>
                 )}
               </DialogFooter>
             </DialogContent>
