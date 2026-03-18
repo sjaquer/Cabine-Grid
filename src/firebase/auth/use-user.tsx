@@ -145,6 +145,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           createdAt: serverTimestamp(),
         });
 
+        if (Math.abs(cashDifference) >= 20) {
+          await addDoc(collection(firestore, 'fraudAlerts'), {
+            type: 'cash-difference',
+            severity: Math.abs(cashDifference) >= 100 ? 'high' : 'medium',
+            locationId: shiftLocationId || null,
+            shiftId,
+            operator: {
+              id: user.uid,
+              email: user.email,
+            },
+            details: {
+              expectedCash,
+              countedCash,
+              cashDifference,
+              reason: payload.discrepancyReason?.trim() || null,
+            },
+            status: 'open',
+            createdAt: serverTimestamp(),
+          });
+        }
+
         await logAuditAction(firestore, {
           action: 'shift.close',
           target: 'shiftClosures',

@@ -80,6 +80,7 @@ export default function InventoryPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const { user, userProfile } = useAuth();
+  const operatorLocationIds = userProfile?.role === "operator" ? (userProfile.locationIds ?? []) : [];
 
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -111,11 +112,14 @@ export default function InventoryPage() {
   const { data: inventoryData } = useCollection<Omit<InventoryDoc, "id">>(inventoryQuery);
 
   const locations = useMemo(
-    () =>
-      (locationsData ?? [])
-        .filter((location) => location.isActive !== false)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [locationsData]
+    () => {
+      const base = (locationsData ?? []).filter((location) => location.isActive !== false);
+      const scoped = userProfile?.role === "operator"
+        ? base.filter((location) => operatorLocationIds.includes(location.id))
+        : base;
+      return scoped.sort((a, b) => a.name.localeCompare(b.name));
+    },
+    [locationsData, userProfile?.role, operatorLocationIds]
   );
 
   const products = useMemo(
@@ -201,6 +205,31 @@ export default function InventoryPage() {
     if (!selectedLocationId) return;
 
     const safeQty = Math.max(1, Math.floor(qty || 0));
+
+    if (safeQty > 20 && userProfile?.role !== "admin") {
+      await addDoc(collection(firestore, "sensitiveApprovals"), {
+        type: "inventory.adjust.large",
+        status: "pending",
+        locationId: selectedLocationId,
+        requestedBy: {
+          id: user?.uid || null,
+          email: user?.email || null,
+        },
+        payload: {
+          locationId: selectedLocationId,
+          productId: row.productId,
+          productName: row.productName,
+          minStock: row.minStock,
+          quantity: safeQty,
+          type,
+        },
+        note: note.trim() || `Ajuste ${type} de ${safeQty} requiere aprobación`,
+        createdAt: serverTimestamp(),
+      });
+      toast({ title: "Solicitud enviada", description: "Ajustes mayores a 20 unidades requieren aprobación de admin." });
+      return;
+    }
+
     const actionKey = `${row.productId}:${type}:${safeQty}`;
     setBusyActionKey(actionKey);
 

@@ -42,6 +42,31 @@ service cloud.firestore {
       return isAdminOrManager() || isOperator();
     }
 
+    function hasMfaForPrivilegedRoles() {
+      return !isAdminOrManager() || (
+        request.auth.token.firebase != null &&
+        request.auth.token.firebase.sign_in_second_factor != null
+      );
+    }
+
+    function locationInScope(locationId) {
+      return isAdminOrManager() || (
+        isOperator() &&
+        locationId is string &&
+        get(userDocPath()).data.locationIds is list &&
+        locationId in get(userDocPath()).data.locationIds
+      );
+    }
+
+    function saleLooksValid() {
+      return request.resource.data.amount is number &&
+        request.resource.data.amount >= 0 &&
+        request.resource.data.amount <= 5000 &&
+        request.resource.data.totalMinutes is number &&
+        request.resource.data.totalMinutes >= 0 &&
+        request.resource.data.totalMinutes <= 1440;
+    }
+
     function hasNonNegativeStock() {
       return request.resource.data.stock is number && request.resource.data.stock >= 0;
     }
@@ -52,76 +77,141 @@ service cloud.firestore {
 
       // Permite bootstrap del perfil propio al iniciar sesión por primera vez.
       allow create: if isSignedIn() && (
-        request.auth.uid == userId || isAdminOrManager()
+        request.auth.uid == userId || (isAdminOrManager() && hasMfaForPrivilegedRoles())
       );
 
       // El propio usuario puede actualizar datos básicos (no rol).
       allow update: if isSignedIn() && (
-        isAdminOrManager() ||
+        (isAdminOrManager() && hasMfaForPrivilegedRoles()) ||
         (
           request.auth.uid == userId &&
           request.resource.data.role == resource.data.role
         )
       );
 
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && hasMfaForPrivilegedRoles();
     }
 
     match /machines/{machineId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if canOperate();
+      allow read: if isSignedIn() && (
+        isAdminOrManager() ||
+        (isOperator() && resource.data.locationId is string && locationInScope(resource.data.locationId))
+      );
+      allow create, update, delete: if canOperate() && hasMfaForPrivilegedRoles() && (
+        !('locationId' in request.resource.data) ||
+        locationInScope(request.resource.data.locationId)
+      );
     }
 
     match /products/{productId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdminOrManager();
+      allow create, update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
     }
 
     match /locations/{locationId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdminOrManager();
+      allow read: if isSignedIn() && (
+        isAdminOrManager() ||
+        (isOperator() && locationInScope(locationId))
+      );
+      allow create, update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
     }
 
     match /sales/{saleId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate();
-      allow update: if canOperate();
+      allow read: if isSignedIn() && (
+        isAdminOrManager() ||
+        (isOperator() && resource.data.locationId is string && locationInScope(resource.data.locationId))
+      );
+      allow create: if canOperate() && saleLooksValid() && (
+        !('locationId' in request.resource.data) ||
+        locationInScope(request.resource.data.locationId)
+      );
+      allow update: if canOperate() && saleLooksValid() && (
+        !('locationId' in request.resource.data) ||
+        locationInScope(request.resource.data.locationId)
+      );
       allow delete: if isAdminOrManager();
     }
 
     match /inventory/{inventoryId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate() && hasNonNegativeStock();
-      allow update: if canOperate() && hasNonNegativeStock();
-      allow delete: if canOperate();
+      allow read: if isSignedIn() && (
+        isAdminOrManager() ||
+        (isOperator() && resource.data.locationId is string && locationInScope(resource.data.locationId))
+      );
+      allow create: if canOperate() && hasNonNegativeStock() && (
+        request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
+      );
+      allow update: if canOperate() && hasNonNegativeStock() && (
+        request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
+      );
+      allow delete: if canOperate() && hasMfaForPrivilegedRoles();
     }
 
     match /inventoryMovements/{movementId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if canOperate();
+      allow read: if isSignedIn() && (
+        isAdminOrManager() ||
+        (isOperator() && resource.data.locationId is string && locationInScope(resource.data.locationId))
+      );
+      allow create: if canOperate() && (
+        request.resource.data.locationId is string &&
+        locationInScope(request.resource.data.locationId) &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity > 0 &&
+        request.resource.data.quantity <= 200
+      );
+      allow update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
     }
 
     match /inventoryDiscrepancies/{discrepancyId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if canOperate();
+      allow read: if isSignedIn() && (
+        isAdminOrManager() ||
+        (isOperator() && resource.data.locationId is string && locationInScope(resource.data.locationId))
+      );
+      allow create: if canOperate() && (
+        request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
+      );
+      allow update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
     }
 
     match /shiftClosures/{closureId} {
       allow read: if isAdminOrManager();
-      allow create: if canOperate();
-      allow update, delete: if isAdmin();
+      allow create: if canOperate() && (
+        request.resource.data.locationId == null ||
+        (request.resource.data.locationId is string && locationInScope(request.resource.data.locationId))
+      );
+      allow update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
     }
 
     match /receiptCounters/{counterId} {
       allow read: if isSignedIn();
       allow create, update: if canOperate();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && hasMfaForPrivilegedRoles();
     }
 
     match /auditLogs/{logId} {
       allow read: if isAdminOrManager();
       allow create: if canOperate();
-      allow update, delete: if isAdmin();
+      allow update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
+    }
+
+    match /sensitiveApprovals/{approvalId} {
+      allow read: if isAdminOrManager();
+      allow create: if canOperate() && (
+        request.resource.data.locationId == null ||
+        (request.resource.data.locationId is string && locationInScope(request.resource.data.locationId))
+      );
+      allow update: if isAdmin() && hasMfaForPrivilegedRoles();
+      allow delete: if isAdmin() && hasMfaForPrivilegedRoles();
+    }
+
+    match /fraudAlerts/{alertId} {
+      allow read: if isAdminOrManager();
+      allow create: if canOperate();
+      allow update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
+    }
+
+    match /dailySnapshots/{snapshotId} {
+      allow read: if isAdminOrManager();
+      allow create, update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
     }
 
     // Bloquea cualquier colección no prevista.

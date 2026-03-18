@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { UserProfile, UserRole } from "@/lib/types";
+import type { Location, UserProfile, UserRole } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -49,10 +50,12 @@ const createUserSchema = z.object({
   email: z.string().trim().email("Ingresa un correo valido"),
   password: z.string().min(6, "La contrasena debe tener al menos 6 caracteres"),
   role: z.enum(["admin", "manager", "operator", "view-only"]),
+  locationIds: z.array(z.string()).optional(),
 });
 
 const userRoleSchema = z.object({
   role: z.enum(["admin", "manager", "operator", "view-only"]),
+  locationIds: z.array(z.string()).optional(),
 });
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
@@ -60,8 +63,9 @@ type UserRoleFormValues = z.infer<typeof userRoleSchema>;
 
 type UserManagerProps = {
   users: UserProfile[];
+  locations: Location[];
   onCreateUser: (payload: CreateUserFormValues) => Promise<void>;
-  onChangeRole: (userId: string, role: UserRole) => Promise<void>;
+  onUpdateUserAccess: (userId: string, payload: { role: UserRole; locationIds: string[] }) => Promise<void>;
   onDeactivate: (userId: string) => Promise<void>;
 };
 
@@ -86,7 +90,7 @@ const roleIcons = {
   "view-only": <User className="w-4 h-4" />,
 };
 
-export default function UserManager({ users, onCreateUser, onChangeRole, onDeactivate }: UserManagerProps) {
+export default function UserManager({ users, locations, onCreateUser, onUpdateUserAccess, onDeactivate }: UserManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
@@ -98,6 +102,7 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
       email: "",
       password: "",
       role: "operator",
+      locationIds: [],
     },
   });
 
@@ -115,6 +120,7 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
         email: "",
         password: "",
         role: "operator",
+        locationIds: [],
       });
     } catch (error) {
       console.error("Error creating user:", error);
@@ -128,13 +134,17 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
   const handleEdit = (user: UserProfile) => {
     setEditingId(user.uid);
     form.setValue("role", user.role);
+    form.setValue("locationIds", user.locationIds ?? []);
     setIsOpen(true);
   };
 
   const handleSubmit = async (values: UserRoleFormValues) => {
     try {
       if (editingId) {
-        await onChangeRole(editingId, values.role);
+        await onUpdateUserAccess(editingId, {
+          role: values.role,
+          locationIds: values.locationIds ?? [],
+        });
         setIsOpen(false);
         setEditingId(null);
         form.reset();
@@ -228,6 +238,40 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
                   </FormItem>
                 )}
               />
+              <FormField
+                control={createForm.control}
+                name="locationIds"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Locales asignados</FormLabel>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border p-3">
+                      {locations.map((location) => {
+                        const checked = (field.value ?? []).includes(location.id);
+                        return (
+                          <label key={location.id} className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(isChecked) => {
+                                const base = field.value ?? [];
+                                if (isChecked) {
+                                  field.onChange(Array.from(new Set([...base, location.id])));
+                                } else {
+                                  field.onChange(base.filter((id) => id !== location.id));
+                                }
+                              }}
+                            />
+                            <span>{location.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <FormDescription>
+                      Si no seleccionas locales, el acceso quedará sin restricción por local.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               {createForm.formState.errors.root?.message && (
                 <p className="md:col-span-2 text-sm text-destructive">
                   {createForm.formState.errors.root.message}
@@ -264,6 +308,7 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
             <TableRow>
               <TableHead>Nombre/Email</TableHead>
               <TableHead>Rol Actual</TableHead>
+              <TableHead>Locales</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -288,6 +333,15 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
                       ? "Operador"
                       : "Lectura"}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  <span className="text-sm text-muted-foreground">
+                    {user.locationIds && user.locationIds.length > 0
+                      ? user.locationIds
+                          .map((id) => locations.find((location) => location.id === id)?.name || id)
+                          .join(", ")
+                      : "Sin restricción"}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <Badge variant={user.isActive !== false ? "default" : "secondary"}>
@@ -320,9 +374,9 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Cambiar Rol de Usuario</DialogTitle>
+              <DialogTitle>Editar Acceso de Usuario</DialogTitle>
               <DialogDescription>
-                Selecciona el nuevo rol para este usuario
+                Ajusta rol y locales permitidos para este usuario.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -368,6 +422,40 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
                       </Select>
                       <FormDescription>
                         {roleDescriptions[form.watch("role")]}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="locationIds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Locales asignados</FormLabel>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border p-3">
+                        {locations.map((location) => {
+                          const checked = (field.value ?? []).includes(location.id);
+                          return (
+                            <label key={location.id} className="flex items-center gap-2 text-sm">
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(isChecked) => {
+                                  const base = field.value ?? [];
+                                  if (isChecked) {
+                                    field.onChange(Array.from(new Set([...base, location.id])));
+                                  } else {
+                                    field.onChange(base.filter((id) => id !== location.id));
+                                  }
+                                }}
+                              />
+                              <span>{location.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <FormDescription>
+                        Si no seleccionas locales, el acceso quedará sin restricción por local.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

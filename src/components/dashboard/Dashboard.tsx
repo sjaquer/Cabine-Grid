@@ -23,11 +23,15 @@ export default function Dashboard() {
   const router = useRouter();
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
+  const operatorLocationIds = userProfile?.role === "operator" ? (userProfile.locationIds ?? []) : [];
 
   const machinesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
+    if (userProfile?.role === "operator" && operatorLocationIds.length > 0 && operatorLocationIds.length <= 10) {
+      return query(collection(firestore, "machines"), where("locationId", "in", operatorLocationIds));
+    }
     return query(collection(firestore, "machines"));
-  }, [firestore]);
+  }, [firestore, userProfile?.role, operatorLocationIds]);
   
   const { data: machinesData, isLoading: machinesLoading } = useCollection<Omit<Machine, 'id'>>(machinesQuery);
 
@@ -131,8 +135,16 @@ export default function Dashboard() {
     today.setHours(0, 0, 0, 0);
     const startOfToday = Timestamp.fromDate(today);
 
+    if (userProfile?.role === "operator" && operatorLocationIds.length > 0 && operatorLocationIds.length <= 10) {
+      return query(
+        collection(firestore, "sales"),
+        where("endTime", ">=", startOfToday),
+        where("locationId", "in", operatorLocationIds)
+      );
+    }
+
     return query(collection(firestore, "sales"), where("endTime", ">=", startOfToday));
-  }, [firestore, user]);
+  }, [firestore, user, userProfile?.role, operatorLocationIds]);
 
   const { data: sales, isLoading: salesLoading } = useCollection<Sale>(salesQuery);
   const sortedSales = useMemo(() => sales ? [...sales].sort((a, b) => (b.endTime as Timestamp).toMillis() - (a.endTime as Timestamp).toMillis()) : [], [sales]);
@@ -403,6 +415,24 @@ export default function Dashboard() {
           productsCount: soldProducts.reduce((sum, p) => sum + p.quantity, 0),
         },
       });
+
+      if (amount >= 200) {
+        await addDoc(collection(firestore, "fraudAlerts"), {
+          type: "high-sale-amount",
+          severity: amount >= 500 ? "high" : "medium",
+          locationId: effectiveLocationId || null,
+          saleId: saleRef.id,
+          operator,
+          details: {
+            amount,
+            paymentMethod,
+            machineName: machine.name,
+            receiptNumber,
+          },
+          status: "open",
+          createdAt: serverTimestamp(),
+        });
+      }
       
       toast({
         title: "Pago Confirmado",
