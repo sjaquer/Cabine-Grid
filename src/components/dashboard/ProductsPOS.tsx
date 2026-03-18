@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ProductsPOSProps {
     initialProducts?: SoldProduct[];
-    onSave: (products: SoldProduct[]) => void;
+    onSave: (products: SoldProduct[]) => Promise<void>;
     onClose?: () => void;
     onGoToCharge?: () => void;
 }
@@ -41,6 +41,7 @@ export default function ProductsPOS({ initialProducts, onSave, onClose, onGoToCh
         }, {} as Record<string, number>);
     });
     const [searchTerm, setSearchTerm] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
 
     const filteredProducts = useMemo(() => {
         return availableProducts.filter(p =>
@@ -203,30 +204,43 @@ export default function ProductsPOS({ initialProducts, onSave, onClose, onGoToCh
                         <Button 
                             variant="outline" 
                             onClick={onClose} 
+                            disabled={isSaving}
                             className="w-full sm:w-1/4 h-12 sm:h-auto font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
                         >
                             Cancelar
                         </Button>
                     )}
                     <Button 
-                        onClick={() => {
-                            onSave(soldProducts);
-                            if (onClose) onClose();
+                        onClick={async () => {
+                            try {
+                                setIsSaving(true);
+                                await onSave(soldProducts);
+                                if (onClose) onClose();
+                            } finally {
+                                setIsSaving(false);
+                            }
                         }} 
+                        disabled={isSaving}
                         className="w-full sm:flex-1 h-14 sm:h-auto bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
                     >
                         <ShoppingCart className="w-5 h-5 mr-2" />
-                        Añadir y seguir jugando
+                        {isSaving ? "Guardando..." : "Añadir y seguir jugando"}
                     </Button>
                     {onGoToCharge && (
                         <Button 
-                            onClick={() => {
-                                onSave(soldProducts);
-                                onGoToCharge();
+                            onClick={async () => {
+                                try {
+                                    setIsSaving(true);
+                                    await onSave(soldProducts);
+                                    onGoToCharge();
+                                } finally {
+                                    setIsSaving(false);
+                                }
                             }} 
+                            disabled={isSaving}
                             className="w-full sm:flex-1 h-14 sm:h-auto bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
                         >
-                            💰 Ir a Cobrar Boleta
+                            {isSaving ? "Guardando..." : "💰 Ir a Cobrar Boleta"}
                         </Button>
                     )}
                 </div>

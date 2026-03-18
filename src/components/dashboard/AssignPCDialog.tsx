@@ -111,23 +111,23 @@ export default function AssignPCDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-primary/20 via-transparent to-accent/20 p-6 border-b">
+      <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden max-h-[92vh] flex flex-col">
+        <div className="bg-gradient-to-r from-primary/20 via-transparent to-accent/20 p-5 sm:p-6 border-b shrink-0">
           <DialogHeader className="space-y-1">
-            <DialogTitle className="font-headline text-2xl flex items-center gap-2">
+            <DialogTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2">
               <div className="p-2 rounded-lg bg-primary/30">
-                <Clock className="w-5 h-5 text-primary" />
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               </div>
               Asignar {machine?.name}
             </DialogTitle>
-            <DialogDescription className="text-sm">
+            <DialogDescription className="text-xs sm:text-sm">
               Configura la sesión del cliente
             </DialogDescription>
           </DialogHeader>
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 p-6" id="assignPC-form">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-5 p-4 sm:p-6 overflow-y-auto min-h-0 flex-1" id="assignPC-form">
             
             {/* Cliente */}
             <FormField
@@ -166,7 +166,7 @@ export default function AssignPCDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm font-semibold">Modo de Uso</FormLabel>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div 
                       className={`cursor-pointer transition-all p-4 rounded-lg border-2 ${field.value === 'free' ? 'ring-2 ring-primary border-primary' : 'border-muted'}`}
                       onClick={() => field.onChange('free')}
@@ -265,7 +265,7 @@ export default function AssignPCDialog({
               {currentMode === 'prepaid' && form.watch('prepaidHours') && effectiveRate && (
                 <div className="text-sm">
                   <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Total a cobrar</p>
-                  <p className="text-lg font-bold text-green-500 font-mono">
+                  <p className="text-sm md:text-lg font-bold text-green-500 font-mono">
                     S/. {(effectiveRate.pricePerHour * (Number(form.watch('prepaidHours')) || 0)).toFixed(2)}
                   </p>
                 </div>
@@ -274,11 +274,11 @@ export default function AssignPCDialog({
           </form>
         </Form>
 
-        <DialogFooter className="p-6 border-t bg-secondary/30 gap-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="p-4 sm:p-6 border-t bg-secondary/30 gap-2 sm:gap-3 shrink-0 flex-col sm:flex-row">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Cancelar
           </Button>
-          <Button type="submit" form="assignPC-form" disabled={isSubmitting}>
+          <Button type="submit" form="assignPC-form" disabled={isSubmitting} className="w-full sm:w-auto">
             {isSubmitting ? "Iniciando..." : "Iniciar Sesión"}
           </Button>
         </DialogFooter>

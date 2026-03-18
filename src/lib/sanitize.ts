@@ -1,19 +1,19 @@
-import DOMPurify from "dompurify";
-
 /**
  * Sanitiza un string para prevenir XSS
- * Elimina scripts y tags HTML peligrosos
+ * Versión ligera que ya no depende de dompurify
  */
 export function sanitizeString(input: string | undefined | null): string {
   if (!input || typeof input !== "string") {
     return "";
   }
   
-  // Usar DOMPurify en modo text-only para mantener el contenido pero eliminar cualquier HTML/Script
-  const clean = DOMPurify.sanitize(input, { 
-    ALLOWED_TAGS: [],
-    ALLOWED_ATTR: [] 
-  });
+  // Reemplazo básico de caracteres sensibles sin usar DOMPurify para mayor rapidez
+  const clean = input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
   
   return clean;
 }

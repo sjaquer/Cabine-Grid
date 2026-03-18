@@ -95,6 +95,7 @@ export default function Dashboard() {
 
   const [isChargeDialogOpen, setChargeDialogOpen] = useState(false);
   const [machineToCharge, setMachineToCharge] = useState<Machine | null>(null);
+  const [isProcessingPayment, setProcessingPayment] = useState(false);
 
   const [isPosDialogOpen, setPosDialogOpen] = useState(false);
   const [machineToPos, setMachineToPos] = useState<Machine | null>(null);
@@ -245,7 +246,7 @@ export default function Dashboard() {
   }, [machineToAssign, firestore, user?.uid, selectedLocationId, toast, handleAssignDialogChange]);
 
   const handleConfirmPayment = useCallback(async (machineId: string, amount: number, paymentMethod: PaymentMethod) => {
-    if (!firestore) return;
+    if (!firestore || isProcessingPayment) return;
     const machine = machines.find(m => m.id === machineId);
     if (!machine || !machine.session) return;
     
@@ -281,6 +282,7 @@ export default function Dashboard() {
     const machineRef = doc(firestore, "machines", machineId);
 
     try {
+      setProcessingPayment(true);
       const batch = writeBatch(firestore);
       const salesCollection = collection(firestore, "sales");
       batch.set(doc(salesCollection), newSale);
@@ -296,6 +298,7 @@ export default function Dashboard() {
         description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}.`,
       });
       handleChargeDialogChange(false);
+      handlePosDialogChange(false);
 
     } catch (error) {
       console.error("Error confirming payment: ", error);
@@ -304,8 +307,10 @@ export default function Dashboard() {
         title: "Error al guardar la venta",
         description: "Hubo un problema al registrar la venta en la base de datos.",
       });
+    } finally {
+      setProcessingPayment(false);
     }
-  }, [machines, firestore, user?.uid, user?.email, selectedLocationId, toast, handleChargeDialogChange]);
+  }, [machines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handleChargeDialogChange, handlePosDialogChange]);
 
   const handleSaveProducts = useCallback(async (machineId: string, products: SoldProduct[]) => {
     if (!firestore) return;
@@ -333,9 +338,12 @@ export default function Dashboard() {
   const handleGoToCharge = useCallback((machineId: string) => {
     const machine = machines.find((item) => item.id === machineId) ?? null;
     if (!machine) return;
+
+    // Cerrar el POS antes de abrir cobro para evitar doble modal y clics extra.
+    handlePosDialogChange(false);
     setMachineToCharge(machine);
     setChargeDialogOpen(true);
-  }, [machines]);
+  }, [machines, handlePosDialogChange]);
 
   const availableMachines = visibleMachines.filter(m => m.status === 'available').length;
   const occupiedMachines = visibleMachines.length - availableMachines;
@@ -385,6 +393,7 @@ export default function Dashboard() {
         onOpenChange={handleChargeDialogChange}
         machine={machineToCharge}
         onConfirmPayment={handleConfirmPayment}
+        isProcessing={isProcessingPayment}
         fractionMinutes={locationsData?.find(loc => loc.id === (machineToCharge?.locationId || selectedLocationId))?.fractionMinutes || 5}
       />
 

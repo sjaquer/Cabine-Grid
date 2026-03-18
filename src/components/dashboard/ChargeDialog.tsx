@@ -23,6 +23,7 @@ type ChargeDialogProps = {
   onOpenChange: (open: boolean) => void;
   machine: Machine | null;
   onConfirmPayment: (machineId: string, amount: number, paymentMethod: PaymentMethod) => void;
+  isProcessing?: boolean;
   fractionMinutes?: number;
 };
 
@@ -31,6 +32,7 @@ export default function ChargeDialog({
   onOpenChange,
   machine,
   onConfirmPayment,
+  isProcessing = false,
   fractionMinutes = 5,
 }: ChargeDialogProps) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo');
@@ -92,6 +94,7 @@ export default function ChargeDialog({
   const change = numAmountPaid > finalCost ? numAmountPaid - finalCost : 0;
 
   const handleConfirm = () => {
+    if (isProcessing) return;
     onConfirmPayment(machine.id, finalCost, paymentMethod);
   };
 
@@ -177,7 +180,7 @@ export default function ChargeDialog({
                     <RadioGroup 
                         value={paymentMethod} 
                         onValueChange={(val) => setPaymentMethod(val as PaymentMethod)} 
-                      className="grid grid-cols-3 gap-3"
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-3"
                     >
                         <Label htmlFor="efectivo" className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 bg-background p-4 hover:bg-secondary/40 cursor-pointer transition-all peer-data-[state=checked]:border-status-available [&:has([data-state=checked])]:border-status-available [&:has([data-state=checked])]:bg-status-available/10 [&:has([data-state=checked])]:shadow-[0_0_15px_-3px_rgba(34,197,94,0.3)]">
                             <RadioGroupItem value="efectivo" id="efectivo" className="sr-only peer" />
@@ -228,9 +231,10 @@ export default function ChargeDialog({
             </Button>
             <Button
                 onClick={handleConfirm}
+                disabled={isProcessing}
               className="w-full sm:flex-1 h-14 sm:h-auto bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-white font-bold text-base shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
             >
-                ✅ Confirmar y Terminar Sesión
+                {isProcessing ? "Procesando pago..." : "✅ Confirmar y Terminar Sesión"}
             </Button>
         </DialogFooter>
       </DialogContent>

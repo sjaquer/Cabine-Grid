@@ -18,7 +18,7 @@ import ProductsPOS from "./ProductsPOS";
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   machine: Machine | null;
-  onSaveProducts: (machineId: string, products: SoldProduct[]) => void;
+  onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
   onGoToCharge: (machineId: string) => void;
  };
 
@@ -34,8 +34,8 @@ export default function ProductsPOSDialog({
   const { session } = machine;
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - session.startTime) / 1000));
 
-  const handleSave = (products: SoldProduct[]) => {
-    onSaveProducts(machine.id, products);
+  const handleSave = async (products: SoldProduct[]) => {
+    await onSaveProducts(machine.id, products);
   };
 
   return (
