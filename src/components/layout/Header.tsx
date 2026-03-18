@@ -1,5 +1,7 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
-import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut } from "lucide-react";
+import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut, Settings, BarChart3 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
@@ -11,64 +13,101 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge";
 
 type HeaderProps = {
   dailySales: number;
   availableMachines: number;
   occupiedMachines: number;
   onHistoryClick: () => void;
+  onSettingsClick?: () => void;
   userProfile: UserProfile | null;
 };
 
-export default function Header({ dailySales, availableMachines, occupiedMachines, onHistoryClick, userProfile }: HeaderProps) {
+export default function Header({ dailySales, availableMachines, occupiedMachines, onHistoryClick, onSettingsClick, userProfile }: HeaderProps) {
   const { logout } = useAuth();
   
+  const totalMachines = availableMachines + occupiedMachines;
+  const utilizationRate = totalMachines > 0 ? ((occupiedMachines / totalMachines) * 100).toFixed(0) : "0";
+  
   return (
-    <header className="px-4 lg:px-6 h-16 flex items-center border-b shrink-0 bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-      <div className="flex items-center gap-2 mr-auto sm:mr-6">
-        <Cpu className="h-8 w-8 text-primary" />
+    <header className="px-4 lg:px-6 h-20 flex items-center border-b border-border/60 shrink-0 bg-card/85 backdrop-blur-xl sticky top-0 z-10 shadow-lg shadow-black/10">
+      <div className="flex items-center gap-3 mr-auto sm:mr-8">
+        <div className="p-2 rounded-xl bg-primary/20 border border-primary/40">
+          <Cpu className="h-6 w-6 text-primary" />
+        </div>
+        <div className="hidden sm:flex flex-col">
+          <h1 className="text-sm font-headline font-bold text-foreground">Cabine Grid</h1>
+          <p className="text-xs text-muted-foreground">Centro de Operaciones</p>
+        </div>
       </div>
 
-       <div className="hidden sm:flex items-center gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <MonitorCheck className="h-5 w-5 text-status-available" />
-            <span className="font-semibold">
-              Libres: <span className="text-foreground font-bold">{availableMachines}</span>
-            </span>
+      <div className="hidden md:flex items-center gap-8">
+        <div className="flex gap-6">
+          <div className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg bg-status-available/10 border border-status-available/30">
+            <div className="flex items-center gap-2">
+              <MonitorCheck className="h-4 w-4 text-status-available" />
+              <span className="font-semibold text-sm text-foreground">{availableMachines}</span>
+            </div>
+            <span className="text-xs text-muted-foreground">Disponibles</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Monitor className="h-5 w-5 text-status-occupied" />
-            <span className="font-semibold">
-              Ocupadas: <span className="text-foreground font-bold">{occupiedMachines}</span>
-            </span>
+          
+          <div className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg bg-status-occupied/10 border border-status-occupied/30">
+            <div className="flex items-center gap-2">
+              <Monitor className="h-4 w-4 text-status-occupied" />
+              <span className="font-semibold text-sm text-foreground">{occupiedMachines}</span>
+            </div>
+            <span className="text-xs text-muted-foreground">En Uso</span>
           </div>
-       </div>
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-4">
-        {userProfile?.role === 'admin' && (
-          <div className="flex items-center gap-2 p-2 rounded-md bg-secondary">
-            <span className="font-semibold text-sm">
-                Ventas: <span className="text-primary font-bold">{formatCurrency(dailySales)}</span>
-            </span>
+          <div className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-sm text-foreground">{utilizationRate}%</span>
+            </div>
+            <span className="text-xs text-muted-foreground">Ocupación</span>
+          </div>
+        </div>
+
+        {(userProfile?.role === 'admin' || userProfile?.role === 'manager') && (
+          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-accent/15 border border-accent/40">
+            <span className="text-xs text-muted-foreground">Recaudación:</span>
+            <span className="font-headline font-bold text-lg text-accent">{formatCurrency(dailySales)}</span>
           </div>
         )}
-        
-        <Button variant="ghost" size="sm" onClick={onHistoryClick}>
+      </div>
+
+      <div className="ml-auto flex items-center gap-2 sm:gap-4">
+        <Button variant="ghost" size="sm" onClick={onHistoryClick} className="hidden sm:flex">
           <History className="mr-2 h-4 w-4" />
-          <span className="hidden sm:inline">Historial</span>
+          <span>Historial</span>
         </Button>
+
+        {(userProfile?.role === 'admin' || userProfile?.role === 'manager') && onSettingsClick && (
+          <Button variant="ghost" size="icon" onClick={onSettingsClick}>
+            <Settings className="h-5 w-5" />
+            <span className="sr-only">Configuración</span>
+          </Button>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon">
               <CircleUser className="h-5 w-5" />
-              <span className="sr-only">User Profile</span>
+              <span className="sr-only">Perfil</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>
-              <div className="text-sm font-medium">{userProfile?.email}</div>
-              <div className="text-xs text-muted-foreground capitalize">{userProfile?.role}</div>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="flex flex-col gap-2 pb-2">
+              <div>
+                <div className="text-sm font-medium">{userProfile?.name || userProfile?.email}</div>
+                <div className="text-xs text-muted-foreground">{userProfile?.email}</div>
+              </div>
+              <Badge className="w-fit capitalize" variant="secondary">
+                {userProfile?.role === 'admin' ? 'Administrador' : 
+                 userProfile?.role === 'manager' ? 'Gerente' :
+                 userProfile?.role === 'operator' ? 'Operador' : 'Lectura'}
+              </Badge>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout}>
@@ -77,7 +116,6 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
       </div>
     </header>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import type { Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session } from "@/lib/types";
 import { rates } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +16,7 @@ import { collection, addDoc, query, where, Timestamp, doc, writeBatch } from "fi
 
 
 export default function Dashboard() {
+  const router = useRouter();
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
 
@@ -56,7 +58,7 @@ export default function Dashboard() {
     return query(collection(firestore, "sales"), where("endTime", ">=", startOfToday));
   }, [firestore, user]);
 
-  const { data: sales, loading: salesLoading } = useCollection<Sale>(salesQuery);
+  const { data: sales, isLoading: salesLoading } = useCollection<Sale>(salesQuery);
   const sortedSales = useMemo(() => sales ? [...sales].sort((a, b) => (b.endTime as Timestamp).toMillis() - (a.endTime as Timestamp).toMillis()) : [], [sales]);
 
 
@@ -96,6 +98,10 @@ export default function Dashboard() {
       setMachineToCharge(machine);
       setChargeDialogOpen(true);
     }
+  };
+
+  const handleHeaderSettingsClick = () => {
+    router.push('/admin');
   };
 
   const handleAssignDialogChange = (open: boolean) => {
@@ -233,6 +239,7 @@ export default function Dashboard() {
         availableMachines={availableMachines}
         occupiedMachines={occupiedMachines}
         onHistoryClick={() => setHistorySheetOpen(true)}
+        onSettingsClick={handleHeaderSettingsClick}
         userProfile={userProfile}
       />
       <main className="flex-1 overflow-y-auto">

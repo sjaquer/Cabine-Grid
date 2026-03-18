@@ -2,23 +2,25 @@ import type { User as FirebaseUser } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 
 export type Rate = {
-  id: 'A' | 'B';
+  id: string;
   name: string;
   pricePerHour: number;
+  description?: string;
+  isActive?: boolean;
 };
 
 export type UsageMode = 'free' | 'prepaid';
 
 export type PaymentMethod = 'efectivo' | 'yape' | 'otro';
 
-export type MachineStatus = 'available' | 'occupied' | 'warning';
+export type MachineStatus = 'available' | 'occupied' | 'warning' | 'maintenance';
 
 export type Session = {
   id: string;
   client?: string;
   startTime: number;
   usageMode: UsageMode;
-  rateId: Rate['id'];
+  rateId: string;
   prepaidHours?: number;
   userId?: string;
 };
@@ -27,15 +29,35 @@ export type Machine = {
   id: string;
   name: string;
   status: MachineStatus;
-  rateId?: Rate['id'];
+  rateId?: string;
   session?: Session | null;
+  locationId?: string;
+  specs?: {
+    processor?: string;
+    ram?: string;
+    storage?: string;
+  };
+};
+
+export type Location = {
+  id: string;
+  name: string;
+  address: string;
+  phone?: string;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updateAt?: Timestamp;
 };
 
 export type Product = {
   id: string;
   name: string;
   price: number;
-  category: 'drink' | 'snack' | 'other';
+  category: 'drink' | 'snack' | 'food' | 'other';
+  description?: string;
+  stock?: number;
+  isActive?: boolean;
+  createdAt?: Timestamp;
 }
 
 export type SoldProduct = {
@@ -62,10 +84,17 @@ export type Sale = {
   }
 };
 
+export type UserRole = 'admin' | 'manager' | 'operator' | 'view-only';
+
 export type UserProfile = {
   uid: string;
   email: string;
-  role: 'admin' | 'employee';
+  name?: string;
+  role: UserRole;
+  locationIds?: string[];
+  permissions?: string[];
+  isActive?: boolean;
+  createdAt?: Timestamp;
 }
 
 export type AuthContextType = {

@@ -2,51 +2,91 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Returns true if the user is authenticated.
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Gets the user's role from their profile in the 'users' collection.
-    // Caches the result for the request.
+    function userDocPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasUserProfile() {
+      return isSignedIn() && exists(userDocPath());
+    }
+
     function getRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return hasUserProfile() ? get(userDocPath()).data.role : null;
     }
 
-    // Returns true if the user's role is 'admin'.
     function isAdmin() {
-      return isSignedIn() && getRole() == 'admin';
+      return getRole() == 'admin';
     }
 
-    // Returns true if the user's role is 'employee'.
-    function isEmployee() {
-      return isSignedIn() && getRole() == 'employee';
+    function isManager() {
+      return getRole() == 'manager';
     }
 
-    // User management:
-    // Users can read their own profile.
-    // Admins can read, list, and modify any user profile.
+    function isOperator() {
+      return getRole() == 'operator';
+    }
+
+    function isViewOnly() {
+      return getRole() == 'view-only';
+    }
+
+    function isAdminOrManager() {
+      return isAdmin() || isManager();
+    }
+
+    function canOperate() {
+      return isAdminOrManager() || isOperator();
+    }
+
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow list, create, update, delete: if isAdmin();
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdminOrManager());
+      allow list: if isAdminOrManager();
+
+      // Permite bootstrap del perfil propio al iniciar sesión por primera vez.
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId || isAdminOrManager()
+      );
+
+      // El propio usuario puede actualizar datos básicos (no rol).
+      allow update: if isSignedIn() && (
+        isAdminOrManager() ||
+        (
+          request.auth.uid == userId &&
+          request.resource.data.role == resource.data.role
+        )
+      );
+
+      allow delete: if isAdmin();
     }
 
-    // Machine management:
-    // Any authenticated user (employee or admin) can view the machine list.
-    // Only employees or admins can update a machine's state (start/end sessions).
-    // Only admins can add or remove machines from the system.
     match /machines/{machineId} {
-      allow read, list: if isSignedIn();
-      allow update: if isEmployee() || isAdmin();
-      allow create, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update, delete: if canOperate();
     }
-    
-    // Sales management:
-    // Employees and admins can create new sales records.
-    // Only admins can view the full sales history or modify/delete records.
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminOrManager();
+    }
+
+    match /locations/{locationId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminOrManager();
+    }
+
     match /sales/{saleId} {
-      allow create: if isEmployee() || isAdmin();
-      allow read, list, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create: if canOperate();
+      allow update, delete: if isAdminOrManager();
+    }
+
+    // Bloquea cualquier colección no prevista.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

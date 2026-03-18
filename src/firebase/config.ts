@@ -1,8 +1,10 @@
+// Firebase config loaded from environment variables
+// All NEXT_PUBLIC_* variables are exposed to the browser (safe for Firebase client SDK)
 export const firebaseConfig = {
-  "projectId": "studio-3052883783-56f49",
-  "appId": "1:7673368149:web:f16641da9fb33fde3b0edc",
-  "apiKey": "AIzaSyC1MXMFMz6RZOLyXdypfG0ScpQbuAhz59M",
-  "authDomain": "studio-3052883783-56f49.firebaseapp.com",
-  "measurementId": "",
-  "messagingSenderId": "7673368149"
-};
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+} as const;
