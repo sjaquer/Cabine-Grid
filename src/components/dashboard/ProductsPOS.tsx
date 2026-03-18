@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { SoldProduct } from "@/lib/types";
-import { products as availableProducts } from "@/lib/data";
+import type { Product, SoldProduct } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, MinusCircle, ShoppingCart } from "lucide-react";
@@ -12,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ProductsPOSProps {
+    availableProducts: Product[];
     initialProducts?: SoldProduct[];
     onSave: (products: SoldProduct[]) => Promise<void>;
     onClose?: () => void;
@@ -32,7 +32,7 @@ const categoryIcons = {
   other: "📦",
 };
 
-export default function ProductsPOS({ initialProducts, onSave, onClose, onGoToCharge }: ProductsPOSProps) {
+export default function ProductsPOS({ availableProducts, initialProducts, onSave, onClose, onGoToCharge }: ProductsPOSProps) {
     const [quantities, setQuantities] = useState<Record<string, number>>(() => {
         if (!initialProducts || initialProducts.length === 0) return {};
         return initialProducts.reduce((acc, item) => {
@@ -76,7 +76,7 @@ export default function ProductsPOS({ initialProducts, onSave, onClose, onGoToCh
     };
 
     const products = useMemo(() => {
-        const result = new Map<string, (typeof availableProducts)>();
+        const result = new Map<string, Product[]>();
         Object.entries(categoryLabels).forEach(([category]) => {
             result.set(category, filteredProducts.filter(p => p.category === category));
         });

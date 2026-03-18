@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location } from "@/lib/types";
+import type { Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
 import Header from "@/components/layout/Header";
@@ -12,7 +12,7 @@ import ChargeDialog from "./ChargeDialog";
 import ProductsPOSDialog from "./ProductsPOSDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc, increment, serverTimestamp } from "firebase/firestore";
 import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -35,6 +35,13 @@ export default function Dashboard() {
   }, [firestore]);
 
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
+
+  const productsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, "products"));
+  }, [firestore]);
+
+  const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   const machines = useMemo(() => {
@@ -54,6 +61,12 @@ export default function Dashboard() {
       .filter((location) => location.isActive !== false)
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [locationsData]);
+
+  const products = useMemo(() => {
+    return (productsData ?? [])
+      .filter((product) => product.isActive !== false)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [productsData]);
 
   const availableLocations = useMemo(() => {
     const profileLocationIds = userProfile?.locationIds;
@@ -286,6 +299,26 @@ export default function Dashboard() {
       const batch = writeBatch(firestore);
       const salesCollection = collection(firestore, "sales");
       batch.set(doc(salesCollection), newSale);
+
+      const effectiveLocationId = machine.locationId || selectedLocationId;
+      if (effectiveLocationId) {
+        soldProducts.forEach((product) => {
+          if (!product.productId) return;
+          const inventoryRef = doc(firestore, "inventory", `${effectiveLocationId}_${product.productId}`);
+          batch.set(
+            inventoryRef,
+            {
+              locationId: effectiveLocationId,
+              productId: product.productId,
+              productName: product.productName,
+              stock: increment(-Math.abs(product.quantity)),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        });
+      }
+
       batch.update(machineRef, {
         status: "available",
         session: null
@@ -408,6 +441,7 @@ export default function Dashboard() {
         isOpen={isPosDialogOpen}
         onOpenChange={handlePosDialogChange}
         machine={machineToPos}
+        products={products}
         onSaveProducts={handleSaveProducts}
         onGoToCharge={handleGoToCharge}
       />

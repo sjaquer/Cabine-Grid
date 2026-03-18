@@ -51,6 +51,18 @@ export function buildShiftReportPdf({
     return sum + sub;
   }, 0);
 
+  const soldProductsByName = new Map<string, { quantity: number; amount: number }>();
+  sales.forEach((sale) => {
+    (sale.soldProducts ?? []).forEach((item) => {
+      const current = soldProductsByName.get(item.productName) ?? { quantity: 0, amount: 0 };
+      soldProductsByName.set(item.productName, {
+        quantity: current.quantity + item.quantity,
+        amount: current.amount + item.quantity * item.unitPrice,
+      });
+    });
+  });
+  const totalProductUnits = Array.from(soldProductsByName.values()).reduce((sum, item) => sum + item.quantity, 0);
+
   doc.setFontSize(18);
   doc.text("Cabine Grid - Cierre de Turno", 40, 40);
 
@@ -70,6 +82,7 @@ export function buildShiftReportPdf({
       ["Debe coincidir en Yape/Plin", formatCurrency(totalYape)],
       ["Pagos con tarjeta/otro", formatCurrency(totalOther)],
       ["Total en productos", formatCurrency(productsTotal)],
+      ["Unidades TPV vendidas", String(totalProductUnits)],
       ["Cabinas que quedan activas", String(openMachines.length)],
     ],
     styles: { fontSize: 10 },
@@ -94,6 +107,18 @@ export function buildShiftReportPdf({
       doc.text("Reporte generado automaticamente al cerrar sesion.", 40, doc.internal.pageSize.getHeight() - 20);
     },
   });
+
+  if (soldProductsByName.size > 0) {
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 16,
+      head: [["Producto TPV", "Cantidad vendida", "Monto"]],
+      body: Array.from(soldProductsByName.entries())
+        .sort((a, b) => b[1].quantity - a[1].quantity)
+        .map(([name, values]) => [name, String(values.quantity), formatCurrency(values.amount)]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [30, 64, 175] },
+    });
+  }
 
   if (openMachines.length > 0) {
     autoTable(doc, {

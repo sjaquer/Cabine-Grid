@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut, Settings, BarChart3 } from "lucide-react";
+import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut, Settings, BarChart3, Package } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
@@ -110,6 +111,12 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
               </Badge>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/inventario">
+                <Package className="mr-2 h-4 w-4" />
+                <span>Inventario</span>
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={logout}>
               <LogOut className="mr-2 h-4 w-4" />
               <span>Cerrar Sesión</span>

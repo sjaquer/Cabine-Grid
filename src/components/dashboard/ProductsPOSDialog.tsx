@@ -1,6 +1,6 @@
 "use client";
 
-import type { Machine, SoldProduct } from "@/lib/types";
+import type { Machine, Product, SoldProduct } from "@/lib/types";
 import { sanitizeString } from "@/lib/sanitize";
 import { formatTime } from "@/lib/utils";
 import {
@@ -18,6 +18,7 @@ import ProductsPOS from "./ProductsPOS";
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   machine: Machine | null;
+  products: Product[];
   onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
   onGoToCharge: (machineId: string) => void;
  };
@@ -26,6 +27,7 @@ export default function ProductsPOSDialog({
   isOpen,
   onOpenChange,
   machine,
+  products,
   onSaveProducts,
   onGoToCharge,
 }: ProductsPOSDialogProps) {
@@ -61,6 +63,7 @@ export default function ProductsPOSDialog({
 
         <div className="flex-1 min-h-0 bg-background/50 flex flex-col">
           <ProductsPOS
+            availableProducts={products}
             initialProducts={session.soldProducts}
             onSave={handleSave}
             onClose={() => onOpenChange(false)}

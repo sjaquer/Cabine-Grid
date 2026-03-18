@@ -63,10 +63,10 @@ type ProductManagerProps = {
 };
 
 const categoryLabels = {
-  drink: "Bebida",
-  snack: "Snack",
-  food: "Comida",
-  other: "Otro",
+  drink: "Bebidas",
+  snack: "Snacks",
+  food: "Comidas",
+  other: "Servicios y Otros",
 };
 
 const categoryColors = {
