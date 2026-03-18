@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
+import { useAuth, useCollection, useDoc, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Database, Loader2, Package, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import MachineManager from "@/components/admin/MachineManager";
 import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
@@ -33,15 +35,20 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
-import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, deleteUser, getAuth, multiFactor, signOut } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { logAuditAction } from "@/lib/audit-log";
+
+type AppSecuritySettings = {
+  requireMfaForFullAccess?: boolean;
+};
 
 export default function AdminPage() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isSavingSecurity, setIsSavingSecurity] = useState(false);
 
   const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
@@ -49,6 +56,7 @@ export default function AdminPage() {
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
   const closuresQuery = useMemoFirebase(() => query(collection(firestore, "shiftClosures")), [firestore]);
   const approvalsQuery = useMemoFirebase(() => query(collection(firestore, "sensitiveApprovals")), [firestore]);
+  const securitySettingsRef = useMemoFirebase(() => doc(firestore, "appSettings", "security"), [firestore]);
 
   const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
@@ -56,6 +64,7 @@ export default function AdminPage() {
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
   const { data: closuresData } = useCollection<any>(closuresQuery);
   const { data: approvalsData } = useCollection<any>(approvalsQuery);
+  const { data: securitySettings } = useDoc<AppSecuritySettings>(securitySettingsRef);
 
   const machines = useMemo(() => (machinesData ?? []) as Machine[], [machinesData]);
   const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
@@ -76,6 +85,8 @@ export default function AdminPage() {
     () => (approvalsData ?? []).filter((x) => (x.status || "pending") === "pending"),
     [approvalsData]
   );
+  const requireMfaForFullAccess = Boolean(securitySettings?.requireMfaForFullAccess);
+  const hasSecondFactorEnabled = user ? multiFactor(user).enrolledFactors.length > 0 : false;
 
   const auditActor = {
     id: user?.uid,
@@ -318,6 +329,62 @@ export default function AdminPage() {
       },
     }, { merge: true });
     toast({ title: "Snapshot diario generado" });
+  };
+
+  const handleToggleRequireMfaForFullAccess = async (checked: boolean) => {
+    if (userProfile?.role !== "admin") {
+      toast({ variant: "destructive", title: "Solo admin puede cambiar esta configuracion" });
+      return;
+    }
+
+    if (checked && !hasSecondFactorEnabled) {
+      toast({
+        variant: "destructive",
+        title: "Activa 2 pasos primero",
+        description: "Tu cuenta admin necesita tener 2 pasos activo antes de exigirlo para toda la app.",
+      });
+      return;
+    }
+
+    setIsSavingSecurity(true);
+    try {
+      await setDoc(
+        securitySettingsRef,
+        {
+          requireMfaForFullAccess: checked,
+          updatedAt: serverTimestamp(),
+          updatedBy: {
+            id: user?.uid || null,
+            email: user?.email || null,
+          },
+        },
+        { merge: true }
+      );
+
+      await logAuditAction(firestore, {
+        action: "security.mfa.require_full_access.toggle",
+        target: "appSettings",
+        targetId: "security",
+        actor: auditActor,
+        details: { requireMfaForFullAccess: checked },
+      });
+
+      toast({
+        title: checked ? "2 pasos requerido activado" : "2 pasos requerido desactivado",
+        description: checked
+          ? "Ahora todos deben tener 2 pasos para ver toda la app."
+          : "Se desactivo la exigencia global de 2 pasos.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "No se pudo actualizar la seguridad",
+        description: "Verifica tus permisos y vuelve a intentar.",
+      });
+    } finally {
+      setIsSavingSecurity(false);
+    }
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -654,6 +721,35 @@ export default function AdminPage() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {userProfile?.role === "admin" && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Seguridad de 2 pasos</CardTitle>
+                <CardDescription>
+                  Exige verificacion en 2 pasos para ver todo Cabine Grid.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-foreground">Requerir 2 pasos para acceso total</p>
+                    <p className="text-sm text-muted-foreground">
+                      Si esta activo, cualquier usuario sin 2 pasos quedara bloqueado hasta volver a iniciar sesion con verificacion.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {isSavingSecurity && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                    <Switch
+                      checked={requireMfaForFullAccess}
+                      disabled={isSavingSecurity}
+                      onCheckedChange={handleToggleRequireMfaForFullAccess}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Tabs defaultValue="machines" className="w-full">
             <TabsList className="grid w-full grid-cols-6 mb-8">
               <TabsTrigger value="machines">Cabinas</TabsTrigger>

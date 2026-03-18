@@ -82,7 +82,7 @@ service cloud.firestore {
 
       // El propio usuario puede actualizar datos básicos (no rol).
       allow update: if isSignedIn() && (
-        (isAdminOrManager() && hasMfaForPrivilegedRoles()) ||
+        isAdminOrManager() ||
         (
           request.auth.uid == userId &&
           request.resource.data.role == resource.data.role
@@ -212,6 +212,12 @@ service cloud.firestore {
     match /dailySnapshots/{snapshotId} {
       allow read: if isAdminOrManager();
       allow create, update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
+    }
+
+    match /appSettings/{settingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && hasMfaForPrivilegedRoles() && settingId == 'security';
+      allow delete: if false;
     }
 
     // Bloquea cualquier colección no prevista.
