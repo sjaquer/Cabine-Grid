@@ -81,7 +81,8 @@ service cloud.firestore {
     match /sales/{saleId} {
       allow read: if isSignedIn();
       allow create: if canOperate();
-      allow update, delete: if isAdminOrManager();
+      allow update: if canOperate();
+      allow delete: if isAdminOrManager();
     }
 
     // Bloquea cualquier colección no prevista.

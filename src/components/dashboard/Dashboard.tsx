@@ -260,6 +260,9 @@ export default function Dashboard() {
     };
 
     const soldProducts = machine.session?.soldProducts ?? [];
+    const resolvedHourlyRate = typeof session.hourlyRate === "number"
+      ? session.hourlyRate
+      : (typeof selectedRate?.pricePerHour === "number" ? selectedRate.pricePerHour : undefined);
     const newSale = {
       machineName: machine.name,
       clientName: session.client || "Ocasional",
@@ -269,7 +272,7 @@ export default function Dashboard() {
       totalMinutes,
       amount,
       ...(selectedRate ? { rate: selectedRate } : {}),
-      hourlyRate: session.hourlyRate,
+      ...(typeof resolvedHourlyRate === "number" ? { hourlyRate: resolvedHourlyRate } : {}),
       paymentMethod,
       soldProducts,
       ...(Object.keys(operator).length > 0 ? { operator } : {}),
