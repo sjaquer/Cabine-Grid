@@ -9,10 +9,9 @@ import {
   addDoc,
   collection,
   doc,
-  increment,
   query,
+  runTransaction,
   serverTimestamp,
-  writeBatch,
 } from "firebase/firestore";
 import {
   ArrowLeft,
@@ -85,11 +84,17 @@ export default function InventoryPage() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [movementType, setMovementType] = useState<"entry" | "exit">("entry");
-  const [movementQty, setMovementQty] = useState<string>("1");
-  const [movementNote, setMovementNote] = useState<string>("");
-  const [isSavingMovement, setIsSavingMovement] = useState(false);
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [adjustingRow, setAdjustingRow] = useState<{
+    productId: string;
+    productName: string;
+    stock: number;
+    minStock: number;
+  } | null>(null);
+  const [adjustType, setAdjustType] = useState<"entry" | "exit">("entry");
+  const [adjustQty, setAdjustQty] = useState<string>("1");
+  const [adjustNote, setAdjustNote] = useState<string>("");
+  const [busyActionKey, setBusyActionKey] = useState<string | null>(null);
 
   const [isDiscrepancyOpen, setIsDiscrepancyOpen] = useState(false);
   const [discrepancyData, setDiscrepancyData] = useState<InventoryDiscrepancyPayload | null>(null);
@@ -164,11 +169,6 @@ export default function InventoryPage() {
     );
   }, [allRows, searchTerm]);
 
-  const selectedProductRow = useMemo(
-    () => allRows.find((row) => row.productId === selectedProductId) ?? null,
-    [allRows, selectedProductId]
-  );
-
   const canManage =
     userProfile?.role === "admin" ||
     userProfile?.role === "manager" ||
@@ -191,71 +191,109 @@ export default function InventoryPage() {
     };
   };
 
-  const handleSaveMovement = async () => {
+  const applyInventoryAdjustment = async (
+    row: { productId: string; productName: string; stock: number; minStock: number },
+    type: "entry" | "exit",
+    qty: number,
+    note: string
+  ) => {
     if (!canManage) return;
-    if (!selectedLocationId || !selectedProductRow) return;
+    if (!selectedLocationId) return;
 
-    const qty = Math.max(1, Math.floor(Number(movementQty) || 0));
-    if (!qty) return;
-
-    const delta = movementType === "entry" ? qty : -qty;
-    const inventoryRef = doc(firestore, "inventory", `${selectedLocationId}_${selectedProductRow.productId}`);
+    const safeQty = Math.max(1, Math.floor(qty || 0));
+    const actionKey = `${row.productId}:${type}:${safeQty}`;
+    setBusyActionKey(actionKey);
 
     try {
-      setIsSavingMovement(true);
-      const batch = writeBatch(firestore);
+      const inventoryRef = doc(firestore, "inventory", `${selectedLocationId}_${row.productId}`);
+      const movementRef = doc(collection(firestore, "inventoryMovements"));
 
-      batch.set(
-        inventoryRef,
-        {
+      const result = await runTransaction(firestore, async (transaction) => {
+        const snapshot = await transaction.get(inventoryRef);
+        const currentStock = snapshot.exists()
+          ? Number(snapshot.data().stock ?? 0)
+          : Math.max(0, row.stock);
+
+        const nextStock = type === "entry"
+          ? currentStock + safeQty
+          : currentStock - safeQty;
+
+        if (nextStock < 0) {
+          throw new Error(`Stock insuficiente. Disponible: ${currentStock}.`);
+        }
+
+        transaction.set(
+          inventoryRef,
+          {
+            locationId: selectedLocationId,
+            productId: row.productId,
+            productName: row.productName,
+            minStock: row.minStock,
+            stock: nextStock,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        transaction.set(movementRef, {
           locationId: selectedLocationId,
-          productId: selectedProductRow.productId,
-          productName: selectedProductRow.productName,
-          minStock: selectedProductRow.minStock,
-          stock: increment(delta),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+          locationName: selectedLocation?.name ?? "",
+          productId: row.productId,
+          productName: row.productName,
+          type,
+          quantity: safeQty,
+          note: note.trim(),
+          source: "manual",
+          createdAt: serverTimestamp(),
+          operator: {
+            id: user?.uid ?? null,
+            email: user?.email ?? null,
+          },
+        });
 
-      batch.set(doc(collection(firestore, "inventoryMovements")), {
-        locationId: selectedLocationId,
-        locationName: selectedLocation?.name ?? "",
-        productId: selectedProductRow.productId,
-        productName: selectedProductRow.productName,
-        type: movementType,
-        quantity: qty,
-        note: movementNote.trim(),
-        source: "manual",
-        createdAt: serverTimestamp(),
-        operator: {
-          id: user?.uid ?? null,
-          email: user?.email ?? null,
-        },
+        return { currentStock, nextStock };
       });
 
-      await batch.commit();
       await logAuditAction(firestore, {
         action: "inventory.adjust",
         target: "inventory",
-        targetId: `${selectedLocationId}_${selectedProductRow.productId}`,
+        targetId: `${selectedLocationId}_${row.productId}`,
         locationId: selectedLocationId,
         actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
         details: {
-          movementType,
-          quantity: qty,
-          note: movementNote.trim(),
+          movementType: type,
+          quantity: safeQty,
+          note: note.trim(),
+          currentStock: result.currentStock,
+          nextStock: result.nextStock,
         },
       });
-      setMovementQty("1");
-      setMovementNote("");
-      toast({ title: "Inventario actualizado" });
+
+      toast({
+        title: "Inventario actualizado",
+        description: `${row.productName}: ${result.currentStock} -> ${result.nextStock}`,
+      });
     } catch (error) {
-      console.error("Error updating inventory:", error);
-      toast({ variant: "destructive", title: "Error al actualizar inventario" });
+      const message = error instanceof Error ? error.message : "Error al actualizar inventario";
+      toast({ variant: "destructive", title: message });
     } finally {
-      setIsSavingMovement(false);
+      setBusyActionKey(null);
     }
+  };
+
+  const openAdjustDialog = (row: { productId: string; productName: string; stock: number; minStock: number }) => {
+    setAdjustingRow(row);
+    setAdjustType("entry");
+    setAdjustQty("1");
+    setAdjustNote("");
+    setIsAdjustOpen(true);
+  };
+
+  const submitAdjustDialog = async () => {
+    if (!adjustingRow) return;
+    const qty = Math.max(1, Math.floor(Number(adjustQty) || 0));
+    await applyInventoryAdjustment(adjustingRow, adjustType, qty, adjustNote);
+    setIsAdjustOpen(false);
   };
 
   const openDiscrepancyDialog = (row: { productId: string; productName: string; stock: number }) => {
@@ -378,10 +416,10 @@ export default function InventoryPage() {
                 <Boxes className="w-5 h-5" /> Operación de Inventario
               </CardTitle>
               <CardDescription>
-                Filtra por local, busca productos y registra entradas/salidas.
+                Filtra por local, busca productos y ajusta stock con botones rápidos por fila.
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div className="space-y-2 xl:col-span-2">
                 <Label>Local</Label>
                 <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
@@ -410,64 +448,12 @@ export default function InventoryPage() {
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label>Producto</Label>
-                <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allRows.map((row) => (
-                      <SelectItem key={row.productId} value={row.productId}>
-                        {row.productName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={movementType} onValueChange={(v) => setMovementType(v as "entry" | "exit") }>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="entry">Ingreso</SelectItem>
-                    <SelectItem value="exit">Salida</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Cantidad</Label>
-                <Input type="number" min={1} value={movementQty} onChange={(e) => setMovementQty(e.target.value)} />
-              </div>
-
-              <div className="space-y-2 xl:col-span-4">
-                <Label>Nota operativa</Label>
-                <Input
-                  placeholder="Ej. Reposición de proveedor / salida para consumo interno"
-                  value={movementNote}
-                  onChange={(e) => setMovementNote(e.target.value)}
-                />
-              </div>
-
-              <div className="xl:col-span-2 flex items-end justify-end gap-2">
+              <div className="xl:col-span-4 flex items-center justify-end">
                 {!canManage && (
                   <span className="text-xs text-amber-700 bg-amber-500/10 border border-amber-300 rounded px-2 py-1">
                     Tu rol es solo lectura.
                   </span>
                 )}
-                <Button
-                  onClick={handleSaveMovement}
-                  disabled={!selectedLocationId || !selectedProductId || isSavingMovement || !canManage}
-                  className="gap-2"
-                >
-                  {movementType === "entry" ? <PlusCircle className="w-4 h-4" /> : <MinusCircle className="w-4 h-4" />}
-                  {isSavingMovement ? "Guardando..." : "Registrar Movimiento"}
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -496,6 +482,7 @@ export default function InventoryPage() {
                         <TableHead className="text-right">Stock</TableHead>
                         <TableHead className="text-right">Mínimo</TableHead>
                         <TableHead>Estado</TableHead>
+                        <TableHead>Ajuste rápido</TableHead>
                         <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -515,17 +502,60 @@ export default function InventoryPage() {
                             <TableCell>
                               <Badge className={`${status.className} border`}>{status.label}</Badge>
                             </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8"
+                                  disabled={!canManage || !selectedLocationId || busyActionKey !== null}
+                                  onClick={() => applyInventoryAdjustment(row, "entry", 1, "Ajuste rápido +1")}
+                                >
+                                  +1
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8"
+                                  disabled={!canManage || !selectedLocationId || busyActionKey !== null}
+                                  onClick={() => applyInventoryAdjustment(row, "entry", 5, "Ajuste rápido +5")}
+                                >
+                                  +5
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8"
+                                  disabled={!canManage || !selectedLocationId || row.stock <= 0 || busyActionKey !== null}
+                                  onClick={() => applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1")}
+                                >
+                                  -1
+                                </Button>
+                              </div>
+                            </TableCell>
                             <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-2"
-                                onClick={() => openDiscrepancyDialog(row)}
-                                disabled={!canManage}
-                              >
-                                <AlertTriangle className="w-4 h-4" />
-                                Incongruencia
-                              </Button>
+                              <div className="flex gap-2 justify-end">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  className="gap-2"
+                                  disabled={!canManage || !selectedLocationId}
+                                  onClick={() => openAdjustDialog(row)}
+                                >
+                                  <PlusCircle className="w-4 h-4" />
+                                  Ajustar
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => openDiscrepancyDialog(row)}
+                                  disabled={!canManage}
+                                >
+                                  <AlertTriangle className="w-4 h-4" />
+                                  Incongruencia
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -574,6 +604,67 @@ export default function InventoryPage() {
             <Button onClick={saveDiscrepancy} disabled={isSavingDiscrepancy || !canManage} className="gap-2">
               <RefreshCw className="w-4 h-4" />
               {isSavingDiscrepancy ? "Registrando..." : "Registrar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ajustar Stock</DialogTitle>
+            <DialogDescription>
+              Registra entrada o salida para {adjustingRow?.productName ?? "producto"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              Stock actual: <span className="font-medium text-foreground">{adjustingRow?.stock ?? 0}</span>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo de movimiento</Label>
+              <Select value={adjustType} onValueChange={(v) => setAdjustType(v as "entry" | "exit") }>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="entry">Ingreso</SelectItem>
+                  <SelectItem value="exit">Salida</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cantidad</Label>
+              <Input
+                type="number"
+                min={1}
+                value={adjustQty}
+                onChange={(e) => setAdjustQty(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nota (opcional)</Label>
+              <Input
+                value={adjustNote}
+                onChange={(e) => setAdjustNote(e.target.value)}
+                placeholder="Ej. Reposición proveedor / merma"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAdjustOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={submitAdjustDialog}
+              disabled={!canManage || busyActionKey !== null}
+              className="gap-2"
+            >
+              {adjustType === "entry" ? <PlusCircle className="w-4 h-4" /> : <MinusCircle className="w-4 h-4" />}
+              Confirmar ajuste
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -455,10 +455,6 @@ export default function AdminPage() {
                     Inventario por Local
                   </Button>
                 </Link>
-                <Button variant="secondary" size="sm" className="gap-2" onClick={handleSeedMockData} disabled={isSeeding}>
-                  {isSeeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-                  Cargar Datos Demo
-                </Button>
                 <Link href="/">
                   <Button variant="outline" size="sm" className="gap-2">
                     <ArrowLeft className="w-4 h-4" />

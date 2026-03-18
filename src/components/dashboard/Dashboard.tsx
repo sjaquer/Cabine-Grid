@@ -12,7 +12,7 @@ import ChargeDialog from "./ChargeDialog";
 import ProductsPOSDialog from "./ProductsPOSDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc, increment, serverTimestamp, runTransaction } from "firebase/firestore";
+import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc, serverTimestamp, runTransaction, getDoc } from "firebase/firestore";
 import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getShiftStart, setShiftLocation } from "@/lib/shift-session";
@@ -342,16 +342,37 @@ export default function Dashboard() {
       batch.set(saleRef, newSale);
 
       if (effectiveLocationId) {
-        soldProducts.forEach((product) => {
-          if (!product.productId) return;
+        const inventoryUpdates: Array<{ productId: string; productName: string; newStock: number }> = [];
+
+        for (const product of soldProducts) {
+          if (!product.productId) continue;
           const inventoryRef = doc(firestore, "inventory", `${effectiveLocationId}_${product.productId}`);
+          const inventorySnap = await getDoc(inventoryRef);
+          const fallbackProduct = products.find((item) => item.id === product.productId);
+          const currentStock = inventorySnap.exists()
+            ? Number(inventorySnap.data().stock ?? 0)
+            : Math.max(0, Number(fallbackProduct?.stock ?? 0));
+
+          if (currentStock < product.quantity) {
+            throw new Error(`Stock insuficiente para ${product.productName}. Disponible: ${currentStock}.`);
+          }
+
+          inventoryUpdates.push({
+            productId: product.productId,
+            productName: product.productName,
+            newStock: currentStock - product.quantity,
+          });
+        }
+
+        inventoryUpdates.forEach((update) => {
+          const inventoryRef = doc(firestore, "inventory", `${effectiveLocationId}_${update.productId}`);
           batch.set(
             inventoryRef,
             {
               locationId: effectiveLocationId,
-              productId: product.productId,
-              productName: product.productName,
-              stock: increment(-Math.abs(product.quantity)),
+              productId: update.productId,
+              productName: update.productName,
+              stock: update.newStock,
               updatedAt: serverTimestamp(),
             },
             { merge: true }
@@ -392,15 +413,16 @@ export default function Dashboard() {
 
     } catch (error) {
       console.error("Error confirming payment: ", error);
+      const message = error instanceof Error ? error.message : "Hubo un problema al registrar la venta en la base de datos.";
       toast({
         variant: "destructive",
         title: "Error al guardar la venta",
-        description: "Hubo un problema al registrar la venta en la base de datos.",
+        description: message,
       });
     } finally {
       setProcessingPayment(false);
     }
-  }, [machines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handleChargeDialogChange, handlePosDialogChange]);
+  }, [machines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handleChargeDialogChange, handlePosDialogChange, products]);
 
   const handleSaveProducts = useCallback(async (machineId: string, products: SoldProduct[]) => {
     if (!firestore) return;
