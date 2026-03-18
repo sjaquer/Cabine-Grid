@@ -24,9 +24,13 @@ import {
   limit,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
+import { initializeApp, deleteApp } from "firebase/app";
+import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
+import { firebaseConfig } from "@/firebase/config";
 
 export default function AdminPage() {
   const { userProfile } = useAuth();
@@ -133,6 +137,55 @@ export default function AdminPage() {
       updateAt: serverTimestamp(),
     });
     toast({ title: "Usuario desactivado" });
+  };
+
+  const handleCreateUser = async ({
+    name,
+    email,
+    password,
+    role,
+  }: {
+    name: string;
+    email: string;
+    password: string;
+    role: UserRole;
+  }) => {
+    if (userProfile?.role !== "admin") {
+      throw new Error("Solo un administrador puede crear cuentas.");
+    }
+
+    const appName = `cabine-grid-admin-create-${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, appName);
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+      const credential = await createUserWithEmailAndPassword(secondaryAuth, email.trim(), password);
+      try {
+        await setDoc(doc(firestore, "users", credential.user.uid), {
+          uid: credential.user.uid,
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role,
+          isActive: true,
+          createdAt: serverTimestamp(),
+          updateAt: serverTimestamp(),
+        });
+      } catch (profileError) {
+        await deleteUser(credential.user).catch(() => undefined);
+        throw profileError;
+      }
+
+      toast({
+        title: "Usuario creado",
+        description: `${name.trim()} fue registrado correctamente.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo crear el usuario.";
+      throw new Error(message);
+    } finally {
+      await signOut(secondaryAuth).catch(() => undefined);
+      await deleteApp(secondaryApp).catch(() => undefined);
+    }
   };
 
   const handleSeedMockData = async () => {
@@ -354,6 +407,7 @@ export default function AdminPage() {
               <TabsContent value="users" className="space-y-6">
                 <UserManager
                   users={users}
+                  onCreateUser={handleCreateUser}
                   onChangeRole={handleChangeUserRole}
                   onDeactivate={handleDeactivateUser}
                 />

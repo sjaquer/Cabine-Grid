@@ -21,6 +21,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -43,14 +44,23 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+const createUserSchema = z.object({
+  name: z.string().trim().min(2, "Ingresa un nombre valido"),
+  email: z.string().trim().email("Ingresa un correo valido"),
+  password: z.string().min(6, "La contrasena debe tener al menos 6 caracteres"),
+  role: z.enum(["admin", "manager", "operator", "view-only"]),
+});
+
 const userRoleSchema = z.object({
   role: z.enum(["admin", "manager", "operator", "view-only"]),
 });
 
+type CreateUserFormValues = z.infer<typeof createUserSchema>;
 type UserRoleFormValues = z.infer<typeof userRoleSchema>;
 
 type UserManagerProps = {
   users: UserProfile[];
+  onCreateUser: (payload: CreateUserFormValues) => Promise<void>;
   onChangeRole: (userId: string, role: UserRole) => Promise<void>;
   onDeactivate: (userId: string) => Promise<void>;
 };
@@ -76,14 +86,44 @@ const roleIcons = {
   "view-only": <User className="w-4 h-4" />,
 };
 
-export default function UserManager({ users, onChangeRole, onDeactivate }: UserManagerProps) {
+export default function UserManager({ users, onCreateUser, onChangeRole, onDeactivate }: UserManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  const createForm = useForm<CreateUserFormValues>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      role: "operator",
+    },
+  });
 
   const form = useForm<UserRoleFormValues>({
     resolver: zodResolver(userRoleSchema),
     defaultValues: { role: "operator" },
   });
+
+  const handleCreateUser = async (values: CreateUserFormValues) => {
+    try {
+      setIsCreatingUser(true);
+      await onCreateUser(values);
+      createForm.reset({
+        name: "",
+        email: "",
+        password: "",
+        role: "operator",
+      });
+    } catch (error) {
+      console.error("Error creating user:", error);
+      const errorMessage = error instanceof Error ? error.message : "Error al crear usuario";
+      createForm.setError("root", { message: errorMessage });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
 
   const handleEdit = (user: UserProfile) => {
     setEditingId(user.uid);
@@ -118,6 +158,90 @@ export default function UserManager({ users, onChangeRole, onDeactivate }: UserM
       </CardHeader>
 
       <CardContent>
+        <div className="mb-6 rounded-lg border p-4 sm:p-5 bg-card">
+          <h3 className="font-semibold text-sm sm:text-base mb-1">Crear nuevo usuario</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground mb-4">
+            Crea cuentas nuevas y asigna su rol inicial.
+          </p>
+          <Form {...createForm}>
+            <form onSubmit={createForm.handleSubmit(handleCreateUser)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={createForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej. Juan Perez" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={createForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Correo</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="usuario@cabinegrid.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={createForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contrasena</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Minimo 6 caracteres" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={createForm.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rol</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="manager">Gerente</SelectItem>
+                        <SelectItem value="operator">Operador</SelectItem>
+                        <SelectItem value="view-only">Lectura</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>{roleDescriptions[createForm.watch("role")]}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {createForm.formState.errors.root?.message && (
+                <p className="md:col-span-2 text-sm text-destructive">
+                  {createForm.formState.errors.root.message}
+                </p>
+              )}
+              <div className="md:col-span-2 flex justify-end">
+                <Button type="submit" disabled={isCreatingUser}>
+                  {isCreatingUser ? "Creando..." : "Crear Usuario"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </div>
+
         <div className="mb-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
           <h3 className="font-semibold text-sm mb-3">Roles Disponibles:</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
