@@ -42,8 +42,8 @@ service cloud.firestore {
       return isAdminOrManager() || isOperator();
     }
 
-    function hasMfaForPrivilegedRoles() {
-      return !isAdminOrManager() || request.auth.token.email_verified == true;
+    function hasPrivilegedClearance() {
+      return true;
     }
 
     function locationInScope(locationId) {
@@ -74,7 +74,7 @@ service cloud.firestore {
 
       // Permite bootstrap del perfil propio al iniciar sesión por primera vez.
       allow create: if isSignedIn() && (
-        request.auth.uid == userId || (isAdminOrManager() && hasMfaForPrivilegedRoles())
+        request.auth.uid == userId || (isAdminOrManager() && hasPrivilegedClearance())
       );
 
       // El propio usuario puede actualizar datos básicos (no rol).
@@ -86,7 +86,7 @@ service cloud.firestore {
         )
       );
 
-      allow delete: if isAdmin() && hasMfaForPrivilegedRoles();
+      allow delete: if isAdmin() && hasPrivilegedClearance();
     }
 
     match /machines/{machineId} {
@@ -94,7 +94,7 @@ service cloud.firestore {
         isAdminOrManager() ||
         (isOperator() && resource.data.locationId is string && locationInScope(resource.data.locationId))
       );
-      allow create, update, delete: if canOperate() && hasMfaForPrivilegedRoles() && (
+      allow create, update, delete: if canOperate() && hasPrivilegedClearance() && (
         !('locationId' in request.resource.data) ||
         locationInScope(request.resource.data.locationId)
       );
@@ -102,7 +102,7 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
+      allow create, update, delete: if isAdminOrManager() && hasPrivilegedClearance();
     }
 
     match /locations/{locationId} {
@@ -110,7 +110,7 @@ service cloud.firestore {
         isAdminOrManager() ||
         (isOperator() && locationInScope(locationId))
       );
-      allow create, update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
+      allow create, update, delete: if isAdminOrManager() && hasPrivilegedClearance();
     }
 
     match /sales/{saleId} {
@@ -140,7 +140,7 @@ service cloud.firestore {
       allow update: if canOperate() && hasNonNegativeStock() && (
         request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
       );
-      allow delete: if canOperate() && hasMfaForPrivilegedRoles();
+      allow delete: if canOperate() && hasPrivilegedClearance();
     }
 
     match /inventoryMovements/{movementId} {
@@ -155,7 +155,7 @@ service cloud.firestore {
         request.resource.data.quantity > 0 &&
         request.resource.data.quantity <= 200
       );
-      allow update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
+      allow update, delete: if isAdminOrManager() && hasPrivilegedClearance();
     }
 
     match /inventoryDiscrepancies/{discrepancyId} {
@@ -166,7 +166,7 @@ service cloud.firestore {
       allow create: if canOperate() && (
         request.resource.data.locationId is string && locationInScope(request.resource.data.locationId)
       );
-      allow update, delete: if isAdminOrManager() && hasMfaForPrivilegedRoles();
+      allow update, delete: if isAdminOrManager() && hasPrivilegedClearance();
     }
 
     match /shiftClosures/{closureId} {
@@ -175,19 +175,19 @@ service cloud.firestore {
         request.resource.data.locationId == null ||
         (request.resource.data.locationId is string && locationInScope(request.resource.data.locationId))
       );
-      allow update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
+      allow update, delete: if isAdmin() && hasPrivilegedClearance();
     }
 
     match /receiptCounters/{counterId} {
       allow read: if isSignedIn();
       allow create, update: if canOperate();
-      allow delete: if isAdmin() && hasMfaForPrivilegedRoles();
+      allow delete: if isAdmin() && hasPrivilegedClearance();
     }
 
     match /auditLogs/{logId} {
       allow read: if isAdminOrManager();
       allow create: if canOperate();
-      allow update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
+      allow update, delete: if isAdmin() && hasPrivilegedClearance();
     }
 
     match /sensitiveApprovals/{approvalId} {
@@ -196,25 +196,19 @@ service cloud.firestore {
         request.resource.data.locationId == null ||
         (request.resource.data.locationId is string && locationInScope(request.resource.data.locationId))
       );
-      allow update: if isAdmin() && hasMfaForPrivilegedRoles();
-      allow delete: if isAdmin() && hasMfaForPrivilegedRoles();
+      allow update: if isAdmin() && hasPrivilegedClearance();
+      allow delete: if isAdmin() && hasPrivilegedClearance();
     }
 
     match /fraudAlerts/{alertId} {
       allow read: if isAdminOrManager();
       allow create: if canOperate();
-      allow update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
+      allow update, delete: if isAdmin() && hasPrivilegedClearance();
     }
 
     match /dailySnapshots/{snapshotId} {
       allow read: if isAdminOrManager();
-      allow create, update, delete: if isAdmin() && hasMfaForPrivilegedRoles();
-    }
-
-    match /appSettings/{settingId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin() && hasMfaForPrivilegedRoles() && settingId == 'security';
-      allow delete: if false;
+      allow create, update, delete: if isAdmin() && hasPrivilegedClearance();
     }
 
     // Bloquea cualquier colección no prevista.

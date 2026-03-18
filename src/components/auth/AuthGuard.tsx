@@ -1,24 +1,13 @@
 "use client";
 
-import { useAuth, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Skeleton } from '../ui/skeleton';
-import { Button } from '../ui/button';
-
-type AppSecuritySettings = {
-  requireVerifiedEmailForFullAccess?: boolean;
-  requireMfaForFullAccess?: boolean;
-};
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  const firestore = useFirestore();
   const router = useRouter();
-
-  const securitySettingsRef = useMemoFirebase(() => doc(firestore, 'appSettings', 'security'), [firestore]);
-  const { data: securitySettings, isLoading: isSecurityLoading } = useDoc<AppSecuritySettings>(securitySettingsRef);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -26,11 +15,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  const isEmailVerificationRequired =
-    securitySettings?.requireVerifiedEmailForFullAccess ?? Boolean(securitySettings?.requireMfaForFullAccess);
-  const canAccessFullApp = !isEmailVerificationRequired || Boolean(user?.emailVerified);
-
-  if (loading || isSecurityLoading || !user) {
+  if (loading || !user) {
     return (
         <div className="flex flex-col h-screen">
             <header className="px-4 lg:px-6 h-16 flex items-center border-b">
@@ -46,22 +31,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
                 </div>
             </main>
         </div>
-    );
-  }
-
-  if (!canAccessFullApp) {
-    return (
-      <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-lg rounded-lg border bg-card p-6 text-center space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">Correo verificado requerido</h1>
-          <p className="text-muted-foreground">
-            Para ver todo Cabine Grid, verifica tu correo desde el enlace enviado a tu bandeja de entrada.
-          </p>
-          <Button onClick={() => router.push('/login')} className="w-full sm:w-auto">
-            Ir al login
-          </Button>
-        </div>
-      </div>
     );
   }
 

@@ -1,17 +1,10 @@
 "use client";
 
-import { useAuth, useDoc, useFirestore, useMemoFirebase } from "@/firebase";
+import { useAuth } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { UserRole } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { doc } from "firebase/firestore";
-
-type AppSecuritySettings = {
-  requireVerifiedEmailForFullAccess?: boolean;
-  requireMfaForFullAccess?: boolean;
-};
 
 type RoleGuardProps = {
   children: React.ReactNode;
@@ -25,11 +18,7 @@ export default function RoleGuard({
   fallback,
 }: RoleGuardProps) {
   const { user, userProfile, loading } = useAuth();
-  const firestore = useFirestore();
   const router = useRouter();
-
-  const securitySettingsRef = useMemoFirebase(() => doc(firestore, "appSettings", "security"), [firestore]);
-  const { data: securitySettings, isLoading: isSecurityLoading } = useDoc<AppSecuritySettings>(securitySettingsRef);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -37,11 +26,7 @@ export default function RoleGuard({
     }
   }, [user, loading, router]);
 
-  const isEmailVerificationRequired =
-    securitySettings?.requireVerifiedEmailForFullAccess ?? Boolean(securitySettings?.requireMfaForFullAccess);
-  const canAccessFullApp = !isEmailVerificationRequired || Boolean(user?.emailVerified);
-
-  if (loading || isSecurityLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="space-y-4 w-full max-w-md">
@@ -55,20 +40,6 @@ export default function RoleGuard({
 
   if (!user || !userProfile) {
     return null;
-  }
-
-  if (!canAccessFullApp) {
-    return (
-      <div className="flex items-center justify-center h-screen p-4">
-        <div className="w-full max-w-lg rounded-lg border bg-card p-6 text-center space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">Correo verificado requerido</h1>
-          <p className="text-muted-foreground">
-            Esta cuenta necesita verificar su correo para acceder a todas las secciones.
-          </p>
-          <Button onClick={() => router.push("/login")}>Ir al login</Button>
-        </div>
-      </div>
-    );
   }
 
   // Si no hay roles requeridos especificados, permitir acceso

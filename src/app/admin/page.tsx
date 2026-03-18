@@ -1,24 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAuth, useCollection, useDoc, useFirestore, useMemoFirebase } from "@/firebase";
+import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Database, Loader2, Package, BarChart3 } from "lucide-react";
+import { ArrowLeft, Database, Package, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import MachineManager from "@/components/admin/MachineManager";
 import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
@@ -49,26 +37,16 @@ import {
   createUserWithEmailAndPassword,
   deleteUser,
   getAuth,
-  sendEmailVerification,
   signOut,
 } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { logAuditAction } from "@/lib/audit-log";
-
-type AppSecuritySettings = {
-  requireVerifiedEmailForFullAccess?: boolean;
-  requireMfaForFullAccess?: boolean;
-};
 
 export default function AdminPage() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
-  const [isSavingSecurity, setIsSavingSecurity] = useState(false);
-  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
-  const [isSendingVerificationEmail, setIsSendingVerificationEmail] = useState(false);
-  const [isCheckingVerificationEmail, setIsCheckingVerificationEmail] = useState(false);
 
   const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
@@ -76,7 +54,6 @@ export default function AdminPage() {
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
   const closuresQuery = useMemoFirebase(() => query(collection(firestore, "shiftClosures")), [firestore]);
   const approvalsQuery = useMemoFirebase(() => query(collection(firestore, "sensitiveApprovals")), [firestore]);
-  const securitySettingsRef = useMemoFirebase(() => doc(firestore, "appSettings", "security"), [firestore]);
 
   const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
@@ -84,7 +61,6 @@ export default function AdminPage() {
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
   const { data: closuresData } = useCollection<any>(closuresQuery);
   const { data: approvalsData } = useCollection<any>(approvalsQuery);
-  const { data: securitySettings } = useDoc<AppSecuritySettings>(securitySettingsRef);
 
   const machines = useMemo(() => (machinesData ?? []) as Machine[], [machinesData]);
   const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
@@ -105,9 +81,6 @@ export default function AdminPage() {
     () => (approvalsData ?? []).filter((x) => (x.status || "pending") === "pending"),
     [approvalsData]
   );
-  const requireVerifiedEmailForFullAccess =
-    securitySettings?.requireVerifiedEmailForFullAccess ?? Boolean(securitySettings?.requireMfaForFullAccess);
-  const hasVerifiedEmail = Boolean(user?.emailVerified);
 
   const auditActor = {
     id: user?.uid,
@@ -350,205 +323,6 @@ export default function AdminPage() {
       },
     }, { merge: true });
     toast({ title: "Snapshot diario generado" });
-  };
-
-  const handleToggleRequireVerifiedEmailForFullAccess = async (checked: boolean) => {
-    if (userProfile?.role !== "admin") {
-      toast({ variant: "destructive", title: "Solo admin puede cambiar esta configuracion" });
-      return;
-    }
-
-    if (checked && !hasVerifiedEmail) {
-      setIsEmailDialogOpen(true);
-      toast({
-        title: "Primero verifica tu correo",
-        description: "Te abrimos el asistente para enviar y confirmar el email de verificacion.",
-      });
-      return;
-    }
-
-    setIsSavingSecurity(true);
-    try {
-      await setDoc(
-        securitySettingsRef,
-        {
-          requireVerifiedEmailForFullAccess: checked,
-          requireMfaForFullAccess: checked,
-          updatedAt: serverTimestamp(),
-          updatedBy: {
-            id: user?.uid || null,
-            email: user?.email || null,
-          },
-        },
-        { merge: true }
-      );
-
-      await logAuditAction(firestore, {
-        action: "security.email.require_full_access.toggle",
-        target: "appSettings",
-        targetId: "security",
-        actor: auditActor,
-        details: { requireVerifiedEmailForFullAccess: checked },
-      });
-
-      toast({
-        title: checked ? "Verificacion de correo requerida activada" : "Verificacion de correo requerida desactivada",
-        description: checked
-          ? "Ahora todos deben tener su correo verificado para ver toda la app."
-          : "Se desactivo la exigencia global de verificacion de correo.",
-      });
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "No se pudo actualizar la seguridad",
-        description: "Verifica tus permisos y vuelve a intentar.",
-      });
-    } finally {
-      setIsSavingSecurity(false);
-    }
-  };
-
-  const handleSendVerificationEmail = async () => {
-    if (!user) {
-      toast({ variant: "destructive", title: "Sesion invalida", description: "Vuelve a iniciar sesion e intentalo otra vez." });
-      return;
-    }
-
-    if (user.emailVerified) {
-      toast({
-        title: "Correo ya verificado",
-        description: "Esta cuenta ya tiene el correo verificado.",
-      });
-      return;
-    }
-
-    if (!firebaseConfig.authDomain) {
-      toast({
-        variant: "destructive",
-        title: "Falta configuracion de authDomain",
-        description: "Configura NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN en .env.local y reinicia la app.",
-      });
-      return;
-    }
-
-    setIsSendingVerificationEmail(true);
-    try {
-      const continueUrl = `${window.location.origin}/login?emailVerified=1`;
-      await sendEmailVerification(user, {
-        url: continueUrl,
-        handleCodeInApp: false,
-      });
-
-      toast({
-        title: "Correo enviado",
-        description: "Revisa bandeja principal, spam y promociones. Luego abre el enlace y vuelve a Comprobar verificacion.",
-      });
-    } catch (error) {
-      console.error(error);
-
-      const firebaseErrorCode =
-        typeof error === "object" && error !== null && "code" in error
-          ? String((error as { code?: unknown }).code)
-          : "";
-
-      if (firebaseErrorCode === "auth/too-many-requests") {
-        toast({
-          variant: "destructive",
-          title: "Demasiados intentos",
-          description: "Firebase limito temporalmente los envios. Espera unos minutos e intentalo de nuevo.",
-        });
-        return;
-      }
-
-      if (firebaseErrorCode === "auth/unauthorized-continue-uri") {
-        toast({
-          variant: "destructive",
-          title: "URL no autorizada",
-          description: "Agrega este dominio en Firebase Authentication > Settings > Authorized domains.",
-        });
-        return;
-      }
-
-      if (firebaseErrorCode === "auth/invalid-continue-uri") {
-        toast({
-          variant: "destructive",
-          title: "Continue URL invalida",
-          description: "La URL de retorno no es valida para Firebase Auth. Revisa dominio y protocolo.",
-        });
-        return;
-      }
-
-      if (firebaseErrorCode === "auth/network-request-failed") {
-        toast({
-          variant: "destructive",
-          title: "Error de red",
-          description: "No se pudo contactar a Firebase. Verifica conexion, VPN o firewall.",
-        });
-        return;
-      }
-
-      if (firebaseErrorCode === "auth/quota-exceeded") {
-        toast({
-          variant: "destructive",
-          title: "Cuota de envios excedida",
-          description: "El proyecto alcanzo el limite de correos de autenticacion. Revisa cuota en Firebase/Google Cloud.",
-        });
-        return;
-      }
-
-      toast({
-        variant: "destructive",
-        title: "No se pudo enviar el correo",
-        description: firebaseErrorCode || "Intenta nuevamente en unos segundos.",
-      });
-    } finally {
-      setIsSendingVerificationEmail(false);
-    }
-  };
-
-  const handleRefreshEmailVerificationStatus = async () => {
-    if (!user) {
-      toast({ variant: "destructive", title: "Sesion invalida", description: "Vuelve a iniciar sesion e intentalo otra vez." });
-      return;
-    }
-
-    setIsCheckingVerificationEmail(true);
-    try {
-      await user.reload();
-      await user.getIdToken(true);
-
-      if (!user.emailVerified) {
-        toast({
-          variant: "destructive",
-          title: "Correo aun no verificado",
-          description: "Abre el enlace del correo y luego vuelve a presionar Comprobar.",
-        });
-        return;
-      }
-
-      await logAuditAction(firestore, {
-        action: "security.email.verify",
-        target: "users",
-        targetId: user.uid,
-        actor: auditActor,
-      });
-
-      toast({
-        title: "Correo verificado",
-        description: "Tu cuenta ya esta verificada. Ahora puedes activar la exigencia global.",
-      });
-      setIsEmailDialogOpen(false);
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "No se pudo comprobar verificacion",
-        description: "Vuelve a intentarlo en unos segundos.",
-      });
-    } finally {
-      setIsCheckingVerificationEmail(false);
-    }
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -885,98 +659,6 @@ export default function AdminPage() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {userProfile?.role === "admin" && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Verificacion por correo</CardTitle>
-                <CardDescription>
-                  Exige correo verificado para ver todo Cabine Grid.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-medium text-foreground">Estado de tu cuenta admin</p>
-                      <p className="text-sm text-muted-foreground">
-                        {hasVerifiedEmail
-                          ? "Tu cuenta ya tiene correo verificado."
-                          : "Tu cuenta aun no tiene correo verificado. Puedes enviarlo desde aqui mismo."}
-                      </p>
-                    </div>
-                    <Button variant="outline" onClick={() => setIsEmailDialogOpen(true)}>
-                      {hasVerifiedEmail ? "Revisar verificacion" : "Verificar correo ahora"}
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 border-t pt-4">
-                    <div>
-                    <p className="font-medium text-foreground">Requerir correo verificado para acceso total</p>
-                    <p className="text-sm text-muted-foreground">
-                      Si esta activo, cualquier usuario sin correo verificado quedara bloqueado hasta confirmar su email.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {isSavingSecurity && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                    <Switch
-                      checked={Boolean(requireVerifiedEmailForFullAccess)}
-                      disabled={isSavingSecurity}
-                      onCheckedChange={handleToggleRequireVerifiedEmailForFullAccess}
-                    />
-                  </div>
-                </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
-            <DialogContent className="sm:max-w-xl">
-              <DialogHeader>
-                <DialogTitle>Verificar correo de la cuenta</DialogTitle>
-                <DialogDescription>
-                  Envia el correo de verificacion y confirma el enlace para habilitar acceso completo.
-                </DialogDescription>
-              </DialogHeader>
-
-              {hasVerifiedEmail ? (
-                <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  Esta cuenta ya tiene el correo verificado.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Paso 1: presiona Enviar correo. Paso 2: abre el enlace que te llega por email.
-                    Paso 3: vuelve aqui y presiona Comprobar verificacion.
-                  </p>
-                </div>
-              )}
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>
-                  Cerrar
-                </Button>
-                {!hasVerifiedEmail && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={handleSendVerificationEmail}
-                      disabled={isSendingVerificationEmail}
-                    >
-                      {isSendingVerificationEmail ? "Enviando..." : "Enviar correo"}
-                    </Button>
-                    <Button
-                      onClick={handleRefreshEmailVerificationStatus}
-                      disabled={isCheckingVerificationEmail}
-                    >
-                      {isCheckingVerificationEmail ? "Comprobando..." : "Comprobar verificacion"}
-                    </Button>
-                  </>
-                )}
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           <Tabs defaultValue="machines" className="w-full">
             <TabsList className="grid w-full grid-cols-6 mb-8">
               <TabsTrigger value="machines">Cabinas</TabsTrigger>
