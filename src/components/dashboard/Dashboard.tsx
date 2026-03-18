@@ -12,10 +12,11 @@ import ChargeDialog from "./ChargeDialog";
 import ProductsPOSDialog from "./ProductsPOSDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc, increment, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc, increment, serverTimestamp, runTransaction } from "firebase/firestore";
 import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { setShiftLocation } from "@/lib/shift-session";
+import { getShiftStart, setShiftLocation } from "@/lib/shift-session";
+import { logAuditAction } from "@/lib/audit-log";
 
 
 export default function Dashboard() {
@@ -281,13 +282,45 @@ export default function Dashboard() {
     };
 
     const soldProducts = machine.session?.soldProducts ?? [];
+    const effectiveLocationId = machine.locationId || selectedLocationId;
+    const shiftStartMs = user?.uid ? (getShiftStart(user.uid) ?? session.startTime) : session.startTime;
+    const shiftId = `${effectiveLocationId || 'global'}_${user?.uid || 'anon'}_${shiftStartMs}`;
+
+    let receiptSequence = 1;
+    let receiptSeries = (effectiveLocationId || 'GLOBAL').slice(0, 6).toUpperCase();
+    let receiptNumber = `${receiptSeries}-${String(receiptSequence).padStart(6, '0')}`;
+
+    try {
+      const counterId = `${effectiveLocationId || 'global'}_${shiftId}`;
+      const counterRef = doc(firestore, "receiptCounters", counterId);
+      receiptSequence = await runTransaction(firestore, async (transaction) => {
+        const snapshot = await transaction.get(counterRef);
+        const current = snapshot.exists() ? Number(snapshot.data().lastNumber || 0) : 0;
+        const next = current + 1;
+        transaction.set(counterRef, {
+          locationId: effectiveLocationId || null,
+          shiftId,
+          lastNumber: next,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+        return next;
+      });
+      receiptNumber = `${receiptSeries}-${String(receiptSequence).padStart(6, '0')}`;
+    } catch (error) {
+      console.error("Error generating receipt counter:", error);
+    }
+
     const resolvedHourlyRate = typeof session.hourlyRate === "number"
       ? session.hourlyRate
       : (typeof selectedRate?.pricePerHour === "number" ? selectedRate.pricePerHour : undefined);
     const newSale = {
       machineName: machine.name,
       clientName: session.client || "Ocasional",
-      ...((machine.locationId || selectedLocationId) ? { locationId: machine.locationId || selectedLocationId } : {}),
+      ...(effectiveLocationId ? { locationId: effectiveLocationId } : {}),
+      receiptSeries,
+      receiptSequence,
+      receiptNumber,
+      shiftId,
       startTime: Timestamp.fromMillis(session.startTime),
       endTime: Timestamp.fromMillis(endTime),
       totalMinutes,
@@ -305,9 +338,9 @@ export default function Dashboard() {
       setProcessingPayment(true);
       const batch = writeBatch(firestore);
       const salesCollection = collection(firestore, "sales");
-      batch.set(doc(salesCollection), newSale);
+      const saleRef = doc(salesCollection);
+      batch.set(saleRef, newSale);
 
-      const effectiveLocationId = machine.locationId || selectedLocationId;
       if (effectiveLocationId) {
         soldProducts.forEach((product) => {
           if (!product.productId) return;
@@ -332,10 +365,27 @@ export default function Dashboard() {
       });
       
       await batch.commit();
+
+      await logAuditAction(firestore, {
+        action: 'sale.close',
+        target: 'sales',
+        targetId: saleRef.id,
+        locationId: effectiveLocationId || undefined,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: {
+          machineId,
+          machineName: machine.name,
+          amount,
+          paymentMethod,
+          receiptNumber,
+          shiftId,
+          productsCount: soldProducts.reduce((sum, p) => sum + p.quantity, 0),
+        },
+      });
       
       toast({
         title: "Pago Confirmado",
-        description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}.`,
+        description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${receiptNumber}.`,
       });
       handleChargeDialogChange(false);
       handlePosDialogChange(false);
@@ -364,6 +414,17 @@ export default function Dashboard() {
         soldProducts: products,
       };
       await updateDoc(machineRef, { session: updatedSession });
+      await logAuditAction(firestore, {
+        action: 'session.products.update',
+        target: 'machines',
+        targetId: machineId,
+        locationId: machine.locationId || selectedLocationId || undefined,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: {
+          totalItems: products.reduce((sum, p) => sum + p.quantity, 0),
+          totalProducts: products.length,
+        },
+      });
       toast({ title: "Productos guardados", description: "Se anexaron a la boleta del cliente." });
     } catch (error) {
       console.error("Error saving products:", error);
@@ -373,7 +434,7 @@ export default function Dashboard() {
         description: "No se pudo actualizar la boleta del cliente.",
       });
     }
-  }, [machines, firestore, toast]);
+  }, [machines, firestore, toast, selectedLocationId, user?.uid, user?.email, userProfile?.role]);
 
   const handleGoToCharge = useCallback((machineId: string) => {
     const machine = machines.find((item) => item.id === machineId) ?? null;

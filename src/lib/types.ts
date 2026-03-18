@@ -74,6 +74,10 @@ export type Sale = {
   id: string;
   machineName: string;
   locationId?: string;
+  receiptSeries?: string;
+  receiptSequence?: number;
+  receiptNumber?: string;
+  shiftId?: string;
   clientName?: string;
   startTime: Timestamp;
   endTime: Timestamp;
@@ -106,5 +110,9 @@ export type AuthContextType = {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
-  logout: () => Promise<void>;
+  logout: (payload?: {
+    countedCash?: number;
+    inventoryChecked?: boolean;
+    discrepancyReason?: string;
+  }) => Promise<void>;
 };

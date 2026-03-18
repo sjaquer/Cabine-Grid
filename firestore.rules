@@ -100,6 +100,24 @@ service cloud.firestore {
       allow create, update, delete: if canOperate();
     }
 
+    match /shiftClosures/{closureId} {
+      allow read: if isAdminOrManager();
+      allow create: if canOperate();
+      allow update, delete: if isAdmin();
+    }
+
+    match /receiptCounters/{counterId} {
+      allow read: if isSignedIn();
+      allow create, update: if canOperate();
+      allow delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdminOrManager();
+      allow create: if canOperate();
+      allow update, delete: if isAdmin();
+    }
+
     // Bloquea cualquier colección no prevista.
     match /{document=**} {
       allow read, write: if false;

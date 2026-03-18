@@ -11,6 +11,7 @@ import MachineManager from "@/components/admin/MachineManager";
 import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
 import UserManager from "@/components/admin/UserManager";
+import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
 import type { Machine, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { initialMachines, products as defaultProducts, rates } from "@/lib/data";
@@ -31,9 +32,10 @@ import {
 import { initializeApp, deleteApp } from "firebase/app";
 import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
+import { logAuditAction } from "@/lib/audit-log";
 
 export default function AdminPage() {
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
@@ -42,11 +44,13 @@ export default function AdminPage() {
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
+  const closuresQuery = useMemoFirebase(() => query(collection(firestore, "shiftClosures")), [firestore]);
 
   const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
+  const { data: closuresData } = useCollection<any>(closuresQuery);
 
   const machines = useMemo(() => (machinesData ?? []) as Machine[], [machinesData]);
   const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
@@ -59,14 +63,40 @@ export default function AdminPage() {
       })) as UserProfile[],
     [usersData]
   );
+  const closures = useMemo(
+    () => (closuresData ?? []).sort((a, b) => (b.shiftEnd?.toMillis?.() || 0) - (a.shiftEnd?.toMillis?.() || 0)),
+    [closuresData]
+  );
+
+  const auditActor = {
+    id: user?.uid,
+    email: user?.email,
+    role: userProfile?.role,
+  };
 
   const handleAddMachine = async (machine: Omit<Machine, 'id'>) => {
     await addDoc(collection(firestore, "machines"), machine);
+    await logAuditAction(firestore, {
+      action: 'machine.create',
+      target: 'machines',
+      targetId: machine.name,
+      locationId: machine.locationId,
+      actor: auditActor,
+      details: { machine },
+    });
     toast({ title: "Máquina creada" });
   };
 
   const handleEditMachine = async (id: string, updates: Partial<Machine>) => {
     await updateDoc(doc(firestore, "machines", id), updates);
+    await logAuditAction(firestore, {
+      action: 'machine.update',
+      target: 'machines',
+      targetId: id,
+      locationId: updates.locationId,
+      actor: auditActor,
+      details: { updates },
+    });
     toast({ title: "Máquina actualizada" });
   };
 
@@ -89,6 +119,13 @@ export default function AdminPage() {
       createdAt: serverTimestamp(),
       updateAt: serverTimestamp(),
     });
+    await logAuditAction(firestore, {
+      action: 'location.create',
+      target: 'locations',
+      targetId: location.name,
+      actor: auditActor,
+      details: { location },
+    });
     toast({ title: "Local creado" });
   };
 
@@ -96,6 +133,13 @@ export default function AdminPage() {
     await updateDoc(doc(firestore, "locations", id), {
       ...updates,
       updateAt: serverTimestamp(),
+    });
+    await logAuditAction(firestore, {
+      action: 'location.update',
+      target: 'locations',
+      targetId: id,
+      actor: auditActor,
+      details: { updates },
     });
     toast({ title: "Local actualizado" });
   };
@@ -110,11 +154,25 @@ export default function AdminPage() {
       ...product,
       createdAt: serverTimestamp(),
     });
+    await logAuditAction(firestore, {
+      action: 'product.create',
+      target: 'products',
+      targetId: product.name,
+      actor: auditActor,
+      details: { product },
+    });
     toast({ title: "Producto creado" });
   };
 
   const handleEditProduct = async (id: string, updates: Partial<Product>) => {
     await updateDoc(doc(firestore, "products", id), updates);
+    await logAuditAction(firestore, {
+      action: 'product.update',
+      target: 'products',
+      targetId: id,
+      actor: auditActor,
+      details: { updates },
+    });
     toast({ title: "Producto actualizado" });
   };
 
@@ -128,6 +186,13 @@ export default function AdminPage() {
       role,
       updateAt: serverTimestamp(),
     });
+    await logAuditAction(firestore, {
+      action: 'user.role.update',
+      target: 'users',
+      targetId: userId,
+      actor: auditActor,
+      details: { role },
+    });
     toast({ title: "Rol actualizado" });
   };
 
@@ -135,6 +200,13 @@ export default function AdminPage() {
     await updateDoc(doc(firestore, "users", userId), {
       isActive: false,
       updateAt: serverTimestamp(),
+    });
+    await logAuditAction(firestore, {
+      action: 'user.deactivate',
+      target: 'users',
+      targetId: userId,
+      actor: auditActor,
+      details: { isActive: false },
     });
     toast({ title: "Usuario desactivado" });
   };
@@ -179,6 +251,13 @@ export default function AdminPage() {
         title: "Usuario creado",
         description: `${name.trim()} fue registrado correctamente.`,
       });
+      await logAuditAction(firestore, {
+        action: 'user.create',
+        target: 'users',
+        targetId: credential.user.uid,
+        actor: auditActor,
+        details: { email: email.trim().toLowerCase(), name: name.trim(), role },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo crear el usuario.";
       throw new Error(message);
@@ -186,6 +265,28 @@ export default function AdminPage() {
       await signOut(secondaryAuth).catch(() => undefined);
       await deleteApp(secondaryApp).catch(() => undefined);
     }
+  };
+
+  const handleReopenShift = async (closureId: string) => {
+    if (userProfile?.role !== "admin") {
+      toast({ variant: "destructive", title: "Solo admin puede reabrir cierres" });
+      return;
+    }
+    await updateDoc(doc(firestore, "shiftClosures", closureId), {
+      status: "reopened",
+      reopenedAt: serverTimestamp(),
+      reopenedBy: {
+        id: user?.uid || null,
+        email: user?.email || null,
+      },
+    });
+    await logAuditAction(firestore, {
+      action: 'shift.reopen',
+      target: 'shiftClosures',
+      targetId: closureId,
+      actor: auditActor,
+    });
+    toast({ title: "Cierre reabierto" });
   };
 
   const handleSeedMockData = async () => {
@@ -371,10 +472,11 @@ export default function AdminPage() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Tabs defaultValue="machines" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-8">
+            <TabsList className="grid w-full grid-cols-5 mb-8">
               <TabsTrigger value="machines">Cabinas</TabsTrigger>
               <TabsTrigger value="locations">Locales</TabsTrigger>
               <TabsTrigger value="products">Productos</TabsTrigger>
+              <TabsTrigger value="closures">Cierres</TabsTrigger>
               {userProfile?.role === "admin" && (
                 <TabsTrigger value="users">Usuarios</TabsTrigger>
               )}
@@ -406,6 +508,14 @@ export default function AdminPage() {
                 onAdd={handleAddProduct}
                 onEdit={handleEditProduct}
                 onDelete={handleDeleteProduct}
+              />
+            </TabsContent>
+
+            <TabsContent value="closures" className="space-y-6">
+              <ShiftClosureManager
+                closures={closures}
+                userProfile={userProfile}
+                onReopenShift={handleReopenShift}
               />
             </TabsContent>
 

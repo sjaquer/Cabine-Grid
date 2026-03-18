@@ -60,3 +60,10 @@ export function clearShiftLocation(uid: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(getShiftLocationStorageKey(uid));
 }
+
+export function getShiftId(uid: string): string | null {
+  const start = getShiftStart(uid);
+  if (!start) return null;
+  const locationId = getShiftLocation(uid) || "global";
+  return `${locationId}_${uid}_${start}`;
+}

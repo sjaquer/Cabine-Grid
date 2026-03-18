@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { logAuditAction } from "@/lib/audit-log";
 
 type InventoryDoc = {
   id: string;
@@ -234,6 +235,18 @@ export default function InventoryPage() {
       });
 
       await batch.commit();
+      await logAuditAction(firestore, {
+        action: "inventory.adjust",
+        target: "inventory",
+        targetId: `${selectedLocationId}_${selectedProductRow.productId}`,
+        locationId: selectedLocationId,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: {
+          movementType,
+          quantity: qty,
+          note: movementNote.trim(),
+        },
+      });
       setMovementQty("1");
       setMovementNote("");
       toast({ title: "Inventario actualizado" });
@@ -280,6 +293,19 @@ export default function InventoryPage() {
         reportedBy: {
           id: user?.uid ?? null,
           email: user?.email ?? null,
+        },
+      });
+      await logAuditAction(firestore, {
+        action: "inventory.discrepancy.report",
+        target: "inventoryDiscrepancies",
+        targetId: `${discrepancyData.locationId}_${discrepancyData.productId}`,
+        locationId: discrepancyData.locationId,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: {
+          systemStock: discrepancyData.systemStock,
+          countedStock: counted,
+          difference,
+          note: discrepancyNote.trim(),
         },
       });
       setIsDiscrepancyOpen(false);

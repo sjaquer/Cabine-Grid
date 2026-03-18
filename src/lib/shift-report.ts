@@ -91,8 +91,9 @@ export function buildShiftReportPdf({
 
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 16,
-    head: [["Fecha fin", "Cabina", "Cliente", "Metodo", "Duracion", "Monto"]],
+    head: [["Boleta", "Fecha fin", "Cabina", "Cliente", "Metodo", "Duracion", "Monto"]],
     body: sales.map((sale) => [
+      sale.receiptNumber || "-",
       formatDateTime(safeTimestampToDate(sale.endTime as Timestamp)),
       sale.machineName,
       sale.clientName || "Ocasional",

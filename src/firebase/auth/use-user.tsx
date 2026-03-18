@@ -8,20 +8,25 @@ import {
 } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { collection, doc, getDocs, query, Timestamp, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, query, Timestamp, where, serverTimestamp } from 'firebase/firestore';
 
 import { useFirebaseAuthInstance, useFirestore } from '../provider';
 import type { Machine, Sale, UserProfile } from '@/lib/types';
 import { useMemoFirebase } from '../provider';
 import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
-import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftLocation, getShiftStart } from '@/lib/shift-session';
+import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftId, getShiftLocation, getShiftStart } from '@/lib/shift-session';
+import { logAuditAction } from '@/lib/audit-log';
 
 export interface AuthContextValue {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
-  logout: () => Promise<void>;
+  logout: (payload?: {
+    countedCash?: number;
+    inventoryChecked?: boolean;
+    discrepancyReason?: string;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -59,11 +64,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, userProfile]);
 
-  const logout = async () => {
+  const logout = async (payload?: {
+    countedCash?: number;
+    inventoryChecked?: boolean;
+    discrepancyReason?: string;
+  }) => {
     if (user && userProfile && (userProfile.role === 'operator' || userProfile.role === 'manager')) {
       const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
       const shiftEndMs = Date.now();
       const shiftLocationId = getShiftLocation(user.uid);
+      const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
+
+      if (!payload || typeof payload.countedCash !== 'number' || payload.countedCash < 0) {
+        throw new Error('Debes registrar el conteo de caja antes de cerrar turno.');
+      }
+      if (!payload.inventoryChecked) {
+        throw new Error('Debes confirmar el conteo de inventario antes de cerrar turno.');
+      }
 
       try {
         const salesRef = collection(firestore, 'sales');
@@ -85,6 +102,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return sale.locationId === shiftLocationId;
         });
 
+        const expectedCash = operatorShiftSales
+          .filter((sale) => sale.paymentMethod === 'efectivo')
+          .reduce((sum, sale) => sum + sale.amount, 0);
+        const countedCash = Math.round(payload.countedCash * 100) / 100;
+        const cashDifference = Math.round((countedCash - expectedCash) * 100) / 100;
+
+        if (cashDifference !== 0 && !payload.discrepancyReason?.trim()) {
+          throw new Error('Existe diferencia en caja. Debes ingresar un motivo para cerrar turno.');
+        }
+
         const machinesRef = collection(firestore, 'machines');
         const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
         const machinesSnap = await getDocs(machinesQuery);
@@ -96,6 +123,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const openMachines = shiftLocationId
           ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
           : allOpenMachines;
+
+        await addDoc(collection(firestore, 'shiftClosures'), {
+          shiftId,
+          locationId: shiftLocationId || null,
+          operator: {
+            id: user.uid,
+            email: user.email,
+            role: userProfile.role,
+          },
+          shiftStart: Timestamp.fromMillis(shiftStartMs),
+          shiftEnd: Timestamp.fromMillis(shiftEndMs),
+          expectedCash,
+          countedCash,
+          cashDifference,
+          discrepancyReason: payload.discrepancyReason?.trim() || null,
+          inventoryChecked: true,
+          salesCount: operatorShiftSales.length,
+          totalSales: operatorShiftSales.reduce((sum: number, sale) => sum + sale.amount, 0),
+          status: 'closed',
+          createdAt: serverTimestamp(),
+        });
+
+        await logAuditAction(firestore, {
+          action: 'shift.close',
+          target: 'shiftClosures',
+          targetId: shiftId,
+          locationId: shiftLocationId || undefined,
+          actor: { id: user.uid, email: user.email, role: userProfile.role },
+          details: {
+            expectedCash,
+            countedCash,
+            cashDifference,
+            salesCount: operatorShiftSales.length,
+          },
+        });
 
         buildShiftReportPdf({
           userProfile,
