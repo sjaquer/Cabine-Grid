@@ -18,8 +18,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, Clock, Hash, Smartphone, Landmark, ShoppingCart, User, Package } from "lucide-react";
+import { DollarSign, Clock, Hash, Smartphone, Landmark, ShoppingCart, User, Package, ChartBar, List } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Badge } from "../ui/badge";
 import type { Timestamp } from "firebase/firestore";
@@ -91,10 +92,26 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
             </Card>
         </div>
 
-        <SalesChart sales={sales} />
+        <Tabs defaultValue="breakdown" className="flex-1 flex flex-col min-h-0 w-full mt-2">
+           <div className="px-4 sm:px-6 mb-2">
+              <TabsList className="grid w-full grid-cols-2">
+                 <TabsTrigger value="breakdown" className="flex items-center gap-2">
+                    <List className="w-4 h-4" /> Desglose
+                 </TabsTrigger>
+                 <TabsTrigger value="analysis" className="flex items-center gap-2">
+                    <ChartBar className="w-4 h-4" /> Análisis
+                 </TabsTrigger>
+              </TabsList>
+           </div>
+           
+           <TabsContent value="analysis" className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 m-0 data-[state=inactive]:hidden border-t">
+              <div className="bg-card border rounded-lg p-2 h-[400px]">
+                 <SalesChart sales={sales} />
+              </div>
+           </TabsContent>
 
-        <div className="flex-1 min-h-0 overflow-y-auto border-t px-4 sm:px-6 py-4">
-          <Accordion type="multiple" className="w-full space-y-2">
+           <TabsContent value="breakdown" className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 m-0 data-[state=inactive]:hidden border-t">
+            <Accordion type="multiple" className="w-full space-y-2">
               {sales.length > 0 ? sales.map((sale) => (
                   <AccordionItem value={sale.id} key={sale.id}>
                      <AccordionTrigger className="px-4 hover:no-underline hover:bg-muted/50">
@@ -151,7 +168,8 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
                 </div>
               )}
             </Accordion>
-        </div>
+           </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );
