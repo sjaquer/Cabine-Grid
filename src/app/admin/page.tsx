@@ -9,6 +9,16 @@ import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import MachineManager from "@/components/admin/MachineManager";
 import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
@@ -35,7 +45,16 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
-import { createUserWithEmailAndPassword, deleteUser, getAuth, multiFactor, signOut } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  EmailAuthProvider,
+  getAuth,
+  multiFactor,
+  reauthenticateWithCredential,
+  signOut,
+  TotpMultiFactorGenerator,
+} from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { logAuditAction } from "@/lib/audit-log";
 
@@ -49,6 +68,15 @@ export default function AdminPage() {
   const { toast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
+  const [hasSecondFactorOverride, setHasSecondFactorOverride] = useState<boolean | null>(null);
+  const [isMfaDialogOpen, setIsMfaDialogOpen] = useState(false);
+  const [mfaPassword, setMfaPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [totpSecret, setTotpSecret] = useState<any | null>(null);
+  const [totpQrUrl, setTotpQrUrl] = useState("");
+  const [totpSecretKey, setTotpSecretKey] = useState("");
+  const [isPreparingMfa, setIsPreparingMfa] = useState(false);
+  const [isConfirmingMfa, setIsConfirmingMfa] = useState(false);
 
   const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
@@ -86,7 +114,8 @@ export default function AdminPage() {
     [approvalsData]
   );
   const requireMfaForFullAccess = Boolean(securitySettings?.requireMfaForFullAccess);
-  const hasSecondFactorEnabled = user ? multiFactor(user).enrolledFactors.length > 0 : false;
+  const currentUserHasMfa = user ? multiFactor(user).enrolledFactors.length > 0 : false;
+  const hasSecondFactorEnabled = hasSecondFactorOverride ?? currentUserHasMfa;
 
   const auditActor = {
     id: user?.uid,
@@ -338,10 +367,10 @@ export default function AdminPage() {
     }
 
     if (checked && !hasSecondFactorEnabled) {
+      setIsMfaDialogOpen(true);
       toast({
-        variant: "destructive",
-        title: "Activa 2 pasos primero",
-        description: "Tu cuenta admin necesita tener 2 pasos activo antes de exigirlo para toda la app.",
+        title: "Primero activa 2 pasos",
+        description: "Te abrimos el asistente para configurarlo ahora mismo.",
       });
       return;
     }
@@ -384,6 +413,91 @@ export default function AdminPage() {
       });
     } finally {
       setIsSavingSecurity(false);
+    }
+  };
+
+  const resetMfaAssistant = () => {
+    setMfaPassword("");
+    setMfaCode("");
+    setTotpSecret(null);
+    setTotpQrUrl("");
+    setTotpSecretKey("");
+    setIsPreparingMfa(false);
+    setIsConfirmingMfa(false);
+  };
+
+  const handleGenerateMfaSecret = async () => {
+    if (!user || !user.email) {
+      toast({ variant: "destructive", title: "Sesion invalida", description: "Vuelve a iniciar sesion para configurar 2 pasos." });
+      return;
+    }
+    if (!mfaPassword.trim()) {
+      toast({ variant: "destructive", title: "Falta contraseña", description: "Ingresa tu contraseña para validar la operacion." });
+      return;
+    }
+
+    setIsPreparingMfa(true);
+    try {
+      const credential = EmailAuthProvider.credential(user.email, mfaPassword.trim());
+      await reauthenticateWithCredential(user, credential);
+
+      const mfaSession = await multiFactor(user).getSession();
+      const secret = await TotpMultiFactorGenerator.generateSecret(mfaSession);
+      const qrUrl = secret.generateQrCodeUrl(user.email, "Cabine Grid");
+
+      setTotpSecret(secret);
+      setTotpQrUrl(qrUrl);
+      setTotpSecretKey(secret.secretKey);
+      toast({ title: "Asistente listo", description: "Escanea el QR en tu app autenticadora y coloca el codigo de 6 digitos." });
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "No se pudo preparar 2 pasos",
+        description: "Verifica tu contraseña y vuelve a intentar.",
+      });
+    } finally {
+      setIsPreparingMfa(false);
+    }
+  };
+
+  const handleConfirmMfaEnrollment = async () => {
+    if (!user || !totpSecret) return;
+    const trimmedCode = mfaCode.trim();
+    if (trimmedCode.length < 6) {
+      toast({ variant: "destructive", title: "Codigo invalido", description: "Ingresa el codigo de 6 digitos de tu app autenticadora." });
+      return;
+    }
+
+    setIsConfirmingMfa(true);
+    try {
+      const assertion = TotpMultiFactorGenerator.assertionForEnrollment(totpSecret, trimmedCode);
+      await multiFactor(user).enroll(assertion, "Cabine Grid Authenticator");
+      await user.getIdToken(true);
+
+      setHasSecondFactorOverride(true);
+      await logAuditAction(firestore, {
+        action: "security.mfa.enroll",
+        target: "users",
+        targetId: user.uid,
+        actor: auditActor,
+      });
+
+      toast({
+        title: "2 pasos activado",
+        description: "Tu cuenta ya quedo protegida. Ahora puedes activar la exigencia global.",
+      });
+      setIsMfaDialogOpen(false);
+      resetMfaAssistant();
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Codigo incorrecto o expirado",
+        description: "Genera un nuevo codigo en tu app y vuelve a intentar.",
+      });
+    } finally {
+      setIsConfirmingMfa(false);
     }
   };
 
@@ -730,8 +844,23 @@ export default function AdminPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-foreground">Estado de tu cuenta admin</p>
+                      <p className="text-sm text-muted-foreground">
+                        {hasSecondFactorEnabled
+                          ? "Tu cuenta ya tiene verificacion de 2 pasos activa."
+                          : "Tu cuenta aun no tiene 2 pasos. Puedes activarlo desde aqui mismo."}
+                      </p>
+                    </div>
+                    <Button variant="outline" onClick={() => setIsMfaDialogOpen(true)}>
+                      {hasSecondFactorEnabled ? "Revisar configuracion 2 pasos" : "Activar 2 pasos ahora"}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 border-t pt-4">
+                    <div>
                     <p className="font-medium text-foreground">Requerir 2 pasos para acceso total</p>
                     <p className="text-sm text-muted-foreground">
                       Si esta activo, cualquier usuario sin 2 pasos quedara bloqueado hasta volver a iniciar sesion con verificacion.
@@ -746,9 +875,106 @@ export default function AdminPage() {
                     />
                   </div>
                 </div>
+                </div>
               </CardContent>
             </Card>
           )}
+
+          <Dialog open={isMfaDialogOpen} onOpenChange={(open) => {
+            setIsMfaDialogOpen(open);
+            if (!open) {
+              resetMfaAssistant();
+            }
+          }}>
+            <DialogContent className="sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Activar verificacion en 2 pasos</DialogTitle>
+                <DialogDescription>
+                  Configura tu app autenticadora para proteger esta cuenta admin sin salir del panel.
+                </DialogDescription>
+              </DialogHeader>
+
+              {hasSecondFactorEnabled ? (
+                <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  Ya tienes 2 pasos activo en esta cuenta. Si inicias sesion nuevamente, se te pedira el codigo del autenticador.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mfa-password">1) Confirma tu contraseña</Label>
+                    <Input
+                      id="mfa-password"
+                      type="password"
+                      value={mfaPassword}
+                      onChange={(event) => setMfaPassword(event.target.value)}
+                      placeholder="Tu contraseña actual"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Button onClick={handleGenerateMfaSecret} disabled={isPreparingMfa}>
+                      {isPreparingMfa ? "Preparando..." : "2) Generar QR de autenticador"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Compatible con Google Authenticator, Microsoft Authenticator o Authy.
+                    </p>
+                  </div>
+
+                  {totpQrUrl && (
+                    <div className="space-y-3 rounded-md border p-4">
+                      <p className="text-sm font-medium">3) Escanea este QR en tu app autenticadora</p>
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(totpQrUrl)}`}
+                        alt="QR para configurar 2 pasos"
+                        className="h-56 w-56 rounded border"
+                      />
+                      <div className="space-y-2">
+                        <Label htmlFor="mfa-secret-key">Clave manual (si no puedes escanear)</Label>
+                        <div className="flex gap-2">
+                          <Input id="mfa-secret-key" value={totpSecretKey} readOnly />
+                          <Button
+                            variant="outline"
+                            type="button"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(totpSecretKey);
+                              toast({ title: "Clave copiada" });
+                            }}
+                          >
+                            Copiar
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="mfa-code">4) Ingresa el codigo de 6 digitos</Label>
+                        <Input
+                          id="mfa-code"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={mfaCode}
+                          onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                          placeholder="123456"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsMfaDialogOpen(false)}>
+                  Cerrar
+                </Button>
+                {!hasSecondFactorEnabled && (
+                  <Button
+                    onClick={handleConfirmMfaEnrollment}
+                    disabled={!totpSecret || mfaCode.trim().length < 6 || isConfirmingMfa}
+                  >
+                    {isConfirmingMfa ? "Activando..." : "Confirmar y activar 2 pasos"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Tabs defaultValue="machines" className="w-full">
             <TabsList className="grid w-full grid-cols-6 mb-8">

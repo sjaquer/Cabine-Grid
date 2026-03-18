@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import type { UserRole } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { multiFactor } from "firebase/auth";
 import { doc } from "firebase/firestore";
 
 type AppSecuritySettings = {
@@ -79,8 +78,7 @@ export default function RoleGuard({
   }, [user]);
 
   const isTwoStepRequired = Boolean(securitySettings?.requireMfaForFullAccess);
-  const hasSecondFactorEnabled = user ? multiFactor(user).enrolledFactors.length > 0 : false;
-  const canAccessFullApp = !isTwoStepRequired || hasSecondFactorSession || hasSecondFactorEnabled;
+  const canAccessFullApp = !isTwoStepRequired || hasSecondFactorSession;
 
   if (loading || isSecurityLoading || isTokenLoading) {
     return (
@@ -104,7 +102,7 @@ export default function RoleGuard({
         <div className="w-full max-w-lg rounded-lg border bg-card p-6 text-center space-y-4">
           <h1 className="text-2xl font-bold text-foreground">Verificacion en 2 pasos requerida</h1>
           <p className="text-muted-foreground">
-            Esta cuenta necesita iniciar sesion con 2 pasos para acceder a todas las secciones.
+            Esta cuenta necesita volver a iniciar sesion y completar el codigo de 2 pasos para acceder a todas las secciones.
           </p>
           <Button onClick={() => router.push("/login")}>Ir al login</Button>
         </div>

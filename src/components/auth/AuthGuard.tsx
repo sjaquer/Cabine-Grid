@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
-import { multiFactor } from 'firebase/auth';
 import { doc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -68,8 +67,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const isTwoStepRequired = Boolean(securitySettings?.requireMfaForFullAccess);
-  const hasSecondFactorEnabled = user ? multiFactor(user).enrolledFactors.length > 0 : false;
-  const canAccessFullApp = !isTwoStepRequired || hasSecondFactorSession || hasSecondFactorEnabled;
+  const canAccessFullApp = !isTwoStepRequired || hasSecondFactorSession;
 
   if (loading || isSecurityLoading || isTokenLoading || !user) {
     return (
@@ -96,7 +94,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         <div className="w-full max-w-lg rounded-lg border bg-card p-6 text-center space-y-4">
           <h1 className="text-2xl font-bold text-foreground">Verificacion en 2 pasos requerida</h1>
           <p className="text-muted-foreground">
-            Para ver todo Cabine Grid, primero debes iniciar sesion con seguridad de 2 pasos activa.
+            Para ver todo Cabine Grid, cierra sesion e inicia nuevamente completando el codigo de 2 pasos.
           </p>
           <Button onClick={() => router.push('/login')} className="w-full sm:w-auto">
             Ir al login
