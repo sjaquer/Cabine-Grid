@@ -63,6 +63,7 @@ export default function ReportesPage() {
   const firestore = useFirestore();
 
   const { userProfile } = useAuth();
+  const canAccessReports = userProfile?.role === "admin" || userProfile?.role === "manager";
 
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 6), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -70,11 +71,26 @@ export default function ReportesPage() {
   const [operatorFilter, setOperatorFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
 
-  const salesQuery = useMemoFirebase(() => query(collection(firestore, "sales")), [firestore]);
-  const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
-  const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
-  const discrepanciesQuery = useMemoFirebase(() => query(collection(firestore, "inventoryDiscrepancies")), [firestore]);
-  const closuresQuery = useMemoFirebase(() => query(collection(firestore, "shiftClosures")), [firestore]);
+  const salesQuery = useMemoFirebase(
+    () => (canAccessReports ? query(collection(firestore, "sales")) : null),
+    [firestore, canAccessReports]
+  );
+  const locationsQuery = useMemoFirebase(
+    () => (canAccessReports ? query(collection(firestore, "locations")) : null),
+    [firestore, canAccessReports]
+  );
+  const machinesQuery = useMemoFirebase(
+    () => (canAccessReports ? query(collection(firestore, "machines")) : null),
+    [firestore, canAccessReports]
+  );
+  const discrepanciesQuery = useMemoFirebase(
+    () => (canAccessReports ? query(collection(firestore, "inventoryDiscrepancies")) : null),
+    [firestore, canAccessReports]
+  );
+  const closuresQuery = useMemoFirebase(
+    () => (canAccessReports ? query(collection(firestore, "shiftClosures")) : null),
+    [firestore, canAccessReports]
+  );
 
   const { data: salesData } = useCollection<Omit<Sale, "id">>(salesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);

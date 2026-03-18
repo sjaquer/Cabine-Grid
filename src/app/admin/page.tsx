@@ -47,13 +47,32 @@ export default function AdminPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
+  const canAccessAdmin = userProfile?.role === "admin" || userProfile?.role === "manager";
 
-  const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
-  const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
-  const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
-  const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
-  const closuresQuery = useMemoFirebase(() => query(collection(firestore, "shiftClosures")), [firestore]);
-  const approvalsQuery = useMemoFirebase(() => query(collection(firestore, "sensitiveApprovals")), [firestore]);
+  const machinesQuery = useMemoFirebase(
+    () => (canAccessAdmin ? query(collection(firestore, "machines")) : null),
+    [firestore, canAccessAdmin]
+  );
+  const locationsQuery = useMemoFirebase(
+    () => (canAccessAdmin ? query(collection(firestore, "locations")) : null),
+    [firestore, canAccessAdmin]
+  );
+  const productsQuery = useMemoFirebase(
+    () => (canAccessAdmin ? query(collection(firestore, "products")) : null),
+    [firestore, canAccessAdmin]
+  );
+  const usersQuery = useMemoFirebase(
+    () => (canAccessAdmin ? query(collection(firestore, "users")) : null),
+    [firestore, canAccessAdmin]
+  );
+  const closuresQuery = useMemoFirebase(
+    () => (canAccessAdmin ? query(collection(firestore, "shiftClosures")) : null),
+    [firestore, canAccessAdmin]
+  );
+  const approvalsQuery = useMemoFirebase(
+    () => (canAccessAdmin ? query(collection(firestore, "sensitiveApprovals")) : null),
+    [firestore, canAccessAdmin]
+  );
 
   const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
