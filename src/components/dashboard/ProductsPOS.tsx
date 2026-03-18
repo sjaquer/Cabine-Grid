@@ -5,15 +5,17 @@ import type { SoldProduct } from "@/lib/types";
 import { products as availableProducts } from "@/lib/data";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { PlusCircle, MinusCircle, ShoppingCart, Zap } from "lucide-react";
+import { PlusCircle, MinusCircle, ShoppingCart } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ProductsPOSProps {
-    onProductsChange: (products: SoldProduct[]) => void;
+    initialProducts?: SoldProduct[];
+    onSave: (products: SoldProduct[]) => void;
+    onClose?: () => void;
+    onGoToCharge?: () => void;
 }
 
 const categoryLabels = {
@@ -30,8 +32,14 @@ const categoryIcons = {
   other: "📦",
 };
 
-export default function ProductsPOS({ onProductsChange }: ProductsPOSProps) {
-    const [quantities, setQuantities] = useState<Record<string, number>>({});
+export default function ProductsPOS({ initialProducts, onSave, onClose, onGoToCharge }: ProductsPOSProps) {
+    const [quantities, setQuantities] = useState<Record<string, number>>(() => {
+        if (!initialProducts || initialProducts.length === 0) return {};
+        return initialProducts.reduce((acc, item) => {
+            acc[item.productId] = item.quantity;
+            return acc;
+        }, {} as Record<string, number>);
+    });
     const [searchTerm, setSearchTerm] = useState("");
 
     const filteredProducts = useMemo(() => {
@@ -52,11 +60,10 @@ export default function ProductsPOS({ onProductsChange }: ProductsPOSProps) {
         }
 
         setQuantities(newQuantities);
-        updateParent(newQuantities);
     };
 
-    const updateParent = (currentQuantities: Record<string, number>) => {
-        const soldProducts: SoldProduct[] = Object.entries(currentQuantities).map(([productId, quantity]) => {
+    const buildSoldProducts = (currentQuantities: Record<string, number>) => {
+        return Object.entries(currentQuantities).map(([productId, quantity]) => {
             const product = availableProducts.find(p => p.id === productId)!;
             return {
                 productId,
@@ -65,7 +72,6 @@ export default function ProductsPOS({ onProductsChange }: ProductsPOSProps) {
                 unitPrice: product.price
             };
         });
-        onProductsChange(soldProducts);
     };
 
     const products = useMemo(() => {
@@ -82,19 +88,20 @@ export default function ProductsPOS({ onProductsChange }: ProductsPOSProps) {
     }, 0);
 
     const itemCount = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
+    const soldProducts = buildSoldProducts(quantities);
 
     return (
-        <Card className="border-0 shadow-none flex flex-col h-[500px]">
+        <Card className="border-0 shadow-none flex flex-col h-full min-h-0">
             <CardHeader className="pb-3">
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
                         <div>
-                            <CardTitle className="flex items-center gap-2">
+                            <CardTitle className="flex items-center gap-2 text-xl font-bold">
                                 <ShoppingCart className="w-5 h-5 text-accent" />
                                 Punto de Venta (TPV)
                             </CardTitle>
-                            <CardDescription>
-                                Selecciona productos para añadir a la venta
+                            <CardDescription className="text-sm mt-1">
+                                Selecciona los productos que consumirá el cliente para agregarlos a su cuenta.
                             </CardDescription>
                         </div>
                         {itemCount > 0 && (
@@ -112,9 +119,9 @@ export default function ProductsPOS({ onProductsChange }: ProductsPOSProps) {
                 </div>
             </CardHeader>
 
-            <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden">
-                <Tabs defaultValue="drink" className="flex-1 flex flex-col">
-                    <TabsList className="grid w-full grid-cols-4 bg-secondary/60">
+            <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+                <Tabs defaultValue="drink" className="flex-1 min-h-0 flex flex-col">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60">
                         {Object.entries(categoryLabels).map(([cat, label]) => (
                             <TabsTrigger key={cat} value={cat} className="text-xs sm:text-sm flex gap-1">
                                 <span>{categoryIcons[cat as keyof typeof categoryIcons]}</span>
@@ -124,74 +131,104 @@ export default function ProductsPOS({ onProductsChange }: ProductsPOSProps) {
                     </TabsList>
 
                     {Array.from(products.entries()).map(([category, categoryProducts]) => (
-                        <TabsContent key={category} value={category} className="flex-1 overflow-hidden">
-                            <ScrollArea className="h-full">
-                                <div className="pr-4 space-y-2">
-                                    {categoryProducts.length === 0 ? (
-                                        <div className="py-8 text-center text-muted-foreground">
-                                            <p>No hay productos en esta categoría</p>
-                                        </div>
-                                    ) : (
-                                        categoryProducts.map(product => (
-                                            <div
-                                                key={product.id}
-                                                className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-secondary/50 transition"
-                                            >
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="font-semibold text-sm truncate">{product.name}</div>
-                                                    <div className="text-sm text-accent font-bold">{formatCurrency(product.price)}</div>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8"
-                                                        onClick={() => handleQuantityChange(product.id, -1)}
-                                                    >
-                                                        <MinusCircle className="w-4 h-4 text-destructive" />
-                                                    </Button>
-                                                    <div className="w-10 text-center">
-                                                        <span className="font-bold text-base">{quantities[product.id] || 0}</span>
-                                                    </div>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8"
-                                                        onClick={() => handleQuantityChange(product.id, 1)}
-                                                    >
-                                                        <PlusCircle className="w-4 h-4 text-status-available" />
-                                                    </Button>
-                                                </div>
+                        <TabsContent key={category} value={category} className="flex-1 min-h-0 overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
+                            <div className="pr-2 space-y-3 pb-4 h-max">
+                                {categoryProducts.length === 0 ? (
+                                    <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
+                                        <p>No hay productos en esta categoría</p>
+                                    </div>
+                                ) : (
+                                    categoryProducts.map(product => (
+                                        <div
+                                            key={product.id}
+                                            className="flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-background hover:bg-secondary/40 transition shadow-sm"
+                                        >
+                                            <div className="flex-1 min-w-0 pr-3">
+                                                <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
+                                                <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
                                             </div>
-                                        ))
-                                    )}
-                                </div>
-                            </ScrollArea>
+                                            <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-1 border border-border/50">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                                                    onClick={() => handleQuantityChange(product.id, -1)}
+                                                >
+                                                    <MinusCircle className="w-5 h-5" />
+                                                </Button>
+                                                <div className="w-8 md:w-10 text-center flex items-center justify-center">
+                                                    <span className="font-bold text-base md:text-lg tabular-nums">{quantities[product.id] || 0}</span>
+                                                </div>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors"
+                                                    onClick={() => handleQuantityChange(product.id, 1)}
+                                                >
+                                                    <PlusCircle className="w-5 h-5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </TabsContent>
                     ))}
                 </Tabs>
             </CardContent>
 
-            <div className="border-t border-border/50 bg-gradient-to-b from-transparent to-secondary/50 p-4 space-y-2">
+            <div className="border-t border-border/50 bg-secondary/10 p-5 mt-auto shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.5)] z-10">
                 {Object.entries(quantities).length > 0 && (
-                    <div className="space-y-1 text-sm mb-3 pb-3 border-b border-border/30">
+                    <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40">
                         {Object.entries(quantities).map(([productId, qty]) => {
                             const product = availableProducts.find(p => p.id === productId);
                             if (!product) return null;
                             return (
-                                <div key={productId} className="flex justify-between text-muted-foreground text-xs">
-                                    <span>{qty}x {product.name}</span>
-                                    <span className="font-mono">{formatCurrency(qty * product.price)}</span>
+                                <div key={productId} className="flex justify-between items-center text-muted-foreground bg-background/50 px-3 py-1.5 rounded-md text-xs font-medium">
+                                    <span className="flex items-center gap-2 text-foreground/80"><span className="text-accent font-bold bg-accent/10 px-1.5 rounded">{qty}x</span> {product.name}</span>
+                                    <span className="font-mono text-foreground/90">{formatCurrency(qty * product.price)}</span>
                                 </div>
                             );
                         })}
                     </div>
                 )}
-                <div className="flex justify-between items-center">
-                    <span className="font-semibold text-muted-foreground">Subtotal Productos:</span>
-                    <span className="text-2xl font-bold font-mono text-accent">
+                <div className="flex justify-between items-center mb-5 px-1">
+                    <span className="font-semibold text-muted-foreground uppercase tracking-wider text-xs md:text-sm">Total Productos:</span>
+                    <span className="text-2xl md:text-3xl font-black tracking-tight text-accent drop-shadow-sm">
                         {formatCurrency(total)}
                     </span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                    {onClose && (
+                        <Button 
+                            variant="outline" 
+                            onClick={onClose} 
+                            className="w-full sm:w-1/4 h-12 sm:h-auto font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
+                        >
+                            Cancelar
+                        </Button>
+                    )}
+                    <Button 
+                        onClick={() => {
+                            onSave(soldProducts);
+                            if (onClose) onClose();
+                        }} 
+                        className="w-full sm:flex-1 h-14 sm:h-auto bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
+                    >
+                        <ShoppingCart className="w-5 h-5 mr-2" />
+                        Añadir y seguir jugando
+                    </Button>
+                    {onGoToCharge && (
+                        <Button 
+                            onClick={() => {
+                                onSave(soldProducts);
+                                onGoToCharge();
+                            }} 
+                            className="w-full sm:flex-1 h-14 sm:h-auto bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
+                        >
+                            💰 Ir a Cobrar Boleta
+                        </Button>
+                    )}
                 </div>
             </div>
         </Card>

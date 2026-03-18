@@ -40,6 +40,7 @@ const statusBadge = {
 export default function PCCard({ machine, onAction }: PCCardProps) {
   const { session, status } = machine;
   const rate = rates.find(r => r.id === (session?.rateId || machine.rateId));
+  const hourlyRate = session?.hourlyRate || machine.hourlyRate || rate?.pricePerHour || 3.00;
   const prepaidSeconds = session?.usageMode === 'prepaid' ? (session.prepaidHours || 0) * 3600 : undefined;
   
   const { elapsedSeconds, remainingSeconds } = useTimer(session?.startTime, prepaidSeconds);
@@ -64,10 +65,13 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
   };
 
   return (
-    <Card className={cn(
-      "flex flex-col transition-all duration-300 border-2 hover:shadow-xl hover:scale-105 cursor-pointer overflow-hidden",
-      statusColors[status]
-    )}>
+    <Card
+      className={cn(
+        "flex flex-col transition-all duration-300 border-2 hover:shadow-xl hover:scale-105 cursor-pointer overflow-hidden",
+        statusColors[status]
+      )}
+      onClick={() => status !== "maintenance" && onAction(machine)}
+    >
       <CardHeader className="flex-row items-start justify-between space-y-0 pb-3 pt-4 px-4">
         <div className="flex flex-col gap-2 flex-1">
           <CardTitle className="text-lg font-headline font-bold">{machine.name}</CardTitle>
@@ -90,7 +94,7 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
           <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-6">
             {getStatusIcon()}
             <p className="text-sm font-medium text-muted-foreground">
-              {rate?.name} - {rate?.description || `S/. ${rate?.pricePerHour}/hr`}
+              {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
             </p>
             <p className="text-xs text-muted-foreground">Haz clic para asignar</p>
           </CardContent>
@@ -99,7 +103,10 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
               variant="default" 
               className="w-full font-semibold" 
               size="sm" 
-              onClick={() => onAction(machine)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAction(machine);
+              }}
             >
               <PlusCircle className="w-4 h-4 mr-2" /> 
               Asignar
@@ -148,14 +155,14 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
                 {formatTime(Math.floor(timeToShow))}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {rate?.name}
+                {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
               </div>
             </div>
 
             {isWarning && (
               <div className="flex items-center gap-2 p-2 rounded-lg bg-status-warning/15 border border-status-warning/40">
                 <AlertTriangle className="w-4 h-4 text-status-warning flex-shrink-0" />
-                <span className="text-xs font-semibold text-status-warning">Tiempo por terminar</span>
+                <span className="text-xs font-semibold text-status-warning">{isPrepaid ? "Tiempo prepagado por terminar" : "Tiempo por terminar"}</span>
               </div>
             )}
           </CardContent>
@@ -165,9 +172,12 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
               variant={isWarning ? "destructive" : "secondary"}
               className="w-full font-semibold" 
               size="sm" 
-              onClick={() => onAction(machine)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAction(machine);
+              }}
             >
-              {isWarning ? "Finalizar Ahora" : "Finalizar y Cobrar"}
+              {isWarning ? "Abrir TPV" : "Abrir TPV"}
             </Button>
           </CardFooter>
         </>

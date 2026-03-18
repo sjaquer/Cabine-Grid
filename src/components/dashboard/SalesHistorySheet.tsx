@@ -18,7 +18,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, Clock, Hash, Smartphone, Landmark, ShoppingCart, User, Package } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
@@ -45,15 +44,15 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-4xl w-full flex flex-col gap-6 p-4 sm:p-6">
-        <SheetHeader>
+      <SheetContent className="sm:max-w-4xl w-full flex flex-col gap-0 p-0 overflow-hidden">
+        <SheetHeader className="px-4 sm:px-6 py-4 sm:py-6 border-b">
           <SheetTitle className="font-headline text-2xl">Historial de Ventas del Día</SheetTitle>
           <SheetDescription>
             Un resumen detallado de la actividad y los ingresos de hoy.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 px-4 sm:px-6 py-4 border-b overflow-x-auto">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Recaudado</CardTitle>
@@ -94,9 +93,8 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
 
         <SalesChart sales={sales} />
 
-        <div className="flex-1 overflow-hidden rounded-lg border">
-          <ScrollArea className="h-full">
-            <Accordion type="multiple" className="w-full">
+        <div className="flex-1 min-h-0 overflow-y-auto border-t px-4 sm:px-6 py-4">
+          <Accordion type="multiple" className="w-full space-y-2">
               {sales.length > 0 ? sales.map((sale) => (
                   <AccordionItem value={sale.id} key={sale.id}>
                      <AccordionTrigger className="px-4 hover:no-underline hover:bg-muted/50">
@@ -112,12 +110,17 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                            <InfoCard icon={User} title="Cliente" value={sale.clientName || 'Ocasional'} />
                            <InfoCard icon={Clock} title="Duración" value={formatTime(sale.totalMinutes * 60)} />
-                           <InfoCard icon={Landmark} title="Tarifa" value={`${sale.rate.name} (${formatCurrency(sale.rate.pricePerHour)}/hr)`} />
+                            <InfoCard icon={Landmark} title="Tarifa" value={`${sale.rate?.name || ''} (${formatCurrency(sale.rate?.pricePerHour || sale.hourlyRate || 0)}/hr)`} />
                            {userProfile?.role === 'admin' && <InfoCard icon={User} title="Operador" value={sale.operator?.email || 'N/A'} />}
                         </div>
-                        {sale.soldProducts && sale.soldProducts.length > 0 && (
+                                    {sale.soldProducts && sale.soldProducts.length > 0 && (
                             <div className="mt-4">
-                               <h4 className="font-semibold mb-2 flex items-center gap-2"><ShoppingCart className="w-4 h-4" /> Productos Vendidos</h4>
+                                              <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                                 <ShoppingCart className="w-4 h-4" /> Productos Vendidos
+                                              </h4>
+                                              <div className="text-xs text-muted-foreground mb-2">
+                                                 Items en boleta: {sale.soldProducts.reduce((sum, item) => sum + item.quantity, 0)}
+                                              </div>
                                <Table>
                                  <TableHeader>
                                     <TableRow>
@@ -148,7 +151,6 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
                 </div>
               )}
             </Accordion>
-          </ScrollArea>
         </div>
       </SheetContent>
     </Sheet>

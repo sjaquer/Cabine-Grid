@@ -8,6 +8,8 @@ import {
   CollectionReference,
   DocumentReference,
   SetOptions,
+  DocumentData,
+  UpdateData,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import {FirestorePermissionError} from '@/firebase/errors';
@@ -17,7 +19,7 @@ import {FirestorePermissionError} from '@/firebase/errors';
  * Does NOT await the write operation internally.
  */
 export function setDocumentNonBlocking<T extends Record<string, unknown>>(docRef: DocumentReference<T>, data: T, options: SetOptions) {
-  setDoc(docRef, data, options).catch((error: any) => {
+  setDoc(docRef, data, options).catch((error: unknown) => {
     errorEmitter.emit(
       'permission-error',
       new FirestorePermissionError({
@@ -38,7 +40,7 @@ export function setDocumentNonBlocking<T extends Record<string, unknown>>(docRef
  */
 export function addDocumentNonBlocking<T extends Record<string, unknown>>(colRef: CollectionReference<T>, data: T) {
   const promise = addDoc(colRef, data)
-    .catch((error: any) => {
+    .catch((error: unknown) => {
       errorEmitter.emit(
         'permission-error',
         new FirestorePermissionError({
@@ -56,9 +58,9 @@ export function addDocumentNonBlocking<T extends Record<string, unknown>>(colRef
  * Initiates an updateDoc operation for a document reference.
  * Does NOT await the write operation internally.
  */
-export function updateDocumentNonBlocking<T extends Record<string, unknown>>(docRef: DocumentReference<T>, data: Partial<T>) {
+export function updateDocumentNonBlocking(docRef: DocumentReference<DocumentData>, data: UpdateData<DocumentData>) {
   updateDoc(docRef, data)
-    .catch((error: any) => {
+    .catch((error: unknown) => {
       errorEmitter.emit(
         'permission-error',
         new FirestorePermissionError({

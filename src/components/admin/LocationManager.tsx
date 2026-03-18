@@ -82,6 +82,7 @@ export default function LocationManager({
           name: values.name,
           address: values.address,
           phone: values.phone || undefined,
+          fractionMinutes: 5,
           isActive: true,
         });
       }

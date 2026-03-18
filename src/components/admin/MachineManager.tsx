@@ -43,10 +43,12 @@ import { Plus, Pencil, Trash2, Power } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import type { Location } from "@/lib/types";
 
 const machineSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
-  rateId: z.string().min(1, "Selecciona una tarifa"),
+  hourlyRate: z.coerce.number().positive("El costo debe ser mayor a 0").max(100, "Máximo 100 soles por hora"),
+  locationId: z.string().min(1, "Selecciona un local"),
   specs: z.object({
     processor: z.string().optional(),
     ram: z.string().optional(),
@@ -58,6 +60,7 @@ type MachineFormValues = z.infer<typeof machineSchema>;
 
 type MachineManagerProps = {
   machines: Machine[];
+  locations: Location[];
   onAdd: (machine: Omit<Machine, 'id'>) => Promise<void>;
   onEdit: (id: string, machine: Partial<Machine>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -66,6 +69,7 @@ type MachineManagerProps = {
 
 export default function MachineManager({
   machines,
+  locations,
   onAdd,
   onEdit,
   onDelete,
@@ -78,7 +82,8 @@ export default function MachineManager({
     resolver: zodResolver(machineSchema),
     defaultValues: {
       name: "",
-      rateId: "",
+      hourlyRate: 3.00,
+      locationId: "",
       specs: {},
     },
   });
@@ -94,7 +99,8 @@ export default function MachineManager({
         await onAdd({
           name: values.name,
           status: "available",
-          rateId: values.rateId,
+          hourlyRate: values.hourlyRate,
+          locationId: values.locationId,
           specs: values.specs,
         });
       }
@@ -111,10 +117,13 @@ export default function MachineManager({
   const handleEdit = (machine: Machine) => {
     setEditingId(machine.id);
     form.setValue("name", machine.name);
-    form.setValue("rateId", machine.rateId || "");
+    form.setValue("hourlyRate", machine.hourlyRate || 3.00);
+    form.setValue("locationId", machine.locationId || "");
     form.setValue("specs", machine.specs || {});
     setIsOpen(true);
   };
+
+  const locationMap = new Map(locations.map((location) => [location.id, location.name]));
 
   const statusBadgeColor = {
     available: "bg-status-available text-black",
@@ -164,19 +173,36 @@ export default function MachineManager({
                 />
                 <FormField
                   control={form.control}
-                  name="rateId"
+                  name="hourlyRate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tarifa Asignada</FormLabel>
+                      <FormLabel>Costo por Hora (S/.)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="3.00" step="0.50" min="0.50" {...field} />
+                      </FormControl>
+                      <FormDescription>Precio que cobra esta máquina por cada hora de uso</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="locationId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Local</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecciona una tarifa" />
+                            <SelectValue placeholder="Selecciona un local" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="A">Tarifa Normal</SelectItem>
-                          <SelectItem value="B">Tarifa Económica</SelectItem>
+                          {locations.map((location) => (
+                            <SelectItem key={location.id} value={location.id}>
+                              {location.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -235,6 +261,7 @@ export default function MachineManager({
           <TableHeader>
             <TableRow>
               <TableHead>Nombre</TableHead>
+              <TableHead>Local</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Tarifa</TableHead>
               <TableHead>Especificaciones</TableHead>
@@ -245,6 +272,7 @@ export default function MachineManager({
             {machines.map((machine) => (
               <TableRow key={machine.id}>
                 <TableCell className="font-medium">{machine.name}</TableCell>
+                <TableCell>{locationMap.get(machine.locationId || "") || "Sin local"}</TableCell>
                 <TableCell>
                   <Badge className={statusBadgeColor[machine.status]}>
                     {machine.status === "available"
@@ -256,7 +284,9 @@ export default function MachineManager({
                       : "Mantenimiento"}
                   </Badge>
                 </TableCell>
-                <TableCell>{machine.rateId}</TableCell>
+                <TableCell className="font-mono font-semibold">
+                  S/. {(machine.hourlyRate || 3.00).toFixed(2)}/hr
+                </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {machine.specs?.processor ? `${machine.specs.processor} • ${machine.specs.ram}` : "Sin especificaciones"}
                 </TableCell>

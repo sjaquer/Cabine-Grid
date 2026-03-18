@@ -1,27 +1,28 @@
 import type { User as FirebaseUser } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 
-export type Rate = {
-  id: string;
-  name: string;
-  pricePerHour: number;
-  description?: string;
-  isActive?: boolean;
-};
+export type PaymentMethod = 'efectivo' | 'yape' | 'otro';
 
 export type UsageMode = 'free' | 'prepaid';
 
-export type PaymentMethod = 'efectivo' | 'yape' | 'otro';
-
 export type MachineStatus = 'available' | 'occupied' | 'warning' | 'maintenance';
+
+export type Rate = {
+  id: string;
+  name: string;
+  description?: string;
+  pricePerHour: number;
+};
 
 export type Session = {
   id: string;
   client?: string;
   startTime: number;
+  rateId?: string;
+  hourlyRate?: number;
   usageMode: UsageMode;
-  rateId: string;
   prepaidHours?: number;
+  soldProducts?: SoldProduct[];
   userId?: string;
 };
 
@@ -29,6 +30,7 @@ export type Machine = {
   id: string;
   name: string;
   status: MachineStatus;
+  hourlyRate?: number;
   rateId?: string;
   session?: Session | null;
   locationId?: string;
@@ -45,6 +47,7 @@ export type Location = {
   address: string;
   phone?: string;
   isActive: boolean;
+  fractionMinutes: number;
   createdAt: Timestamp;
   updateAt?: Timestamp;
 };
@@ -70,12 +73,14 @@ export type SoldProduct = {
 export type Sale = {
   id: string;
   machineName: string;
+  locationId?: string;
   clientName?: string;
   startTime: Timestamp;
   endTime: Timestamp;
   totalMinutes: number;
   amount: number;
-  rate: Rate;
+  hourlyRate?: number;
+  rate?: Rate;
   paymentMethod: PaymentMethod;
   soldProducts?: SoldProduct[];
   operator?: {

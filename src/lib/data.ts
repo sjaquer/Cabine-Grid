@@ -1,27 +1,9 @@
-import type { Machine, Rate, Product } from './types';
+import type { Machine, Product, Rate } from './types';
 
 export const rates: Rate[] = [
-  { 
-    id: 'A', 
-    name: 'Tarifa Normal', 
-    pricePerHour: 3.00,
-    description: 'Acceso completo',
-    isActive: true
-  },
-  { 
-    id: 'B', 
-    name: 'Tarifa Económica', 
-    pricePerHour: 2.50,
-    description: 'Tarifa reducida',
-    isActive: true
-  },
-  { 
-    id: 'C', 
-    name: 'Tarifa Premium', 
-    pricePerHour: 5.00,
-    description: 'Máquinas gaming',
-    isActive: true
-  },
+  { id: 'rate-normal', name: 'Tarifa Normal', pricePerHour: 3.00, description: 'Tarifa estándar' },
+  { id: 'rate-economica', name: 'Tarifa Económica', pricePerHour: 2.50, description: 'Tarifa reducida' },
+  { id: 'rate-premium', name: 'Tarifa Premium', pricePerHour: 5.00, description: 'Tarifa premium con soporte' },
 ];
 
 // This is now only used for seeding the database if it's empty.
@@ -29,7 +11,8 @@ export const rates: Rate[] = [
 export const initialMachines: Omit<Machine, 'id'>[] = Array.from({ length: 12 }, (_, i) => ({
   name: `PC ${String(i + 1).padStart(2, '0')}`,
   status: 'available',
-  rateId: i < 6 ? 'A' : i < 10 ? 'B' : 'C',
+  rateId: i < 6 ? 'rate-normal' : i < 10 ? 'rate-economica' : 'rate-premium',
+  hourlyRate: i < 6 ? 3.00 : i < 10 ? 2.50 : 5.00,
   session: null,
 }));
 

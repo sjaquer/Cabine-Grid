@@ -185,10 +185,12 @@ export default function AdminPage() {
           });
         }
       } else if (machinesSnap.empty) {
+        const locationIds = locationsSnap.docs.map((locationDoc) => locationDoc.id);
         initialMachines.forEach((machine, index) => {
           const machineRef = doc(collection(firestore, "machines"));
           batch.set(machineRef, {
             ...machine,
+            ...(locationIds.length > 0 ? { locationId: locationIds[index % locationIds.length] } : {}),
             specs: {
               processor: index % 3 === 0 ? "Ryzen 5 5600G" : "Core i5 10400",
               ram: index % 2 === 0 ? "16GB" : "8GB",
@@ -245,7 +247,7 @@ export default function AdminPage() {
             endTime: Timestamp.fromDate(oneHourAgo),
             totalMinutes: 60,
             amount: 3,
-            rate: rates[0],
+            hourlyRate: 3,
             paymentMethod: "efectivo",
             soldProducts: [
               { productId: "demo-p1", productName: "Inka Kola 500ml", quantity: 1, unitPrice: 2.5 },
@@ -258,7 +260,7 @@ export default function AdminPage() {
             endTime: Timestamp.fromDate(twoHoursAgo),
             totalMinutes: 60,
             amount: 5,
-            rate: rates[2],
+            hourlyRate: 5,
             paymentMethod: "yape",
           },
         ];
@@ -320,6 +322,7 @@ export default function AdminPage() {
             <TabsContent value="machines" className="space-y-6">
               <MachineManager
                 machines={machines}
+                locations={locations}
                 onAdd={handleAddMachine}
                 onEdit={handleEditMachine}
                 onDelete={handleDeleteMachine}
