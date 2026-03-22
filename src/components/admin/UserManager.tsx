@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { UserProfile, UserRole } from "@/lib/types";
+import type { Location, UserProfile, UserRole } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,6 +53,15 @@ const createUserSchema = z.object({
 
 const userRoleSchema = z.object({
   role: z.enum(["admin", "manager", "operator", "view-only"]),
+  locationId: z.string(),
+}).superRefine((values, context) => {
+  if (values.role === "operator" && values.locationId === "__none") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["locationId"],
+      message: "Selecciona un local para el operador",
+    });
+  }
 });
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
@@ -60,8 +69,9 @@ type UserRoleFormValues = z.infer<typeof userRoleSchema>;
 
 type UserManagerProps = {
   users: UserProfile[];
+  locations: Location[];
   onCreateUser: (payload: CreateUserFormValues) => Promise<void>;
-  onChangeRole: (userId: string, role: UserRole) => Promise<void>;
+  onChangeRole: (userId: string, role: UserRole, locationIds: string[]) => Promise<void>;
   onDeactivate: (userId: string) => Promise<void>;
 };
 
@@ -86,7 +96,7 @@ const roleIcons = {
   "view-only": <User className="w-4 h-4" />,
 };
 
-export default function UserManager({ users, onCreateUser, onChangeRole, onDeactivate }: UserManagerProps) {
+export default function UserManager({ users, locations, onCreateUser, onChangeRole, onDeactivate }: UserManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
@@ -103,8 +113,24 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
 
   const form = useForm<UserRoleFormValues>({
     resolver: zodResolver(userRoleSchema),
-    defaultValues: { role: "operator" },
+    defaultValues: { role: "operator", locationId: "__none" },
   });
+
+  const getUserLocationText = (user: UserProfile) => {
+    if (!user.locationIds || user.locationIds.length === 0) {
+      return "Sin local asignado";
+    }
+
+    const names = user.locationIds
+      .map((locationId) => locations.find((location) => location.id === locationId)?.name)
+      .filter((name): name is string => Boolean(name));
+
+    if (names.length === 0) {
+      return "Local no encontrado";
+    }
+
+    return names.join(", ");
+  };
 
   const handleCreateUser = async (values: CreateUserFormValues) => {
     try {
@@ -128,13 +154,15 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
   const handleEdit = (user: UserProfile) => {
     setEditingId(user.uid);
     form.setValue("role", user.role);
+    form.setValue("locationId", user.locationIds?.[0] ?? "__none");
     setIsOpen(true);
   };
 
   const handleSubmit = async (values: UserRoleFormValues) => {
     try {
       if (editingId) {
-        await onChangeRole(editingId, values.role);
+        const locationIds = values.locationId === "__none" ? [] : [values.locationId];
+        await onChangeRole(editingId, values.role, locationIds);
         setIsOpen(false);
         setEditingId(null);
         form.reset();
@@ -264,6 +292,7 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
             <TableRow>
               <TableHead>Nombre/Email</TableHead>
               <TableHead>Rol Actual</TableHead>
+              <TableHead>Local asignado</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -288,6 +317,9 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
                       ? "Operador"
                       : "Lectura"}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  <span className="text-sm text-muted-foreground">{getUserLocationText(user)}</span>
                 </TableCell>
                 <TableCell>
                   <Badge variant={user.isActive !== false ? "default" : "secondary"}>
@@ -320,9 +352,9 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Cambiar Rol de Usuario</DialogTitle>
+              <DialogTitle>Editar Usuario</DialogTitle>
               <DialogDescription>
-                Selecciona el nuevo rol para este usuario
+                Configura el rol y el local asignado para este usuario
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -373,6 +405,39 @@ export default function UserManager({ users, onCreateUser, onChangeRole, onDeact
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="locationId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Local asignado</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona un local" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none">Sin local asignado</SelectItem>
+                          {locations.map((location) => (
+                            <SelectItem key={location.id} value={location.id}>
+                              {location.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Requerido para operadores. Para admin/gerente puede quedar sin local.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {form.formState.errors.root?.message && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.root.message}
+                  </p>
+                )}
                 <DialogFooter>
                   <Button type="submit">Guardar Cambios</Button>
                 </DialogFooter>

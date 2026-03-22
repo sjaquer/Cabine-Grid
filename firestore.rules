@@ -51,7 +51,13 @@ service cloud.firestore {
     }
 
     function userCanAccessLocation(locationId) {
-      return isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.locationIds.hasAny([locationId]);
+      return isAdminOrManager() || (
+        isOperator() && (
+          locationId != null &&
+          get(userDocPath()).data.locationIds is list &&
+          get(userDocPath()).data.locationIds.hasAny([locationId])
+        )
+      );
     }
 
     function machineLocationId() {
@@ -62,17 +68,27 @@ service cloud.firestore {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdminOrManager());
       allow list: if isAdminOrManager();
 
-      // Permite bootstrap del perfil propio al iniciar sesión por primera vez.
+      // Bootstrap del perfil propio con restricciones para evitar escalamiento.
       allow create: if isSignedIn() && (
-        request.auth.uid == userId || isAdminOrManager()
+        isAdminOrManager() ||
+        (
+          request.auth.uid == userId &&
+          request.resource.data.uid == request.auth.uid &&
+          request.resource.data.role in ['operator', 'view-only'] &&
+          request.resource.data.isActive == true &&
+          request.resource.data.email is string
+        )
       );
 
-      // El propio usuario puede actualizar datos básicos (no rol).
+      // El propio usuario solo puede cambiar datos no privilegiados.
       allow update: if isSignedIn() && (
         isAdminOrManager() ||
         (
           request.auth.uid == userId &&
-          request.resource.data.role == resource.data.role
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.locationIds == resource.data.locationIds &&
+          request.resource.data.isActive == resource.data.isActive &&
+          request.resource.data.email == resource.data.email
         )
       );
 
@@ -80,8 +96,9 @@ service cloud.firestore {
     }
 
     match /machines/{machineId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if canOperate();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /products/{productId} {
@@ -95,22 +112,21 @@ service cloud.firestore {
     }
 
     match /sales/{saleId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate();
-      allow update: if canOperate();
-      allow delete: if isAdminOrManager();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /inventory/{inventoryId} {
-      allow read: if isSignedIn();
-      allow create, update: if canOperate() && hasNonNegativeCurrentStock();
-      allow delete: if isAdminOrManager();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && hasNonNegativeCurrentStock() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /stockMovements/{movementId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate();
-      allow update, delete: if isAdminOrManager();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow update, delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /shifts/{shiftId} {
@@ -121,19 +137,20 @@ service cloud.firestore {
     }
 
     match /inventoryMovements/{movementId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if canOperate();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if canOperate() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /shiftClosures/{closureId} {
-      allow read: if isAdminOrManager();
-      allow create: if canOperate();
-      allow update, delete: if isAdmin();
+      allow read: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
+      allow create: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow update, delete: if isAdmin() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /receiptCounters/{counterId} {
-      allow read: if isSignedIn();
-      allow create, update: if canOperate();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
       allow delete: if isAdmin();
     }
 

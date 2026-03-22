@@ -237,9 +237,10 @@ export default function AdminPage() {
     toast({ title: "Producto eliminado" });
   };
 
-  const handleChangeUserRole = async (userId: string, role: UserRole) => {
+  const handleChangeUserRole = async (userId: string, role: UserRole, locationIds: string[]) => {
     await updateDoc(doc(firestore, "users", userId), {
       role,
+      locationIds,
       updateAt: serverTimestamp(),
     });
     await logAuditAction(firestore, {
@@ -247,7 +248,7 @@ export default function AdminPage() {
       target: 'users',
       targetId: userId,
       actor: auditActor,
-      details: { role },
+      details: { role, locationIds },
     });
     toast({ title: "Rol actualizado" });
   };
@@ -695,6 +696,7 @@ export default function AdminPage() {
                 <TabsContent value="users">
                   <UserManager
                     users={users}
+                    locations={locations}
                     onCreateUser={handleCreateUser}
                     onChangeRole={handleChangeUserRole}
                     onDeactivate={handleDeactivateUser}
