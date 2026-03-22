@@ -53,7 +53,7 @@ type InventoryDoc = {
   locationId: string;
   productId: string;
   productName?: string;
-  stock?: number;
+  currentStock?: number;
   minStock?: number;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -149,7 +149,7 @@ export default function InventoryPage() {
     return products.map((product) => {
       const key = `${selectedLocationId}_${product.id}`;
       const inv = inventoryMap.get(key);
-      const stock = typeof inv?.stock === "number" ? inv.stock : Math.max(0, product.stock ?? 0);
+      const stock = typeof inv?.currentStock === "number" ? inv.currentStock : Math.max(0, product.stock ?? 0);
       const minStock = typeof inv?.minStock === "number" ? inv.minStock : 5;
 
       return {
@@ -215,7 +215,7 @@ export default function InventoryPage() {
       const result = await runTransaction(firestore, async (transaction) => {
         const snapshot = await transaction.get(inventoryRef);
         const currentStock = snapshot.exists()
-          ? Number(snapshot.data().stock ?? 0)
+          ? Number(snapshot.data().currentStock ?? 0)
           : Math.max(0, row.stock);
 
         const nextStock = type === "entry"
@@ -233,7 +233,7 @@ export default function InventoryPage() {
             productId: row.productId,
             productName: row.productName,
             minStock: row.minStock,
-            stock: nextStock,
+            currentStock: nextStock,
             updatedAt: serverTimestamp(),
           },
           { merge: true }
