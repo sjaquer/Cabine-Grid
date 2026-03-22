@@ -43,6 +43,8 @@ const customerSchema = z.object({
     .union([z.coerce.number().int().min(5, "Edad minima 5").max(110, "Edad maxima 110"), z.nan()])
     .optional()
     .transform((value) => (typeof value === "number" && Number.isFinite(value) ? value : undefined)),
+  phone: z.string().trim().optional(),
+  email: z.string().trim().email("Email invalido").optional().or(z.literal("")),
   favoriteGamesText: z.string().trim().optional(),
 });
 
@@ -132,6 +134,8 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
       customerCode: "",
       fullName: "",
       age: undefined,
+      phone: "",
+      email: "",
       favoriteGamesText: "",
     },
   });
@@ -141,6 +145,8 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
       customerCode: "",
       fullName: "",
       age: undefined,
+      phone: "",
+      email: "",
       favoriteGamesText: "",
     });
     setEditingId(null);
@@ -152,6 +158,8 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
       customerCode: customer.customerCode,
       fullName: customer.fullName,
       age: customer.age,
+      phone: customer.phone || "",
+      email: customer.email || "",
       favoriteGamesText: customer.favoriteGames?.join(", ") || "",
     });
     setIsOpen(true);
@@ -162,6 +170,8 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
       customerCode: values.customerCode.trim().toUpperCase(),
       fullName: values.fullName.trim(),
       ...(typeof values.age === "number" ? { age: values.age } : {}),
+      ...(values.phone?.trim() ? { phone: values.phone.trim() } : {}),
+      ...(values.email?.trim() ? { email: values.email.trim() } : {}),
       favoriteGames: parseFavoriteGames(values.favoriteGamesText),
       isActive: true,
     };
@@ -259,6 +269,34 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
                             field.onChange(next === "" ? undefined : Number(next));
                           }}
                         />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Número de celular</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+51 900 123 456" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Correo electrónico</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="cliente@email.com" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

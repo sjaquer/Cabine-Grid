@@ -115,6 +115,8 @@ export type Customer = {
   customerCode: string;
   fullName: string;
   age?: number;
+  phone?: string;
+  email?: string;
   favoriteGames?: string[];
   isActive?: boolean;
   createdAt?: Timestamp;

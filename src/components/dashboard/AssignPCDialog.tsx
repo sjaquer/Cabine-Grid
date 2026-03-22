@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Clock, Search } from "lucide-react";
+import { Clock, Search, X } from "lucide-react";
 
 const OCCASIONAL_CLIENT_VALUE = "__ocasional__";
 
@@ -60,10 +60,20 @@ const quickCustomerSchema = z.object({
     .union([z.coerce.number().int().min(5, "Edad minima 5").max(110, "Edad maxima 110"), z.nan()])
     .optional()
     .transform((value) => (typeof value === "number" && Number.isFinite(value) ? value : undefined)),
+  phone: z.string().trim().optional(),
+  email: z.string().trim().email("Email invalido").optional().or(z.literal("")),
   favoriteGamesText: z.string().trim().optional(),
 });
 
 type QuickCustomerFormValues = z.infer<typeof quickCustomerSchema>;
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
 
 type AssignPCDialogProps = {
   isOpen: boolean;
@@ -101,6 +111,8 @@ export default function AssignPCDialog({
       customerCode: "",
       fullName: "",
       age: undefined,
+      phone: "",
+      email: "",
       favoriteGamesText: "",
     },
   });
@@ -111,12 +123,12 @@ export default function AssignPCDialog({
   );
 
   const filteredCustomers = useMemo(() => {
-    const needle = customerSearch.toLowerCase().trim();
+    const needle = normalizeText(customerSearch);
     if (!needle) return sortedCustomers;
 
     return sortedCustomers.filter((customer) => {
-      const fullName = customer.fullName.toLowerCase();
-      const code = customer.customerCode.toLowerCase();
+      const fullName = normalizeText(customer.fullName);
+      const code = normalizeText(customer.customerCode);
       return fullName.includes(needle) || code.includes(needle);
     });
   }, [customerSearch, sortedCustomers]);
@@ -138,6 +150,8 @@ export default function AssignPCDialog({
         customerCode: "",
         fullName: "",
         age: undefined,
+        phone: "",
+        email: "",
         favoriteGamesText: "",
       });
       setCustomerSearch("");
@@ -175,6 +189,8 @@ export default function AssignPCDialog({
         customerCode: values.customerCode.trim().toUpperCase(),
         fullName: values.fullName.trim(),
         ...(typeof values.age === "number" ? { age: values.age } : {}),
+        ...(values.phone?.trim() ? { phone: values.phone.trim() } : {}),
+        ...(values.email?.trim() ? { email: values.email.trim() } : {}),
         favoriteGames: (values.favoriteGamesText || "")
           .split(",")
           .map((item) => item.trim())
@@ -191,6 +207,8 @@ export default function AssignPCDialog({
         customerCode: "",
         fullName: "",
         age: undefined,
+        phone: "",
+        email: "",
         favoriteGamesText: "",
       });
     } catch (error) {
@@ -228,14 +246,26 @@ export default function AssignPCDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm font-semibold">Cliente (Opcional)</FormLabel>
-                  <div className="relative mb-2">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={customerSearch}
-                      onChange={(event) => setCustomerSearch(event.target.value)}
-                      placeholder="Buscar cliente por nombre o codigo"
-                      className="pl-9"
-                    />
+                  <div className="relative mb-2 flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        value={customerSearch}
+                        onChange={(event) => setCustomerSearch(event.target.value)}
+                        placeholder="Buscar cliente por nombre o codigo"
+                        className="pl-9 pr-9"
+                      />
+                      {customerSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setCustomerSearch("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Limpiar búsqueda"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <Select
                     onValueChange={(value) => field.onChange(value === OCCASIONAL_CLIENT_VALUE ? undefined : value)}
@@ -248,11 +278,17 @@ export default function AssignPCDialog({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value={OCCASIONAL_CLIENT_VALUE}>Cliente ocasional</SelectItem>
-                      {filteredCustomers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.fullName} ({customer.customerCode})
-                        </SelectItem>
-                      ))}
+                      {filteredCustomers.length === 0 ? (
+                        <div className="p-2 text-center text-xs text-muted-foreground">
+                          No se encontraron clientes
+                        </div>
+                      ) : (
+                        filteredCustomers.map((customer) => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.fullName} ({customer.customerCode})
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
@@ -391,6 +427,32 @@ export default function AssignPCDialog({
                                 field.onChange(next === "" ? undefined : Number(next));
                               }}
                             />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={quickCustomerForm.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de celular</FormLabel>
+                          <FormControl>
+                            <Input placeholder="+51 900 123 456" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={quickCustomerForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Correo electrónico</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="cliente@email.com" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

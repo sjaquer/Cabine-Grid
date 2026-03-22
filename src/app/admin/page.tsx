@@ -249,6 +249,8 @@ export default function AdminPage() {
       customerCode: code,
       fullName: name,
       ...(typeof customer.age === "number" ? { age: customer.age } : {}),
+      ...(customer.phone ? { phone: customer.phone } : {}),
+      ...(customer.email ? { email: customer.email } : {}),
       favoriteGames: customer.favoriteGames ?? [],
       isActive: customer.isActive ?? true,
       createdAt: serverTimestamp(),

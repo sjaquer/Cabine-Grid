@@ -381,6 +381,8 @@ export default function Dashboard() {
       customerCode: normalizedCode,
       fullName: normalizedName,
       ...(typeof payload.age === "number" ? { age: payload.age } : {}),
+      ...(payload.phone ? { phone: payload.phone } : {}),
+      ...(payload.email ? { email: payload.email } : {}),
       favoriteGames: payload.favoriteGames ?? [],
       isActive: payload.isActive ?? true,
       createdAt: serverTimestamp(),
@@ -405,6 +407,8 @@ export default function Dashboard() {
       customerCode: normalizedCode,
       fullName: normalizedName,
       ...(typeof payload.age === "number" ? { age: payload.age } : {}),
+      ...(payload.phone ? { phone: payload.phone } : {}),
+      ...(payload.email ? { email: payload.email } : {}),
       favoriteGames: payload.favoriteGames ?? [],
       isActive: true,
       metrics: {
