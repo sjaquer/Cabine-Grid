@@ -16,7 +16,7 @@ import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc
 import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getShiftStart, setShiftLocation } from "@/lib/shift-session";
-import { logAuditAction } from "@/lib/audit-log";
+import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
 
 
 export default function Dashboard() {
@@ -24,8 +24,13 @@ export default function Dashboard() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
 
+  console.log('DEBUG Dashboard: firestore disponible:', !!firestore, 'user:', user?.email);
+
   const machinesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore) {
+      console.log('DEBUG: firestore no está disponible');
+      return null;
+    }
     return query(collection(firestore, "machines"));
   }, [firestore]);
   
@@ -47,7 +52,12 @@ export default function Dashboard() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   const machines = useMemo(() => {
-    if (!machinesData) return [];
+    if (!machinesData) {
+      console.log('DEBUG: machinesData es null/undefined');
+      return [];
+    }
+    
+    console.log('DEBUG: machinesData loaded:', machinesData.length, 'máquinas');
     
     // Sort by name, assuming format "PC XX"
     return machinesData.sort((a, b) => {
@@ -104,12 +114,22 @@ export default function Dashboard() {
   }, [user?.uid, selectedLocationId]);
 
   const visibleMachines = useMemo(() => {
+    console.log('DEBUG: visibleMachines:', {
+      totalMachines: machines.length,
+      selectedLocationId,
+      hasMachinesWithLocation,
+      machinesLoading,
+    });
+    
     if (!selectedLocationId || !hasMachinesWithLocation) {
+      console.log('DEBUG: Mostrando todas las máquinas:', machines.length);
       return machines;
     }
 
-    return machines.filter((machine) => machine.locationId === selectedLocationId);
-  }, [machines, selectedLocationId, hasMachinesWithLocation]);
+    const filtered = machines.filter((machine) => machine.locationId === selectedLocationId);
+    console.log('DEBUG: Máquinas filtradas por local:', filtered.length);
+    return filtered;
+  }, [machines, selectedLocationId, hasMachinesWithLocation, machinesLoading]);
 
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
   const [machineToAssign, setMachineToAssign] = useState<Machine | null>(null);
@@ -251,6 +271,22 @@ export default function Dashboard() {
         });
         await batch.commit();
 
+        await logAuditAction(firestore, {
+          action: 'session.start',
+          target: 'machines',
+          targetId: machineToAssign.id,
+          locationId: machineToAssign.locationId || selectedLocationId || undefined,
+          actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+          details: {
+            machineName: machineToAssign.name,
+            usageMode: values.usageMode,
+            prepaidHours: values.prepaidHours ?? null,
+            rateId: effectiveRate.id,
+            rateName: effectiveRate.name,
+            client: values.client || 'Ocasional',
+          },
+        });
+
         toast({
             title: "Sesión Iniciada",
             description: `${machineToAssign.name} asignada a ${values.client || 'un cliente ocasional'} en modo ${values.usageMode === 'prepaid' ? 'prepagado' : 'pago por uso'}.`,
@@ -258,6 +294,14 @@ export default function Dashboard() {
         handleAssignDialogChange(false);
     } catch(error) {
          console.error("Error starting session: ", error);
+          await logAuditFailure(firestore, {
+            action: 'session.start.error',
+            target: 'machines',
+            targetId: machineToAssign.id,
+            locationId: machineToAssign.locationId || selectedLocationId || undefined,
+            actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+            error,
+          });
           toast({
             variant: "destructive",
             title: "Error al iniciar sesión",
@@ -413,6 +457,19 @@ export default function Dashboard() {
 
     } catch (error) {
       console.error("Error confirming payment: ", error);
+      await logAuditFailure(firestore, {
+        action: 'sale.close.error',
+        target: 'sales',
+        targetId: machineId,
+        locationId: machine.locationId || selectedLocationId || undefined,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        error,
+        details: {
+          paymentMethod,
+          amount,
+          machineName: machine.name,
+        },
+      });
       const message = error instanceof Error ? error.message : "Hubo un problema al registrar la venta en la base de datos.";
       toast({
         variant: "destructive",
@@ -450,6 +507,18 @@ export default function Dashboard() {
       toast({ title: "Productos guardados", description: "Se anexaron a la boleta del cliente." });
     } catch (error) {
       console.error("Error saving products:", error);
+      await logAuditFailure(firestore, {
+        action: 'session.products.update.error',
+        target: 'machines',
+        targetId: machineId,
+        locationId: machine.locationId || selectedLocationId || undefined,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        error,
+        details: {
+          totalItems: products.reduce((sum, p) => sum + p.quantity, 0),
+          totalProducts: products.length,
+        },
+      });
       toast({
         variant: "destructive",
         title: "Error al guardar productos",

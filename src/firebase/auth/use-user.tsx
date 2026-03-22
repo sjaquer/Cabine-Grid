@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -16,7 +17,7 @@ import { useMemoFirebase } from '../provider';
 import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
 import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftId, getShiftLocation, getShiftStart } from '@/lib/shift-session';
-import { logAuditAction } from '@/lib/audit-log';
+import { logAuditAction, logAuditFailure } from '@/lib/audit-log';
 
 export interface AuthContextValue {
   user: User | null;
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const loginAuditSentRef = useRef<string | null>(null);
 
   // Subscribe to auth state changes
   useEffect(() => {
@@ -63,6 +65,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ensureShiftStart(user.uid);
     }
   }, [user, userProfile]);
+
+  useEffect(() => {
+    if (!user || !userProfile || !firestore) return;
+    if (loginAuditSentRef.current === user.uid) return;
+
+    loginAuditSentRef.current = user.uid;
+    void logAuditAction(firestore, {
+      action: 'auth.login',
+      target: 'users',
+      targetId: user.uid,
+      actor: { id: user.uid, email: user.email, role: userProfile.role },
+      details: {
+        role: userProfile.role,
+      },
+    });
+  }, [user, userProfile, firestore]);
 
   const logout = async (payload?: {
     countedCash?: number;
@@ -150,12 +168,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           target: 'shiftClosures',
           targetId: shiftId,
           locationId: shiftLocationId || undefined,
+          severity: Math.abs(cashDifference) >= 20 ? 'critical' : cashDifference !== 0 ? 'high' : 'medium',
+          anomalyScore: Math.abs(cashDifference) >= 50 ? 90 : Math.abs(cashDifference) >= 20 ? 75 : cashDifference !== 0 ? 55 : 10,
+          riskTags: cashDifference !== 0 ? ['cash-difference'] : [],
           actor: { id: user.uid, email: user.email, role: userProfile.role },
           details: {
             expectedCash,
             countedCash,
             cashDifference,
             salesCount: operatorShiftSales.length,
+          },
+        });
+
+        await logAuditAction(firestore, {
+          action: 'auth.logout',
+          target: 'users',
+          targetId: user.uid,
+          actor: { id: user.uid, email: user.email, role: userProfile.role },
+          details: {
+            shiftId,
+            locationId: shiftLocationId || null,
           },
         });
 
@@ -168,6 +200,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       } catch (error) {
         console.error('Error generando cierre de turno:', error);
+        await logAuditFailure(firestore, {
+          action: 'shift.close.error',
+          target: 'shiftClosures',
+          targetId: shiftId,
+          locationId: shiftLocationId || undefined,
+          actor: { id: user.uid, email: user.email, role: userProfile.role },
+          error,
+        });
       }
 
       clearShiftLocation(user.uid);

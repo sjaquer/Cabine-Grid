@@ -12,6 +12,8 @@ import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
 import UserManager from "@/components/admin/UserManager";
 import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
+import FinanceReportsManager from "@/components/admin/FinanceReportsManager";
+import AuditLogsManager from "@/components/admin/AuditLogsManager";
 import type { Machine, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { initialMachines, products as defaultProducts, rates } from "@/lib/data";
@@ -32,7 +34,7 @@ import {
 import { initializeApp, deleteApp } from "firebase/app";
 import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
-import { logAuditAction } from "@/lib/audit-log";
+import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
 
 export default function AdminPage() {
   const { user, userProfile } = useAuth();
@@ -45,12 +47,16 @@ export default function AdminPage() {
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
   const closuresQuery = useMemoFirebase(() => query(collection(firestore, "shiftClosures")), [firestore]);
+  const salesQuery = useMemoFirebase(() => query(collection(firestore, "sales")), [firestore]);
+  const auditLogsQuery = useMemoFirebase(() => query(collection(firestore, "auditLogs")), [firestore]);
 
   const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
   const { data: closuresData } = useCollection<any>(closuresQuery);
+  const { data: salesData } = useCollection<Omit<Sale, "id">>(salesQuery);
+  const { data: auditLogsData } = useCollection<any>(auditLogsQuery);
 
   const machines = useMemo(() => (machinesData ?? []) as Machine[], [machinesData]);
   const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
@@ -67,6 +73,8 @@ export default function AdminPage() {
     () => (closuresData ?? []).sort((a, b) => (b.shiftEnd?.toMillis?.() || 0) - (a.shiftEnd?.toMillis?.() || 0)),
     [closuresData]
   );
+  const sales = useMemo(() => (salesData ?? []) as Sale[], [salesData]);
+  const auditLogs = useMemo(() => (auditLogsData ?? []), [auditLogsData]);
 
   const auditActor = {
     id: user?.uid,
@@ -102,6 +110,14 @@ export default function AdminPage() {
 
   const handleDeleteMachine = async (id: string) => {
     await deleteDoc(doc(firestore, "machines", id));
+    await logAuditAction(firestore, {
+      action: 'machine.delete',
+      target: 'machines',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
     toast({ title: "Máquina eliminada" });
   };
 
@@ -110,6 +126,13 @@ export default function AdminPage() {
     status: Machine["status"]
   ) => {
     await updateDoc(doc(firestore, "machines", id), { status });
+    await logAuditAction(firestore, {
+      action: 'machine.status.update',
+      target: 'machines',
+      targetId: id,
+      actor: auditActor,
+      details: { status },
+    });
     toast({ title: "Estado de máquina actualizado" });
   };
 
@@ -146,6 +169,14 @@ export default function AdminPage() {
 
   const handleDeleteLocation = async (id: string) => {
     await deleteDoc(doc(firestore, "locations", id));
+    await logAuditAction(firestore, {
+      action: 'location.delete',
+      target: 'locations',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
     toast({ title: "Local eliminado" });
   };
 
@@ -178,6 +209,14 @@ export default function AdminPage() {
 
   const handleDeleteProduct = async (id: string) => {
     await deleteDoc(doc(firestore, "products", id));
+    await logAuditAction(firestore, {
+      action: 'product.delete',
+      target: 'products',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
     toast({ title: "Producto eliminado" });
   };
 
@@ -428,9 +467,23 @@ export default function AdminPage() {
       }
 
       await batch.commit();
+      await logAuditAction(firestore, {
+        action: 'system.seed.mock',
+        target: 'system',
+        targetId: 'seed',
+        actor: auditActor,
+        severity: 'medium',
+      });
       toast({ title: "Datos mock cargados", description: "Ya puedes probar flujos completos en el sistema." });
     } catch (error) {
       console.error(error);
+      await logAuditFailure(firestore, {
+        action: 'system.seed.mock.error',
+        target: 'system',
+        targetId: 'seed',
+        actor: auditActor,
+        error,
+      });
       toast({
         variant: "destructive",
         title: "Error al crear datos mock",
@@ -449,6 +502,15 @@ export default function AdminPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h1 className="text-2xl font-headline font-bold">Panel de Administración</h1>
               <div className="flex items-center gap-2">
+                <Button 
+                  onClick={handleSeedMockData} 
+                  disabled={isSeeding}
+                  variant="default" 
+                  size="sm" 
+                  className="gap-2"
+                >
+                  {isSeeding ? "Cargando..." : "Cargar datos de prueba"}
+                </Button>
                 <Link href="/inventario">
                   <Button variant="outline" size="sm" className="gap-2">
                     <Package className="w-4 h-4" />
@@ -468,10 +530,12 @@ export default function AdminPage() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Tabs defaultValue="machines" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 mb-8">
+            <TabsList className="grid w-full grid-cols-7 mb-8">
               <TabsTrigger value="machines">Cabinas</TabsTrigger>
               <TabsTrigger value="locations">Locales</TabsTrigger>
               <TabsTrigger value="products">Productos</TabsTrigger>
+              <TabsTrigger value="finance">Finanzas</TabsTrigger>
+              <TabsTrigger value="logs">Logs</TabsTrigger>
               <TabsTrigger value="closures">Cierres</TabsTrigger>
               {userProfile?.role === "admin" && (
                 <TabsTrigger value="users">Usuarios</TabsTrigger>
@@ -504,6 +568,25 @@ export default function AdminPage() {
                 onAdd={handleAddProduct}
                 onEdit={handleEditProduct}
                 onDelete={handleDeleteProduct}
+              />
+            </TabsContent>
+
+            <TabsContent value="finance" className="space-y-6">
+              <FinanceReportsManager
+                sales={sales}
+                machines={machines}
+                locations={locations}
+                users={users}
+                auditLogs={auditLogs}
+                closures={closures}
+              />
+            </TabsContent>
+
+            <TabsContent value="logs" className="space-y-6">
+              <AuditLogsManager
+                logs={auditLogs}
+                locations={locations}
+                users={users}
               />
             </TabsContent>
 
