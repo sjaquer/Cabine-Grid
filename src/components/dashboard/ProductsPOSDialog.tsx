@@ -21,6 +21,7 @@ import ProductsPOS from "./ProductsPOS";
   products: Product[];
   onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
   onGoToCharge: (machineId: string) => void;
+  inventoryByProduct?: Record<string, number>; // productId -> stock
  };
 
 export default function ProductsPOSDialog({
@@ -30,6 +31,7 @@ export default function ProductsPOSDialog({
   products,
   onSaveProducts,
   onGoToCharge,
+  inventoryByProduct,
 }: ProductsPOSDialogProps) {
   if (!machine || !machine.session) return null;
 
@@ -68,6 +70,7 @@ export default function ProductsPOSDialog({
             onSave={handleSave}
             onClose={() => onOpenChange(false)}
             onGoToCharge={() => onGoToCharge(machine.id)}
+            inventoryByProduct={inventoryByProduct}
           />
         </div>
       </DialogContent>

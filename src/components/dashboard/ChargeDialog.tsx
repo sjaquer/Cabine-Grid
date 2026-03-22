@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { Machine, PaymentMethod } from "@/lib/types";
 import { formatCurrency, formatDuration, formatTime } from "@/lib/utils";
+import { calculateSessionCost } from "@/lib/session-cost";
 import { sanitizeString } from "@/lib/sanitize";
 import {
   Dialog,
@@ -49,31 +50,17 @@ export default function ChargeDialog({
   if (!machine || !machine.session) return null;
 
   const { session } = machine;
-  const hourlyRate = session.hourlyRate || 0;
-  const elapsedSeconds = (Date.now() - session.startTime) / 1000;
-  const elapsedMinutes = Math.max(0, Math.ceil(elapsedSeconds / 60));
-  const graceMinutes = Math.max(1, Math.floor(fractionMinutes || 5));
-
-  // Regla solicitada:
-  // - Hasta la prórroga (X min): cobrar tiempo real en minutos.
-  // - Pasado X min: cobrar hora completa (redondeado hacia arriba por horas).
-  const billedMinutes = elapsedMinutes === 0
-    ? 0
-    : elapsedMinutes <= graceMinutes
-      ? elapsedMinutes
-      : Math.ceil(elapsedMinutes / 60) * 60;
-  const billedHours = billedMinutes / 60;
-
-  const sessionCostRaw = billedHours * hourlyRate;
-  const sessionCost = Math.round(sessionCostRaw * 100) / 100;
-
-  const chargeDescription = session.usageMode === 'prepaid' && session.prepaidHours
-    ? `(prepago ${session.prepaidHours}h, prórroga ${graceMinutes} min; luego hora completa)`
-    : `(prórroga ${graceMinutes} min; luego hora completa)`;
-
-  const soldProducts = session.soldProducts ?? [];
-  const productsTotal = soldProducts.reduce((total, p) => total + p.quantity * p.unitPrice, 0);
-  const finalCost = sessionCost + productsTotal;
+  
+  // Use centralized cost calculation
+  const costCalculation = calculateSessionCost(session, fractionMinutes);
+  const {
+    elapsedSeconds,
+    billedMinutes,
+    sessionCost,
+    productsTotal,
+    finalCost,
+    chargeDescription,
+  } = costCalculation;
 
   const numAmountPaid = parseFloat(amountPaid) || 0;
   const change = numAmountPaid > finalCost ? numAmountPaid - finalCost : 0;
@@ -107,7 +94,7 @@ export default function ChargeDialog({
                     </div>
                     <div className="flex flex-col gap-1 sm:text-center">
                         <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Tarifa por Hora</span>
-                        <span className="font-semibold text-sm md:text-base font-mono text-accent">{formatCurrency(hourlyRate)}</span>
+                        <span className="font-semibold text-sm md:text-base font-mono text-accent">{formatCurrency(session.hourlyRate || 0)}</span>
                     </div>
                     <div className="flex flex-col gap-1 text-center">
                         <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Tiempo Usado</span>
@@ -142,7 +129,7 @@ export default function ChargeDialog({
                             <div className="border-t border-dashed border-border/60 my-3" />
                             <div className="space-y-1.5 bg-secondary/20 p-3 rounded-lg">
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Detalle de productos</p>
-                              {soldProducts.map((product, index) => (
+                              {(session.soldProducts ?? []).map((product, index) => (
                                 <div key={`${product.productId}-${index}`} className="flex justify-between text-xs md:text-sm text-foreground/70 font-medium items-center">
                                   <span className="flex items-center gap-2"><span className="bg-accent/10 text-accent font-bold px-1.5 rounded">{product.quantity}x</span> {product.productName}</span>
                                   <span className="font-mono font-semibold">{formatCurrency(product.quantity * product.unitPrice)}</span>

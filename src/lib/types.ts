@@ -106,6 +106,38 @@ export type UserProfile = {
   createdAt?: Timestamp;
 }
 
+export type StockMovementType = 'sale' | 'entry' | 'adjustment' | 'return' | 'damaged';
+
+export type Inventory = {
+  id?: string;
+  locationId: string;
+  productId: string;
+  productName: string;
+  currentStock: number;
+  minStock?: number;
+  reorderPoint?: number;
+  lastUpdated?: Timestamp;
+};
+
+export type StockMovement = {
+  id?: string;
+  locationId: string;
+  productId: string;
+  productName: string;
+  type: StockMovementType;
+  quantity: number;
+  quantityBefore: number;
+  quantityAfter: number;
+  reason?: string;
+  saleId?: string;
+  shiftId?: string;
+  approvedBy?: {
+    id?: string;
+    email?: string;
+  };
+  createdAt?: Timestamp;
+};
+
 export type AuthContextType = {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;

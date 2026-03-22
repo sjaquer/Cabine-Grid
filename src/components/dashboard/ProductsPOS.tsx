@@ -4,11 +4,14 @@ import { useState, useMemo } from "react";
 import type { Product, SoldProduct } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, MinusCircle, ShoppingCart } from "lucide-react";
+import { PlusCircle, MinusCircle, ShoppingCart, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ProductsPOSProps {
     availableProducts: Product[];
@@ -16,6 +19,7 @@ interface ProductsPOSProps {
     onSave: (products: SoldProduct[]) => Promise<void>;
     onClose?: () => void;
     onGoToCharge?: () => void;
+    inventoryByProduct?: Record<string, number>; // productId -> stock
 }
 
 const categoryLabels = {
@@ -32,7 +36,14 @@ const categoryIcons = {
   other: "📦",
 };
 
-export default function ProductsPOS({ availableProducts, initialProducts, onSave, onClose, onGoToCharge }: ProductsPOSProps) {
+export default function ProductsPOS({ 
+  availableProducts, 
+  initialProducts, 
+  onSave, 
+  onClose, 
+  onGoToCharge,
+  inventoryByProduct = {}
+}: ProductsPOSProps) {
     const [quantities, setQuantities] = useState<Record<string, number>>(() => {
         if (!initialProducts || initialProducts.length === 0) return {};
         return initialProducts.reduce((acc, item) => {
@@ -41,18 +52,40 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
         }, {} as Record<string, number>);
     });
     const [searchTerm, setSearchTerm] = useState("");
+    const [onlyInStock, setOnlyInStock] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     const filteredProducts = useMemo(() => {
-        return availableProducts.filter(p =>
-            p.name.toLowerCase().includes(searchTerm.toLowerCase()) && p.isActive !== false
-        );
-    }, [searchTerm]);
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+        return availableProducts.filter((p) => {
+            if (p.isActive === false) return false;
+            if (normalizedSearch && !p.name.toLowerCase().includes(normalizedSearch)) return false;
+            if (onlyInStock) {
+                const stock = inventoryByProduct[p.id] !== undefined
+                    ? Math.max(0, inventoryByProduct[p.id])
+                    : Math.max(0, p.stock ?? 0);
+                if (stock <= 0) return false;
+            }
+            return true;
+        });
+    }, [availableProducts, searchTerm, onlyInStock, inventoryByProduct]);
+
+    const getAvailableStock = (productId: string, product: Product): number => {
+        // First check inventory system, then fallback to product stock field
+        if (inventoryByProduct && inventoryByProduct[productId] !== undefined) {
+            return Math.max(0, inventoryByProduct[productId]);
+        }
+        return Math.max(0, product.stock ?? 0);
+    };
 
     const handleQuantityChange = (productId: string, delta: number) => {
+        const product = availableProducts.find(p => p.id === productId);
+        if (!product) return;
+
+        const availableStock = getAvailableStock(productId, product);
         const newQuantities = { ...quantities };
         const currentQuantity = newQuantities[productId] || 0;
-        const newQuantity = Math.max(0, currentQuantity + delta);
+        const newQuantity = Math.max(0, Math.min(currentQuantity + delta, availableStock));
 
         if (newQuantity > 0) {
             newQuantities[productId] = newQuantity;
@@ -91,6 +124,12 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
     const itemCount = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
     const soldProducts = buildSoldProducts(quantities);
 
+    // Check if any products are out of stock
+    const outOfStockProducts = availableProducts.filter(p => {
+        const stock = getAvailableStock(p.id, p);
+        return stock === 0 && p.isActive !== false;
+    });
+
     return (
         <Card className="border-0 shadow-none flex flex-col h-full min-h-0">
             <CardHeader className="pb-3">
@@ -117,10 +156,33 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="h-9"
                     />
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                            {filteredProducts.length} resultado{filteredProducts.length === 1 ? "" : "s"}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="only-in-stock" className="text-xs text-muted-foreground cursor-pointer">
+                                Solo con stock
+                            </Label>
+                            <Switch
+                                id="only-in-stock"
+                                checked={onlyInStock}
+                                onCheckedChange={setOnlyInStock}
+                            />
+                        </div>
+                    </div>
                 </div>
             </CardHeader>
 
             <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+                {outOfStockProducts.length > 0 && (
+                    <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                            {outOfStockProducts.length} {outOfStockProducts.length === 1 ? "producto está" : "productos están"} sin stock disponible.
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <Tabs defaultValue="drink" className="flex-1 min-h-0 flex flex-col">
                     <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60">
                         {Object.entries(categoryLabels).map(([cat, label]) => (
@@ -139,38 +201,62 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                                         <p>No hay productos en esta categoría</p>
                                     </div>
                                 ) : (
-                                    categoryProducts.map(product => (
-                                        <div
-                                            key={product.id}
-                                            className="flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-background hover:bg-secondary/40 transition shadow-sm"
-                                        >
-                                            <div className="flex-1 min-w-0 pr-3">
-                                                <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
-                                                <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-1 border border-border/50">
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                                                    onClick={() => handleQuantityChange(product.id, -1)}
-                                                >
-                                                    <MinusCircle className="w-5 h-5" />
-                                                </Button>
-                                                <div className="w-8 md:w-10 text-center flex items-center justify-center">
-                                                    <span className="font-bold text-base md:text-lg tabular-nums">{quantities[product.id] || 0}</span>
+                                    categoryProducts.map(product => {
+                                        const availableStock = getAvailableStock(product.id, product);
+                                        const isOutOfStock = availableStock === 0;
+                                        const currentQty = quantities[product.id] || 0;
+                                        
+                                        return (
+                                            <div
+                                                key={product.id}
+                                                className={`flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-background transition shadow-sm ${
+                                                    isOutOfStock 
+                                                        ? 'opacity-50 cursor-not-allowed' 
+                                                        : 'hover:bg-secondary/40'
+                                                }`}
+                                            >
+                                                <div className="flex-1 min-w-0 pr-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
+                                                        {availableStock > 0 && (
+                                                            <Badge variant="outline" className="text-xs bg-secondary/60 text-foreground/70 font-semibold">
+                                                                Stock: {availableStock}
+                                                            </Badge>
+                                                        )}
+                                                        {isOutOfStock && (
+                                                            <Badge variant="destructive" className="text-xs font-semibold">
+                                                                Sin stock
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
                                                 </div>
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors"
-                                                    onClick={() => handleQuantityChange(product.id, 1)}
-                                                >
-                                                    <PlusCircle className="w-5 h-5" />
-                                                </Button>
+                                                <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-1 border border-border/50">
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="icon"
+                                                        className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => handleQuantityChange(product.id, -1)}
+                                                        disabled={isOutOfStock || currentQty === 0}
+                                                    >
+                                                        <MinusCircle className="w-5 h-5" />
+                                                    </Button>
+                                                    <div className="w-8 md:w-10 text-center flex items-center justify-center">
+                                                        <span className="font-bold text-base md:text-lg tabular-nums">{quantities[product.id] || 0}</span>
+                                                    </div>
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="icon"
+                                                        className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => handleQuantityChange(product.id, 1)}
+                                                        disabled={isOutOfStock || currentQty >= availableStock}
+                                                    >
+                                                        <PlusCircle className="w-5 h-5" />
+                                                    </Button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
                         </TabsContent>

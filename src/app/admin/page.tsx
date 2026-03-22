@@ -44,14 +44,28 @@ export default function AdminPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
+  const [activeTab, setActiveTab] = useState("machines");
+
+  const shouldLoadSales = activeTab === "finance";
+  const shouldLoadAuditLogs = activeTab === "finance" || activeTab === "logs";
+  const shouldLoadClosures = activeTab === "finance" || activeTab === "closures";
 
   const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
-  const closuresQuery = useMemoFirebase(() => query(collection(firestore, "shiftClosures")), [firestore]);
-  const salesQuery = useMemoFirebase(() => query(collection(firestore, "sales")), [firestore]);
-  const auditLogsQuery = useMemoFirebase(() => query(collection(firestore, "auditLogs")), [firestore]);
+  const closuresQuery = useMemoFirebase(() => {
+    if (!firestore || !shouldLoadClosures) return null;
+    return query(collection(firestore, "shiftClosures"));
+  }, [firestore, shouldLoadClosures]);
+  const salesQuery = useMemoFirebase(() => {
+    if (!firestore || !shouldLoadSales) return null;
+    return query(collection(firestore, "sales"));
+  }, [firestore, shouldLoadSales]);
+  const auditLogsQuery = useMemoFirebase(() => {
+    if (!firestore || !shouldLoadAuditLogs) return null;
+    return query(collection(firestore, "auditLogs"));
+  }, [firestore, shouldLoadAuditLogs]);
 
   const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
@@ -604,7 +618,7 @@ export default function AdminPage() {
           </div>
 
           {/* Tabs de Gestión */}
-          <Tabs defaultValue="machines" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="bg-card/80 rounded-lg border border-border/50 p-4 mb-6">
               <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 bg-transparent h-auto">
                 <TabTriggerWithIcon value="machines" icon={<Cpu className="w-4 h-4" />} label="Cabinas" />

@@ -1,9 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import Pagination from "@/components/ui/pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import type { UserProfile } from "@/lib/types";
 import type { Timestamp } from "firebase/firestore";
@@ -34,6 +37,18 @@ type ShiftClosureManagerProps = {
 
 export default function ShiftClosureManager({ closures, userProfile, onReopenShift }: ShiftClosureManagerProps) {
   const canReopen = userProfile?.role === "admin";
+  const sortedClosures = useMemo(
+    () => [...closures].sort((a, b) => (b.shiftEnd?.toMillis?.() || 0) - (a.shiftEnd?.toMillis?.() || 0)),
+    [closures],
+  );
+  const {
+    paginatedItems,
+    currentPage,
+    totalPages,
+    pageSize,
+    onPageChange,
+    onPageSizeChange,
+  } = usePagination(sortedClosures, 10);
 
   return (
     <Card>
@@ -66,7 +81,7 @@ export default function ShiftClosureManager({ closures, userProfile, onReopenShi
                   </TableCell>
                 </TableRow>
               ) : (
-                closures.map((closure) => (
+                paginatedItems.map((closure) => (
                   <TableRow key={closure.id}>
                     <TableCell>
                       {closure.shiftEnd ? formatDateTime((closure.shiftEnd as Timestamp).toDate()) : "-"}
@@ -97,6 +112,16 @@ export default function ShiftClosureManager({ closures, userProfile, onReopenShi
             </TableBody>
           </Table>
         </div>
+        {closures.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+            totalItems={closures.length}
+          />
+        )}
       </CardContent>
     </Card>
   );

@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import Pagination from "@/components/ui/pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 
 export type AuditLogRecord = {
@@ -99,6 +101,14 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
   }, [logs, locationFilter, operatorFilter, severityFilter, search]);
 
   const anomalies = useMemo(() => filtered.filter((log) => (log.anomalyScore || 0) >= 60), [filtered]);
+  const {
+    paginatedItems,
+    currentPage,
+    totalPages,
+    pageSize,
+    onPageChange,
+    onPageSizeChange,
+  } = usePagination(filtered, 15);
 
   return (
     <div className="space-y-6">
@@ -211,7 +221,7 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((log) => (
+              {paginatedItems.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell>{toDate(log).toLocaleString("es-PE")}</TableCell>
                   <TableCell>
@@ -233,6 +243,16 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
               ))}
             </TableBody>
           </Table>
+          {filtered.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              onPageChange={onPageChange}
+              onPageSizeChange={onPageSizeChange}
+              totalItems={filtered.length}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

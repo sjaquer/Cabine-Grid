@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
+import type { Inventory } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
 import Header from "@/components/layout/Header";
@@ -17,9 +18,13 @@ import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getShiftStart, setShiftLocation } from "@/lib/shift-session";
 import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
+import { closeSession } from "@/lib/close-session";
+import { canAccessMachine, useAccessibleMachines } from "@/hooks/useMachineAccess";
+import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, TrendingUp } from "lucide-react";
+import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 
 
 export default function Dashboard() {
@@ -53,6 +58,26 @@ export default function Dashboard() {
 
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+  
+  const inventoryQuery = useMemoFirebase(() => {
+    if (!firestore || !selectedLocationId) return null;
+    return query(
+      collection(firestore, "inventory"),
+      where("locationId", "==", selectedLocationId)
+    );
+  }, [firestore, selectedLocationId]);
+
+  const { data: inventoryData } = useCollection<Omit<Inventory, "id">>(inventoryQuery);
+
+  const inventoryByProduct = useMemo(() => {
+    const result: Record<string, number> = {};
+    if (inventoryData) {
+      inventoryData.forEach((item) => {
+        result[item.productId] = item.currentStock ?? 0;
+      });
+    }
+    return result;
+  }, [inventoryData]);
 
   const machines = useMemo(() => {
     if (!machinesData) {
@@ -70,6 +95,9 @@ export default function Dashboard() {
     });
 
   }, [machinesData]);
+
+  // Filter machines by user access
+  const { accessible: accessibleMachines } = useAccessibleMachines(machines, userProfile);
 
   const locations = useMemo(() => {
     return (locationsData ?? [])
@@ -94,7 +122,7 @@ export default function Dashboard() {
     return locations.filter((location) => profileLocationIds.includes(location.id));
   }, [locations, userProfile?.locationIds, userProfile?.role]);
 
-  const hasMachinesWithLocation = useMemo(() => machines.some((machine) => Boolean(machine.locationId)), [machines]);
+  const hasMachinesWithLocation = useMemo(() => accessibleMachines.some((machine) => Boolean(machine.locationId)), [accessibleMachines]);
 
   useEffect(() => {
     if (availableLocations.length === 0) {
@@ -118,21 +146,21 @@ export default function Dashboard() {
 
   const visibleMachines = useMemo(() => {
     console.log('DEBUG: visibleMachines:', {
-      totalMachines: machines.length,
+      totalAccessibleMachines: accessibleMachines.length,
       selectedLocationId,
       hasMachinesWithLocation,
       machinesLoading,
     });
     
     if (!selectedLocationId || !hasMachinesWithLocation) {
-      console.log('DEBUG: Mostrando todas las máquinas:', machines.length);
-      return machines;
+      console.log('DEBUG: Mostrando todas las máquinas accesibles:', accessibleMachines.length);
+      return accessibleMachines;
     }
 
-    const filtered = machines.filter((machine) => machine.locationId === selectedLocationId);
+    const filtered = accessibleMachines.filter((machine) => machine.locationId === selectedLocationId);
     console.log('DEBUG: Máquinas filtradas por local:', filtered.length);
     return filtered;
-  }, [machines, selectedLocationId, hasMachinesWithLocation, machinesLoading]);
+  }, [accessibleMachines, selectedLocationId, hasMachinesWithLocation, machinesLoading]);
 
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
   const [machineToAssign, setMachineToAssign] = useState<Machine | null>(null);
@@ -315,24 +343,25 @@ export default function Dashboard() {
 
   const handleConfirmPayment = useCallback(async (machineId: string, amount: number, paymentMethod: PaymentMethod) => {
     if (!firestore || isProcessingPayment) return;
-    const machine = machines.find(m => m.id === machineId);
+    const machine = accessibleMachines.find(m => m.id === machineId);
     if (!machine || !machine.session) return;
     
-    const { session } = machine;
-    const selectedRate = rates.find(r => r.id === session.rateId);
-    const endTime = Date.now();
-    const totalMinutes = Math.ceil((endTime - session.startTime) / (1000 * 60));
+    // Validate user has access to this machine
+    if (!canAccessMachine(machine, userProfile)) {
+      toast({
+        variant: "destructive",
+        title: "Acceso denegado",
+        description: "No tienes permiso para operar esta máquina.",
+      });
+      return;
+    }
     
-    const operator = {
-      ...(user?.uid ? { id: user.uid } : {}),
-      ...(user?.email ? { email: user.email } : {}),
-    };
-
-    const soldProducts = machine.session?.soldProducts ?? [];
+    const { session } = machine;
     const effectiveLocationId = machine.locationId || selectedLocationId;
     const shiftStartMs = user?.uid ? (getShiftStart(user.uid) ?? session.startTime) : session.startTime;
     const shiftId = `${effectiveLocationId || 'global'}_${user?.uid || 'anon'}_${shiftStartMs}`;
 
+    // Generate receipt number
     let receiptSequence = 1;
     let receiptSeries = (effectiveLocationId || 'GLOBAL').slice(0, 6).toUpperCase();
     let receiptNumber = `${receiptSeries}-${String(receiptSequence).padStart(6, '0')}`;
@@ -357,122 +386,36 @@ export default function Dashboard() {
       console.error("Error generating receipt counter:", error);
     }
 
-    const resolvedHourlyRate = typeof session.hourlyRate === "number"
-      ? session.hourlyRate
-      : (typeof selectedRate?.pricePerHour === "number" ? selectedRate.pricePerHour : undefined);
-    const newSale = {
-      machineName: machine.name,
-      clientName: session.client || "Ocasional",
-      ...(effectiveLocationId ? { locationId: effectiveLocationId } : {}),
-      receiptSeries,
-      receiptSequence,
-      receiptNumber,
-      shiftId,
-      startTime: Timestamp.fromMillis(session.startTime),
-      endTime: Timestamp.fromMillis(endTime),
-      totalMinutes,
-      amount,
-      ...(selectedRate ? { rate: selectedRate } : {}),
-      ...(typeof resolvedHourlyRate === "number" ? { hourlyRate: resolvedHourlyRate } : {}),
-      paymentMethod,
-      soldProducts,
-      ...(Object.keys(operator).length > 0 ? { operator } : {}),
-    };
-    
-    const machineRef = doc(firestore, "machines", machineId);
+    const soldProducts = machine.session?.soldProducts ?? [];
 
     try {
       setProcessingPayment(true);
-      const batch = writeBatch(firestore);
-      const salesCollection = collection(firestore, "sales");
-      const saleRef = doc(salesCollection);
-      batch.set(saleRef, newSale);
-
-      if (effectiveLocationId) {
-        const inventoryUpdates: Array<{ productId: string; productName: string; newStock: number }> = [];
-
-        for (const product of soldProducts) {
-          if (!product.productId) continue;
-          const inventoryRef = doc(firestore, "inventory", `${effectiveLocationId}_${product.productId}`);
-          const inventorySnap = await getDoc(inventoryRef);
-          const fallbackProduct = products.find((item) => item.id === product.productId);
-          const currentStock = inventorySnap.exists()
-            ? Number(inventorySnap.data().stock ?? 0)
-            : Math.max(0, Number(fallbackProduct?.stock ?? 0));
-
-          if (currentStock < product.quantity) {
-            throw new Error(`Stock insuficiente para ${product.productName}. Disponible: ${currentStock}.`);
-          }
-
-          inventoryUpdates.push({
-            productId: product.productId,
-            productName: product.productName,
-            newStock: currentStock - product.quantity,
-          });
-        }
-
-        inventoryUpdates.forEach((update) => {
-          const inventoryRef = doc(firestore, "inventory", `${effectiveLocationId}_${update.productId}`);
-          batch.set(
-            inventoryRef,
-            {
-              locationId: effectiveLocationId,
-              productId: update.productId,
-              productName: update.productName,
-              stock: update.newStock,
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
-        });
-      }
-
-      batch.update(machineRef, {
-        status: "available",
-        session: null
-      });
       
-      await batch.commit();
-
-      await logAuditAction(firestore, {
-        action: 'sale.close',
-        target: 'sales',
-        targetId: saleRef.id,
-        locationId: effectiveLocationId || undefined,
-        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
-        details: {
-          machineId,
-          machineName: machine.name,
-          amount,
-          paymentMethod,
-          receiptNumber,
-          shiftId,
-          productsCount: soldProducts.reduce((sum, p) => sum + p.quantity, 0),
-        },
+      // Use the new transactional closeSession function
+      const result = await closeSession(firestore, {
+        machineId,
+        machine,
+        session,
+        amount,
+        paymentMethod,
+        locationId: effectiveLocationId,
+        operatorId: user?.uid,
+        operatorEmail: user?.email || undefined,
+        operatorRole: userProfile?.role,
+        shiftId,
+        receiptNumber,
+        soldProducts,
       });
-      
+
       toast({
         title: "Pago Confirmado",
-        description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${receiptNumber}.`,
+        description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${result.receiptNumber}.`,
       });
       handleChargeDialogChange(false);
       handlePosDialogChange(false);
 
     } catch (error) {
       console.error("Error confirming payment: ", error);
-      await logAuditFailure(firestore, {
-        action: 'sale.close.error',
-        target: 'sales',
-        targetId: machineId,
-        locationId: machine.locationId || selectedLocationId || undefined,
-        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
-        error,
-        details: {
-          paymentMethod,
-          amount,
-          machineName: machine.name,
-        },
-      });
       const message = error instanceof Error ? error.message : "Hubo un problema al registrar la venta en la base de datos.";
       toast({
         variant: "destructive",
@@ -482,12 +425,22 @@ export default function Dashboard() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [machines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handleChargeDialogChange, handlePosDialogChange, products]);
+  }, [accessibleMachines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handleChargeDialogChange, handlePosDialogChange, userProfile]);
 
   const handleSaveProducts = useCallback(async (machineId: string, products: SoldProduct[]) => {
     if (!firestore) return;
-    const machine = machines.find((item) => item.id === machineId);
+    const machine = accessibleMachines.find((item) => item.id === machineId);
     if (!machine || !machine.session) return;
+    
+    // Validate user has access to this machine
+    if (!canAccessMachine(machine, userProfile)) {
+      toast({
+        variant: "destructive",
+        title: "Acceso denegado",
+        description: "No tienes permiso para operar esta máquina.",
+      });
+      return;
+    }
 
     try {
       const machineRef = doc(firestore, "machines", machineId);
@@ -528,22 +481,66 @@ export default function Dashboard() {
         description: "No se pudo actualizar la boleta del cliente.",
       });
     }
-  }, [machines, firestore, toast, selectedLocationId, user?.uid, user?.email, userProfile?.role]);
+  }, [accessibleMachines, firestore, toast, selectedLocationId, user?.uid, user?.email, userProfile]);
 
   const handleGoToCharge = useCallback((machineId: string) => {
-    const machine = machines.find((item) => item.id === machineId) ?? null;
+    const machine = accessibleMachines.find((item) => item.id === machineId) ?? null;
     if (!machine) return;
+    
+    // Validate user has access to this machine
+    if (!canAccessMachine(machine, userProfile)) {
+      toast({
+        variant: "destructive",
+        title: "Acceso denegado",
+        description: "No tienes permiso para operar esta máquina.",
+      });
+      return;
+    }
 
     // Cerrar el POS antes de abrir cobro para evitar doble modal y clics extra.
     handlePosDialogChange(false);
     setMachineToCharge(machine);
     setChargeDialogOpen(true);
-  }, [machines, handlePosDialogChange]);
+  }, [accessibleMachines, handlePosDialogChange, toast, userProfile]);
 
   const availableMachines = visibleMachines.filter(m => m.status === 'available').length;
   const occupiedMachines = visibleMachines.length - availableMachines;
   const dailySales = visibleSales.reduce((sum, sale) => sum + sale.amount, 0);
   const utilizationRate = visibleMachines.length > 0 ? Math.round((occupiedMachines / visibleMachines.length) * 100) : 0;
+
+  // Cálculos KPI avanzados
+  const machineRevenue = useMemo(() => {
+    const revenueByMachine: Record<string, number> = {};
+    visibleSales.forEach(sale => {
+      revenueByMachine[sale.machineName] = (revenueByMachine[sale.machineName] || 0) + sale.amount;
+    });
+    return revenueByMachine;
+  }, [visibleSales]);
+
+  const topMachine = useMemo(() => {
+    if (Object.keys(machineRevenue).length === 0) return null;
+    const [machine, revenue] = Object.entries(machineRevenue).reduce((acc, [name, rev]) => 
+      rev > acc[1] ? [name, rev] : acc
+    , ['', 0]) as [string, number];
+    return { machine, revenue };
+  }, [machineRevenue]);
+
+  const avgTransactionValue = visibleSales.length > 0 
+    ? Math.round((dailySales / visibleSales.length) * 100) / 100 
+    : 0;
+
+
+  const grossMargin = useMemo(() => {
+    // Margen: costo máquina vs venta (asumiendo 70% costo operacional base)
+    const machineRevenue = visibleSales.reduce((sum, sale) => sum + (sale.hourlyRate ? Math.ceil(sale.totalMinutes / 60) * sale.hourlyRate : 0), 0);
+    const productRevenue = visibleSales.reduce((sum, sale) => sum + (sale.soldProducts?.reduce((pSum, p) => pSum + (p.quantity * p.unitPrice), 0) || 0), 0);
+    
+    // Estimado: 30% margen en máquinas, 50% en productos
+    const estimatedCost = (machineRevenue * 0.3) + (productRevenue * 0.5);
+    return dailySales > 0 ? Math.round(((dailySales - estimatedCost) / dailySales) * 100) : 0;
+  }, [visibleSales, dailySales]);
+  // Hook para obtener alertas de inventario
+  const inventoryAlerts = useInventoryAlerts(inventoryData || []);
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
@@ -587,6 +584,41 @@ export default function Dashboard() {
               color="text-accent"
               icon={null}
             />
+          </div>
+
+          {/* Estadísticas Avanzadas */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard 
+              label="Margen Bruto"
+              value={`${grossMargin}%`}
+              color={grossMargin >= 40 ? "text-status-available" : "text-yellow-500"}
+              icon={null}
+            />
+            <StatCard 
+              label="Transacciones"
+              value={visibleSales.length}
+              color="text-blue-500"
+              icon={null}
+            />
+            <StatCard 
+              label="Ticket promedio"
+              value={formatCurrency(avgTransactionValue)}
+              color="text-purple-500"
+              icon={null}
+            />
+            {topMachine && (
+              <StatCard 
+                label="Mejor máquina"
+                value={topMachine.machine}
+                color="text-amber-500"
+                icon={null}
+              />
+            )}
+
+                                {/* Alertas de Inventario */}
+                                {inventoryAlerts.length > 0 && (
+                                  <InventoryAlertsDisplay alerts={inventoryAlerts} />
+                                )}
           </div>
 
           {/* Selección de Local */}
@@ -653,6 +685,7 @@ export default function Dashboard() {
         products={products}
         onSaveProducts={handleSaveProducts}
         onGoToCharge={handleGoToCharge}
+        inventoryByProduct={inventoryByProduct}
       />
     </div>
   );
@@ -664,13 +697,15 @@ function StatCard({
   value, 
   total,
   color,
-  icon 
+  icon,
+  subtitle
 }: { 
   label: string;
   value: string | number;
   total?: number;
   color: string;
   icon?: React.ReactNode;
+  subtitle?: string;
 }) {
   return (
     <div className="p-4 rounded-lg bg-background/50 border border-border/50 hover:border-border/80 transition-all">
@@ -683,6 +718,9 @@ function StatCard({
               <p className="text-xs text-muted-foreground">/ {total}</p>
             )}
           </div>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+          )}
         </div>
         {icon && (
           <div className={`p-2 rounded-md bg-primary/10 text-primary flex-shrink-0`}>

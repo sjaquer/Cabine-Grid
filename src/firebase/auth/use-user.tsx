@@ -18,6 +18,7 @@ import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
 import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftId, getShiftLocation, getShiftStart } from '@/lib/shift-session';
 import { logAuditAction, logAuditFailure } from '@/lib/audit-log';
+import { getActiveShift, closeShift } from '@/lib/shift-management';
 
 export interface AuthContextValue {
   user: User | null;
@@ -87,12 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     inventoryChecked?: boolean;
     discrepancyReason?: string;
   }) => {
-    if (user && userProfile && (userProfile.role === 'operator' || userProfile.role === 'manager')) {
-      const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
-      const shiftEndMs = Date.now();
-      const shiftLocationId = getShiftLocation(user.uid);
-      const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
+    if (!user || !userProfile || !firestore) {
+      await signOut(auth);
+      return;
+    }
 
+    // Only require shift closure validation for operators and managers
+    if (userProfile.role === 'operator' || userProfile.role === 'manager') {
       if (!payload || typeof payload.countedCash !== 'number' || payload.countedCash < 0) {
         throw new Error('Debes registrar el conteo de caja antes de cerrar turno.');
       }
@@ -101,11 +103,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        // Get shift info from localStorage (for now, until we fully migrate)
+        const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
+        const shiftLocationId = getShiftLocation(user.uid);
+        const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
+
+        // Get sales for this shift
         const salesRef = collection(firestore, 'sales');
         const salesQuery = query(
           salesRef,
           where('endTime', '>=', Timestamp.fromMillis(shiftStartMs)),
-          where('endTime', '<=', Timestamp.fromMillis(shiftEndMs))
+          where('endTime', '<=', Timestamp.fromMillis(Date.now()))
         );
         const salesSnap = await getDocs(salesQuery);
         const allShiftSales: Sale[] = salesSnap.docs.map((snapshot) => ({
@@ -113,23 +121,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...(snapshot.data() as Omit<Sale, 'id'>),
         }));
 
-        // Evita mezclar ventas entre operadores en el mismo lapso.
+        // Filter sales by operator and location
         const operatorShiftSales = allShiftSales.filter((sale) => {
           if (sale.operator?.id !== user.uid) return false;
           if (!shiftLocationId) return true;
           return sale.locationId === shiftLocationId;
         });
 
+        // Calculate expected cash from cash payments
         const expectedCash = operatorShiftSales
           .filter((sale) => sale.paymentMethod === 'efectivo')
           .reduce((sum, sale) => sum + sale.amount, 0);
         const countedCash = Math.round(payload.countedCash * 100) / 100;
         const cashDifference = Math.round((countedCash - expectedCash) * 100) / 100;
 
+        // Validate cash difference
         if (cashDifference !== 0 && !payload.discrepancyReason?.trim()) {
           throw new Error('Existe diferencia en caja. Debes ingresar un motivo para cerrar turno.');
         }
 
+        // Get open machines
         const machinesRef = collection(firestore, 'machines');
         const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
         const machinesSnap = await getDocs(machinesQuery);
@@ -142,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
           : allOpenMachines;
 
+        // Create shift closure record
         await addDoc(collection(firestore, 'shiftClosures'), {
           shiftId,
           locationId: shiftLocationId || null,
@@ -151,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: userProfile.role,
           },
           shiftStart: Timestamp.fromMillis(shiftStartMs),
-          shiftEnd: Timestamp.fromMillis(shiftEndMs),
+          shiftEnd: Timestamp.now(),
           expectedCash,
           countedCash,
           cashDifference,
@@ -163,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           createdAt: serverTimestamp(),
         });
 
+        // Log shift closure
         await logAuditAction(firestore, {
           action: 'shift.close',
           target: 'shiftClosures',
@@ -180,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         });
 
+        // Log logout
         await logAuditAction(firestore, {
           action: 'auth.logout',
           target: 'users',
@@ -191,29 +205,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         });
 
+        // Generate PDF report
         buildShiftReportPdf({
           userProfile,
           sales: operatorShiftSales,
           shiftStartMs,
-          shiftEndMs,
+          shiftEndMs: Date.now(),
           openMachines,
         });
+
+        // Clear localStorage shift data
+        clearShiftLocation(user.uid);
+        clearShiftStart(user.uid);
       } catch (error) {
         console.error('Error generando cierre de turno:', error);
         await logAuditFailure(firestore, {
           action: 'shift.close.error',
-          target: 'shiftClosures',
-          targetId: shiftId,
-          locationId: shiftLocationId || undefined,
+          target: 'shifts',
+          targetId: user.uid,
+          locationId: getShiftLocation(user.uid) || undefined,
           actor: { id: user.uid, email: user.email, role: userProfile.role },
           error,
         });
+        throw error; // Re-throw so user sees the error
       }
-
-      clearShiftLocation(user.uid);
-      clearShiftStart(user.uid);
     }
 
+    // Sign out
     await signOut(auth);
   };
 
