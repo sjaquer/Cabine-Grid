@@ -141,7 +141,7 @@ export default function ProductsPOS({
                                 Punto de Venta (TPV)
                             </CardTitle>
                             <CardDescription className="text-sm mt-1">
-                                Selecciona los productos que consumirá el cliente para agregarlos a su cuenta.
+                                1) Elige productos 2) Ajusta cantidad 3) Guarda o cobra.
                             </CardDescription>
                         </div>
                         {itemCount > 0 && (
@@ -154,7 +154,7 @@ export default function ProductsPOS({
                         placeholder="Buscar producto..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-9"
+                        className="h-11 text-base"
                     />
                     <div className="flex items-center justify-between gap-3">
                         <p className="text-xs text-muted-foreground">
@@ -184,9 +184,9 @@ export default function ProductsPOS({
                     </Alert>
                 )}
                 <Tabs defaultValue="drink" className="flex-1 min-h-0 flex flex-col">
-                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60 p-1">
                         {Object.entries(categoryLabels).map(([cat, label]) => (
-                            <TabsTrigger key={cat} value={cat} className="text-xs sm:text-sm flex gap-1">
+                            <TabsTrigger key={cat} value={cat} className="text-sm flex gap-1 h-11">
                                 <span>{categoryIcons[cat as keyof typeof categoryIcons]}</span>
                                 <span className="hidden sm:inline">{label}</span>
                             </TabsTrigger>
@@ -231,23 +231,23 @@ export default function ProductsPOS({
                                                     </div>
                                                     <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
                                                 </div>
-                                                <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-1 border border-border/50">
+                                                <div className="flex items-center gap-2 bg-secondary/30 rounded-lg p-1.5 border border-border/50">
                                                     <Button
                                                         variant="secondary"
                                                         size="icon"
-                                                        className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         onClick={() => handleQuantityChange(product.id, -1)}
                                                         disabled={isOutOfStock || currentQty === 0}
                                                     >
                                                         <MinusCircle className="w-5 h-5" />
                                                     </Button>
-                                                    <div className="w-8 md:w-10 text-center flex items-center justify-center">
-                                                        <span className="font-bold text-base md:text-lg tabular-nums">{quantities[product.id] || 0}</span>
+                                                    <div className="w-10 md:w-12 text-center flex items-center justify-center">
+                                                        <span className="font-bold text-lg md:text-xl tabular-nums">{quantities[product.id] || 0}</span>
                                                     </div>
                                                     <Button
                                                         variant="secondary"
                                                         size="icon"
-                                                        className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                         onClick={() => handleQuantityChange(product.id, 1)}
                                                         disabled={isOutOfStock || currentQty >= availableStock}
                                                     >
@@ -264,7 +264,7 @@ export default function ProductsPOS({
                 </Tabs>
             </CardContent>
 
-            <div className="border-t border-border/50 bg-secondary/10 p-5 mt-auto shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.5)] z-10">
+            <div className="border-t border-border/50 bg-secondary/10 p-4 sm:p-5 mt-auto shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.5)] z-10">
                 {Object.entries(quantities).length > 0 && (
                     <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40">
                         {Object.entries(quantities).map(([productId, qty]) => {
@@ -291,7 +291,7 @@ export default function ProductsPOS({
                             variant="outline" 
                             onClick={onClose} 
                             disabled={isSaving}
-                            className="w-full sm:w-1/4 h-12 sm:h-auto font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
+                            className="w-full sm:w-1/4 h-12 font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
                         >
                             Cancelar
                         </Button>
@@ -307,10 +307,10 @@ export default function ProductsPOS({
                             }
                         }} 
                         disabled={isSaving}
-                        className="w-full sm:flex-1 h-14 sm:h-auto bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
+                        className="w-full sm:flex-1 h-14 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
                     >
                         <ShoppingCart className="w-5 h-5 mr-2" />
-                        {isSaving ? "Guardando..." : "Añadir y seguir jugando"}
+                        {isSaving ? "Guardando..." : "Guardar productos"}
                     </Button>
                     {onGoToCharge && (
                         <Button 
@@ -324,9 +324,9 @@ export default function ProductsPOS({
                                 }
                             }} 
                             disabled={isSaving}
-                            className="w-full sm:flex-1 h-14 sm:h-auto bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
+                            className="w-full sm:flex-1 h-14 bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
                         >
-                            {isSaving ? "Guardando..." : "💰 Ir a Cobrar Boleta"}
+                            {isSaving ? "Guardando..." : "💰 Guardar y cobrar"}
                         </Button>
                     )}
                 </div>

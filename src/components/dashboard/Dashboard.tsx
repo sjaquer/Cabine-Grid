@@ -542,12 +542,24 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Vista rápida</p>
-              <h2 className="text-base md:text-lg font-semibold">Cabinas</h2>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Flujo rápido</p>
+              <h2 className="text-base md:text-lg font-semibold">Cabinas en 3 pasos</h2>
             </div>
             <Badge variant="secondary" className="text-xs md:text-sm">
               Activas: {occupiedMachines}
             </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2">
+              <span className="font-semibold text-primary">1.</span> Filtra: activas, libres o todas.
+            </div>
+            <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2">
+              <span className="font-semibold text-primary">2.</span> Toca una cabina para abrir acciones.
+            </div>
+            <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2">
+              <span className="font-semibold text-primary">3.</span> Asigna, agrega productos o cobra.
+            </div>
           </div>
 
           {/* Filtros rápidos para operación */}

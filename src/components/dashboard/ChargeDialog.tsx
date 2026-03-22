@@ -65,6 +65,12 @@ export default function ChargeDialog({
   const numAmountPaid = parseFloat(amountPaid) || 0;
   const change = numAmountPaid > finalCost ? numAmountPaid - finalCost : 0;
 
+  const quickAmounts = [
+    finalCost,
+    Math.ceil(finalCost / 5) * 5,
+    Math.ceil(finalCost / 10) * 10,
+  ];
+
   const handleConfirm = () => {
     if (isProcessing) return;
     onConfirmPayment(machine.id, finalCost, paymentMethod);
@@ -86,15 +92,27 @@ export default function ChargeDialog({
         </div>
 
         <div className="w-full overflow-y-auto flex-1 min-h-0 px-4 sm:px-6 py-4 sm:py-5 space-y-5 bg-background/50">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2">
+                    <span className="font-semibold text-primary">1.</span> Revisa total y consumo.
+                  </div>
+                  <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2">
+                    <span className="font-semibold text-primary">2.</span> Elige método de pago.
+                  </div>
+                  <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2">
+                    <span className="font-semibold text-primary">3.</span> Confirma y termina sesión.
+                  </div>
+                </div>
+
                 {/* Detalle de Sesión */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 p-5 rounded-xl bg-secondary/30 border border-border/60 shadow-sm items-start">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4 rounded-xl bg-secondary/30 border border-border/60 shadow-sm items-start">
                     <div className="flex flex-col gap-1">
                         <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Cliente</span>
-                        <span className="font-headline font-bold text-base md:text-lg text-foreground/90">{sanitizeString(session.client) || 'Ocasional'}</span>
+                        <span className="font-headline font-bold text-sm md:text-lg text-foreground/90">{sanitizeString(session.client) || 'Ocasional'}</span>
                     </div>
                     <div className="flex flex-col gap-1 sm:text-center">
                         <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Tarifa por Hora</span>
-                        <span className="font-semibold text-sm md:text-base font-mono text-accent">{formatCurrency(session.hourlyRate || 0)}</span>
+                        <span className="font-semibold text-sm font-mono text-accent">{formatCurrency(session.hourlyRate || 0)}</span>
                     </div>
                     <div className="flex flex-col gap-1 text-center">
                         <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Tiempo Usado</span>
@@ -103,7 +121,7 @@ export default function ChargeDialog({
                     <div className="flex flex-col gap-1 text-right sm:text-center lg:text-right">
                         <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">Tiempo a Cobrar</span>
                         <div className="flex flex-col items-end sm:items-center lg:items-end gap-0.5">
-                          <span className="font-mono font-bold text-base md:text-lg text-primary">{formatDuration(billedMinutes)}</span>
+                          <span className="font-mono font-bold text-base text-primary">{formatDuration(billedMinutes)}</span>
                           <span className="text-[10px] text-muted-foreground font-normal">{chargeDescription}</span>
                         </div>
                     </div>
@@ -154,17 +172,17 @@ export default function ChargeDialog({
                         onValueChange={(val) => setPaymentMethod(val as PaymentMethod)} 
                       className="grid grid-cols-1 sm:grid-cols-3 gap-3"
                     >
-                        <Label htmlFor="efectivo" className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 bg-background p-4 hover:bg-secondary/40 cursor-pointer transition-all peer-data-[state=checked]:border-status-available [&:has([data-state=checked])]:border-status-available [&:has([data-state=checked])]:bg-status-available/10 [&:has([data-state=checked])]:shadow-[0_0_15px_-3px_rgba(34,197,94,0.3)]">
+                        <Label htmlFor="efectivo" className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 bg-background p-5 min-h-24 hover:bg-secondary/40 cursor-pointer transition-all peer-data-[state=checked]:border-status-available [&:has([data-state=checked])]:border-status-available [&:has([data-state=checked])]:bg-status-available/10 [&:has([data-state=checked])]:shadow-[0_0_15px_-3px_rgba(34,197,94,0.3)]">
                             <RadioGroupItem value="efectivo" id="efectivo" className="sr-only peer" />
                             <span className="text-3xl drop-shadow-sm group-hover:scale-110 transition-transform">💵</span>
                             <span className="text-sm font-bold text-foreground/80">Efectivo</span>
                         </Label>
-                        <Label htmlFor="yape" className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 bg-background p-4 hover:bg-secondary/40 cursor-pointer transition-all peer-data-[state=checked]:border-[#742384] [&:has([data-state=checked])]:border-[#742384] [&:has([data-state=checked])]:bg-[#742384]/10 [&:has([data-state=checked])]:shadow-[0_0_15px_-3px_rgba(116,35,132,0.3)]">
+                        <Label htmlFor="yape" className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 bg-background p-5 min-h-24 hover:bg-secondary/40 cursor-pointer transition-all peer-data-[state=checked]:border-[#742384] [&:has([data-state=checked])]:border-[#742384] [&:has([data-state=checked])]:bg-[#742384]/10 [&:has([data-state=checked])]:shadow-[0_0_15px_-3px_rgba(116,35,132,0.3)]">
                             <RadioGroupItem value="yape" id="yape" className="sr-only peer" />
                             <span className="text-3xl drop-shadow-sm group-hover:scale-110 transition-transform">📱</span>
                             <span className="text-sm font-bold text-foreground/80">Yape/Plin</span>
                         </Label>
-                        <Label htmlFor="otro" className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 bg-background p-4 hover:bg-secondary/40 cursor-pointer transition-all peer-data-[state=checked]:border-accent [&:has([data-state=checked])]:border-accent [&:has([data-state=checked])]:bg-accent/10 [&:has([data-state=checked])]:shadow-[0_0_15px_-3px_rgba(var(--accent),0.3)]">
+                        <Label htmlFor="otro" className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 bg-background p-5 min-h-24 hover:bg-secondary/40 cursor-pointer transition-all peer-data-[state=checked]:border-accent [&:has([data-state=checked])]:border-accent [&:has([data-state=checked])]:bg-accent/10 [&:has([data-state=checked])]:shadow-[0_0_15px_-3px_rgba(var(--accent),0.3)]">
                             <RadioGroupItem value="otro" id="otro" className="sr-only peer" />
                             <span className="text-3xl drop-shadow-sm group-hover:scale-110 transition-transform">💳</span>
                             <span className="text-sm font-bold text-foreground/80">Tarjeta</span>
@@ -183,9 +201,22 @@ export default function ChargeDialog({
                                 placeholder={finalCost.toFixed(2)}
                                 value={amountPaid}
                                 onChange={(e) => setAmountPaid(e.target.value)}
-                                className="text-right font-mono text-xl font-bold h-12 border-status-available/30 focus-visible:ring-status-available/50 bg-background shadow-sm"
+                                className="text-right font-mono text-xl font-bold h-14 border-status-available/30 focus-visible:ring-status-available/50 bg-background shadow-sm"
                                 autoFocus
                             />
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {quickAmounts.map((value, index) => (
+                                <Button
+                                  key={`${value}-${index}`}
+                                  type="button"
+                                  variant="outline"
+                                  className="h-10"
+                                  onClick={() => setAmountPaid(value.toFixed(2))}
+                                >
+                                  {index === 0 ? "Exacto" : formatCurrency(value)}
+                                </Button>
+                              ))}
+                            </div>
                         </div>
                         <div className="flex flex-col justify-end pb-1 sm:pl-4">
                             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-1">Vuelto a entregar:</p>
