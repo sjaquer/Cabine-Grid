@@ -1,11 +1,11 @@
 "use client";
 
 import { z } from "zod";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Machine } from "@/lib/types";
-import { clients, rates } from "@/lib/data";
+import type { Customer, Machine } from "@/lib/types";
+import { rates } from "@/lib/data";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,13 +33,12 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Clock } from "lucide-react";
+import { Clock, Search } from "lucide-react";
 
 const OCCASIONAL_CLIENT_VALUE = "__ocasional__";
 
 const formSchema = z.object({
-  client: z.string().optional(),
+  customerId: z.string().optional(),
   usageMode: z.enum(['free', 'prepaid']),
   prepaidHours: z.coerce.number().positive("Las horas deben ser mayor a 0").optional(),
 }).refine((data) => {
@@ -54,10 +53,24 @@ const formSchema = z.object({
 
 export type AssignPCFormValues = z.infer<typeof formSchema>;
 
+const quickCustomerSchema = z.object({
+  customerCode: z.string().trim().min(1, "El codigo es obligatorio"),
+  fullName: z.string().trim().min(2, "Ingresa el nombre completo"),
+  age: z
+    .union([z.coerce.number().int().min(5, "Edad minima 5").max(110, "Edad maxima 110"), z.nan()])
+    .optional()
+    .transform((value) => (typeof value === "number" && Number.isFinite(value) ? value : undefined)),
+  favoriteGamesText: z.string().trim().optional(),
+});
+
+type QuickCustomerFormValues = z.infer<typeof quickCustomerSchema>;
+
 type AssignPCDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   machine: Machine | null;
+  customers: Customer[];
+  onCreateCustomer: (payload: Omit<Customer, "id">) => Promise<Customer>;
   onAssign: (values: AssignPCFormValues) => void;
 };
 
@@ -65,26 +78,71 @@ export default function AssignPCDialog({
   isOpen,
   onOpenChange,
   machine,
+  customers,
+  onCreateCustomer,
   onAssign,
 }: AssignPCDialogProps) {
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const weekdayLabels = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
+
   const form = useForm<AssignPCFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      client: undefined,
+      customerId: undefined,
       usageMode: 'free',
       prepaidHours: 1,
     },
   });
 
+  const quickCustomerForm = useForm<QuickCustomerFormValues>({
+    resolver: zodResolver(quickCustomerSchema),
+    defaultValues: {
+      customerCode: "",
+      fullName: "",
+      age: undefined,
+      favoriteGamesText: "",
+    },
+  });
+
+  const sortedCustomers = useMemo(
+    () => [...customers].filter((customer) => customer.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    [customers]
+  );
+
+  const filteredCustomers = useMemo(() => {
+    const needle = customerSearch.toLowerCase().trim();
+    if (!needle) return sortedCustomers;
+
+    return sortedCustomers.filter((customer) => {
+      const fullName = customer.fullName.toLowerCase();
+      const code = customer.customerCode.toLowerCase();
+      return fullName.includes(needle) || code.includes(needle);
+    });
+  }, [customerSearch, sortedCustomers]);
+
+  const selectedCustomerId = form.watch("customerId");
+  const selectedCustomer = useMemo(() => {
+    if (!selectedCustomerId) return null;
+    return customers.find((customer) => customer.id === selectedCustomerId) ?? null;
+  }, [customers, selectedCustomerId]);
+
   useEffect(() => {
     if (isOpen) {
       form.reset({
-        client: undefined,
+        customerId: undefined,
         usageMode: 'free',
         prepaidHours: 1,
       });
+      quickCustomerForm.reset({
+        customerCode: "",
+        fullName: "",
+        age: undefined,
+        favoriteGamesText: "",
+      });
+      setCustomerSearch("");
     }
-  }, [isOpen, form]);
+  }, [isOpen, form, quickCustomerForm]);
   
   const { formState: { isSubmitting } } = form;
   const currentMode = form.watch('usageMode');
@@ -107,6 +165,40 @@ export default function AssignPCDialog({
   const onSubmit = (values: AssignPCFormValues) => {
     onAssign(values);
     form.reset();
+  };
+
+  const handleQuickCreateCustomer = async (values: QuickCustomerFormValues) => {
+    try {
+      setIsCreatingCustomer(true);
+
+      const created = await onCreateCustomer({
+        customerCode: values.customerCode.trim().toUpperCase(),
+        fullName: values.fullName.trim(),
+        ...(typeof values.age === "number" ? { age: values.age } : {}),
+        favoriteGames: (values.favoriteGamesText || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        isActive: true,
+      });
+
+      form.setValue("customerId", created.id, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+
+      quickCustomerForm.reset({
+        customerCode: "",
+        fullName: "",
+        age: undefined,
+        favoriteGamesText: "",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo crear el cliente";
+      quickCustomerForm.setError("root", { message });
+    } finally {
+      setIsCreatingCustomer(false);
+    }
   };
 
   return (
@@ -132,10 +224,19 @@ export default function AssignPCDialog({
             {/* Cliente */}
             <FormField
               control={form.control}
-              name="client"
+              name="customerId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm font-semibold">Cliente (Opcional)</FormLabel>
+                  <div className="relative mb-2">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={customerSearch}
+                      onChange={(event) => setCustomerSearch(event.target.value)}
+                      placeholder="Buscar cliente por nombre o codigo"
+                      className="pl-9"
+                    />
+                  </div>
                   <Select
                     onValueChange={(value) => field.onChange(value === OCCASIONAL_CLIENT_VALUE ? undefined : value)}
                     value={field.value ?? OCCASIONAL_CLIENT_VALUE}
@@ -147,17 +248,186 @@ export default function AssignPCDialog({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value={OCCASIONAL_CLIENT_VALUE}>Cliente ocasional</SelectItem>
-                      {clients.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
+                      {filteredCustomers.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.fullName} ({customer.customerCode})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {filteredCustomers.length} cliente(s) encontrado(s)
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {selectedCustomer && (
+              <Card className="border border-primary/20 bg-primary/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Resumen del cliente seleccionado</CardTitle>
+                  <CardDescription>
+                    {selectedCustomer.fullName} - Codigo {selectedCustomer.customerCode}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                  {(() => {
+                    const metrics = selectedCustomer.metrics;
+                    const totalSessions = metrics?.totalSessions ?? 0;
+                    const totalSpent = metrics?.totalSpent ?? 0;
+                    const avgTicket = totalSessions > 0 ? totalSpent / totalSessions : 0;
+                    const topDay = Object.entries(metrics?.visitsByWeekday ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
+                    const topHour = Object.entries(metrics?.visitHours ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+                    return (
+                      <>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Sesiones</p>
+                    <p className="font-semibold">{totalSessions}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Horas acumuladas</p>
+                    <p className="font-semibold">{((metrics?.totalMinutesRented ?? 0) / 60).toFixed(1)} h</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Productos comprados</p>
+                    <p className="font-semibold">{metrics?.totalProductsBought ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Gasto acumulado</p>
+                    <p className="font-semibold">S/. {totalSpent.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Ticket promedio</p>
+                    <p className="font-semibold">S/. {avgTicket.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">PC frecuente</p>
+                    <p className="font-semibold">
+                      {Object.entries(metrics?.machineUsage ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Dia/hora frecuente</p>
+                    <p className="font-semibold">
+                      {topDay !== undefined ? weekdayLabels[Number(topDay)] : "-"}
+                      {topHour !== undefined ? ` ${String(Number(topHour)).padStart(2, "0")}:00` : ""}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-muted-foreground">Juegos favoritos</p>
+                    <p className="font-semibold truncate">{(selectedCustomer.favoriteGames ?? []).join(", ") || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Ultima visita</p>
+                    <p className="font-semibold">
+                      {metrics?.lastVisitAt?.toDate
+                        ? metrics.lastVisitAt.toDate().toLocaleString("es-PE", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "-"}
+                    </p>
+                  </div>
+                      </>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="border border-dashed">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Crear cliente rapido</CardTitle>
+                <CardDescription>Registra un cliente sin salir de esta asignacion.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...quickCustomerForm}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FormField
+                      control={quickCustomerForm.control}
+                      name="customerCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Codigo</FormLabel>
+                          <FormControl>
+                            <Input placeholder="CLI-001" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={quickCustomerForm.control}
+                      name="fullName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nombre completo</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Cliente" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={quickCustomerForm.control}
+                      name="age"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Edad</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="5"
+                              max="110"
+                              placeholder="18"
+                              value={field.value ?? ""}
+                              onChange={(event) => {
+                                const next = event.target.value;
+                                field.onChange(next === "" ? undefined : Number(next));
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={quickCustomerForm.control}
+                      name="favoriteGamesText"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Juegos favoritos</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Valorant, Dota 2" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {quickCustomerForm.formState.errors.root?.message && (
+                      <p className="sm:col-span-2 text-sm text-destructive">
+                        {quickCustomerForm.formState.errors.root.message}
+                      </p>
+                    )}
+                    <div className="sm:col-span-2 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isCreatingCustomer}
+                        onClick={quickCustomerForm.handleSubmit(handleQuickCreateCustomer)}
+                      >
+                        {isCreatingCustomer ? "Creando..." : "Crear cliente y seleccionar"}
+                      </Button>
+                    </div>
+                  </div>
+                </Form>
+              </CardContent>
+            </Card>
 
             {/* Modo de Uso */}
             <FormField

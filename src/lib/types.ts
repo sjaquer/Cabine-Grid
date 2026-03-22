@@ -17,6 +17,8 @@ export type Rate = {
 export type Session = {
   id: string;
   client?: string;
+  clientId?: string;
+  clientCode?: string;
   startTime: number;
   rateId?: string;
   hourlyRate?: number;
@@ -79,6 +81,8 @@ export type Sale = {
   receiptNumber?: string;
   shiftId?: string;
   clientName?: string;
+  customerId?: string;
+  customerCode?: string;
   startTime: Timestamp;
   endTime: Timestamp;
   totalMinutes: number;
@@ -94,6 +98,33 @@ export type Sale = {
 };
 
 export type UserRole = 'admin' | 'manager' | 'operator' | 'view-only';
+
+export type CustomerMetrics = {
+  totalSessions: number;
+  totalMinutesRented: number;
+  totalProductsBought: number;
+  totalSpent?: number;
+  machineUsage?: Record<string, number>;
+  visitsByWeekday?: Record<string, number>;
+  visitHours?: Record<string, number>;
+  lastVisitAt?: Timestamp;
+};
+
+export type Customer = {
+  id: string;
+  customerCode: string;
+  fullName: string;
+  age?: number;
+  favoriteGames?: string[];
+  isActive?: boolean;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+  createdBy?: {
+    id?: string;
+    email?: string;
+  };
+  metrics?: CustomerMetrics;
+};
 
 export type UserProfile = {
   uid: string;

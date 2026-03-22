@@ -6,7 +6,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import type { Machine, Session, Sale, SoldProduct, PaymentMethod, StockMovement } from './types';
+import type { Customer, Machine, Session, Sale, SoldProduct, PaymentMethod, StockMovement } from './types';
 import { logAuditAction, logAuditFailure } from './audit-log';
 
 export interface CloseSessionPayload {
@@ -60,6 +60,10 @@ export async function closeSession(
 
   const endTime = Date.now();
   const totalMinutes = Math.ceil((endTime - session.startTime) / (1000 * 60));
+  const visitDate = new Date(session.startTime);
+  const weekdayKey = String(visitDate.getDay());
+  const hourKey = String(visitDate.getHours());
+  const totalProductsBought = soldProducts.reduce((sum, product) => sum + product.quantity, 0);
 
   // Build the Sale document
   const operator = {
@@ -70,6 +74,8 @@ export async function closeSession(
   const newSale: Omit<Sale, 'id'> = {
     machineName: machine.name,
     clientName: session.client || 'Ocasional',
+    ...(session.clientId ? { customerId: session.clientId } : {}),
+    ...(session.clientCode ? { customerCode: session.clientCode } : {}),
     ...(locationId ? { locationId } : {}),
     receiptNumber,
     ...(shiftId ? { shiftId } : {}),
@@ -90,6 +96,21 @@ export async function closeSession(
       const machineSnap = await transaction.get(machineRef);
       if (!machineSnap.exists()) {
         throw new Error(`Machine ${machineId} not found`);
+      }
+
+      // Read customer document before writes if this session is linked to a customer.
+      let customerRef;
+      let customerData: Customer | null = null;
+      if (session.clientId) {
+        customerRef = doc(firestore, 'customers', session.clientId);
+        const customerSnap = await transaction.get(customerRef);
+        if (!customerSnap.exists()) {
+          throw new Error('The selected customer no longer exists.');
+        }
+        customerData = {
+          ...(customerSnap.data() as Customer),
+          id: customerSnap.id,
+        };
       }
 
       // 2. Read all inventory docs before any write (Firestore requirement)
@@ -185,6 +206,37 @@ export async function closeSession(
         status: 'available',
         session: null,
       });
+
+      // 5. Update customer CRM metrics for this finished session
+      if (session.clientId && customerRef && customerData) {
+        const currentMetrics = customerData.metrics;
+        const currentMachineUsage = currentMetrics?.machineUsage ?? {};
+        const currentVisitsByWeekday = currentMetrics?.visitsByWeekday ?? {};
+        const currentVisitHours = currentMetrics?.visitHours ?? {};
+
+        transaction.set(customerRef, {
+          metrics: {
+            totalSessions: (currentMetrics?.totalSessions ?? 0) + 1,
+            totalMinutesRented: (currentMetrics?.totalMinutesRented ?? 0) + totalMinutes,
+            totalProductsBought: (currentMetrics?.totalProductsBought ?? 0) + totalProductsBought,
+            totalSpent: (currentMetrics?.totalSpent ?? 0) + amount,
+            machineUsage: {
+              ...currentMachineUsage,
+              [machine.name]: (currentMachineUsage[machine.name] ?? 0) + 1,
+            },
+            visitsByWeekday: {
+              ...currentVisitsByWeekday,
+              [weekdayKey]: (currentVisitsByWeekday[weekdayKey] ?? 0) + 1,
+            },
+            visitHours: {
+              ...currentVisitHours,
+              [hourKey]: (currentVisitHours[hourKey] ?? 0) + 1,
+            },
+            lastVisitAt: Timestamp.fromMillis(endTime),
+          },
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
 
       return {
         saleId: saleRef.id,

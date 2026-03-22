@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
+import type { Customer, Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
 import type { Inventory } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -57,6 +57,11 @@ export default function Dashboard() {
   }, [firestore]);
 
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
+  const customersQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, "customers"));
+  }, [firestore]);
+  const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   
   const inventoryQuery = useMemoFirebase(() => {
@@ -110,6 +115,11 @@ export default function Dashboard() {
       .filter((product) => product.isActive !== false)
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [productsData]);
+
+  const customers = useMemo(
+    () => (customersData ?? []) as Customer[],
+    [customersData]
+  );
 
   const availableLocations = useMemo(() => {
     const profileLocationIds = userProfile?.locationIds;
@@ -271,6 +281,10 @@ export default function Dashboard() {
 
   const handleAssignPC = useCallback(async (values: AssignPCFormValues) => {
     if (!machineToAssign || !firestore) return;
+
+    const selectedCustomer = values.customerId
+      ? customers.find((customer) => customer.id === values.customerId) ?? null
+      : null;
     
     // Obtener la tarifa de la máquina
     const machineRate = machineToAssign.rateId ? rates.find(r => r.id === machineToAssign.rateId) : null;
@@ -288,7 +302,13 @@ export default function Dashboard() {
       hourlyRate: effectiveRate.pricePerHour,
       usageMode: values.usageMode,
       ...(values.usageMode === 'prepaid' && values.prepaidHours ? { prepaidHours: values.prepaidHours } : {}),
-      ...(values.client ? { client: values.client } : {}),
+      ...(selectedCustomer
+        ? {
+            client: selectedCustomer.fullName,
+            clientId: selectedCustomer.id,
+            clientCode: selectedCustomer.customerCode,
+          }
+        : {}),
       ...(user?.uid ? { userId: user.uid } : {}),
     };
 
@@ -316,13 +336,14 @@ export default function Dashboard() {
             prepaidHours: values.prepaidHours ?? null,
             rateId: effectiveRate.id,
             rateName: effectiveRate.name,
-            client: values.client || 'Ocasional',
+            client: selectedCustomer?.fullName || 'Ocasional',
+            customerId: selectedCustomer?.id || null,
           },
         });
 
         toast({
             title: "Sesión Iniciada",
-            description: `${machineToAssign.name} asignada a ${values.client || 'un cliente ocasional'} en modo ${values.usageMode === 'prepaid' ? 'prepagado' : 'pago por uso'}.`,
+            description: `${machineToAssign.name} asignada a ${selectedCustomer?.fullName || 'un cliente ocasional'} en modo ${values.usageMode === 'prepaid' ? 'prepagado' : 'pago por uso'}.`,
         });
         handleAssignDialogChange(false);
     } catch(error) {
@@ -341,7 +362,80 @@ export default function Dashboard() {
             description: "Hubo un problema al actualizar la máquina.",
           });
     }
-  }, [machineToAssign, firestore, user?.uid, selectedLocationId, toast, handleAssignDialogChange]);
+  }, [machineToAssign, firestore, customers, user?.uid, selectedLocationId, toast, handleAssignDialogChange]);
+
+  const handleCreateCustomerQuick = useCallback(async (payload: Omit<Customer, "id">): Promise<Customer> => {
+    if (!firestore) {
+      throw new Error("Firestore no esta disponible");
+    }
+
+    const normalizedCode = payload.customerCode.trim().toUpperCase();
+    const normalizedName = payload.fullName.trim();
+
+    const existingByCode = customers.some((customer) => customer.customerCode.trim().toUpperCase() === normalizedCode);
+    if (existingByCode) {
+      throw new Error("Ya existe un cliente con ese codigo");
+    }
+
+    const docRef = await addDoc(collection(firestore, "customers"), {
+      customerCode: normalizedCode,
+      fullName: normalizedName,
+      ...(typeof payload.age === "number" ? { age: payload.age } : {}),
+      favoriteGames: payload.favoriteGames ?? [],
+      isActive: payload.isActive ?? true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: {
+        id: user?.uid,
+        email: user?.email,
+      },
+      metrics: {
+        totalSessions: 0,
+        totalMinutesRented: 0,
+        totalProductsBought: 0,
+        totalSpent: 0,
+        machineUsage: {},
+        visitsByWeekday: {},
+        visitHours: {},
+      },
+    });
+
+    const created: Customer = {
+      id: docRef.id,
+      customerCode: normalizedCode,
+      fullName: normalizedName,
+      ...(typeof payload.age === "number" ? { age: payload.age } : {}),
+      favoriteGames: payload.favoriteGames ?? [],
+      isActive: true,
+      metrics: {
+        totalSessions: 0,
+        totalMinutesRented: 0,
+        totalProductsBought: 0,
+        totalSpent: 0,
+        machineUsage: {},
+        visitsByWeekday: {},
+        visitHours: {},
+      },
+    };
+
+    await logAuditAction(firestore, {
+      action: 'customer.create.quick',
+      target: 'customers',
+      targetId: created.id,
+      actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+      details: {
+        customerCode: normalizedCode,
+        fullName: normalizedName,
+      },
+    });
+
+    toast({
+      title: "Cliente creado",
+      description: `${normalizedName} ya esta disponible para asignar.`,
+    });
+
+    return created;
+  }, [firestore, customers, user?.uid, user?.email, userProfile?.role, toast]);
 
   const handleConfirmPayment = useCallback(async (machineId: string, amount: number, paymentMethod: PaymentMethod) => {
     if (!firestore || isProcessingPayment) return;
@@ -646,6 +740,8 @@ export default function Dashboard() {
         isOpen={isAssignDialogOpen} 
         onOpenChange={handleAssignDialogChange}
         machine={machineToAssign}
+        customers={customers}
+        onCreateCustomer={handleCreateCustomerQuick}
         onAssign={handleAssignPC}
       />
       

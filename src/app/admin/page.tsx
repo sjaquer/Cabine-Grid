@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Database, Loader2, Package, Cpu, MapPin, ShoppingCart, BarChart3, FileText, Home, Users } from "lucide-react";
+import { ArrowLeft, Package, Cpu, MapPin, ShoppingCart, BarChart3, FileText, Home, Users, UserRound } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MachineManager from "@/components/admin/MachineManager";
@@ -14,22 +14,18 @@ import UserManager from "@/components/admin/UserManager";
 import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
 import FinanceReportsManager from "@/components/admin/FinanceReportsManager";
 import AuditLogsManager from "@/components/admin/AuditLogsManager";
-import type { Machine, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
+import CustomerManager from "@/components/admin/CustomerManager";
+import type { Customer, Machine, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { initialMachines, products as defaultProducts, rates } from "@/lib/data";
 import {
-  Timestamp,
   addDoc,
   collection,
   deleteDoc,
   doc,
-  getDocs,
-  limit,
   query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  writeBatch,
 } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
@@ -43,8 +39,8 @@ export default function AdminPage() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [isSeeding, setIsSeeding] = useState(false);
   const [activeTab, setActiveTab] = useState("machines");
+  const tabsSectionRef = useRef<HTMLDivElement | null>(null);
 
   const shouldLoadSales = activeTab === "finance";
   const shouldLoadAuditLogs = activeTab === "finance" || activeTab === "logs";
@@ -54,6 +50,7 @@ export default function AdminPage() {
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
+  const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
   const closuresQuery = useMemoFirebase(() => {
     if (!firestore || !shouldLoadClosures) return null;
     return query(collection(firestore, "shiftClosures"));
@@ -71,6 +68,7 @@ export default function AdminPage() {
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
+  const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
   const { data: closuresData } = useCollection<any>(closuresQuery);
   const { data: salesData } = useCollection<Omit<Sale, "id">>(salesQuery);
   const { data: auditLogsData } = useCollection<any>(auditLogsQuery);
@@ -91,6 +89,7 @@ export default function AdminPage() {
     [closuresData]
   );
   const sales = useMemo(() => (salesData ?? []) as Sale[], [salesData]);
+  const customers = useMemo(() => (customersData ?? []) as Customer[], [customersData]);
   const auditLogs = useMemo(() => (auditLogsData ?? []), [auditLogsData]);
 
   const auditActor = {
@@ -237,6 +236,91 @@ export default function AdminPage() {
     toast({ title: "Producto eliminado" });
   };
 
+  const handleAddCustomer = async (customer: Omit<Customer, 'id'>) => {
+    const code = customer.customerCode.trim().toUpperCase();
+    const name = customer.fullName.trim();
+    const duplicated = customers.some((item) => item.customerCode.trim().toUpperCase() === code);
+
+    if (duplicated) {
+      throw new Error("Ya existe un cliente con ese codigo");
+    }
+
+    const docRef = await addDoc(collection(firestore, "customers"), {
+      customerCode: code,
+      fullName: name,
+      ...(typeof customer.age === "number" ? { age: customer.age } : {}),
+      favoriteGames: customer.favoriteGames ?? [],
+      isActive: customer.isActive ?? true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: {
+        id: user?.uid,
+        email: user?.email,
+      },
+      metrics: {
+        totalSessions: 0,
+        totalMinutesRented: 0,
+        totalProductsBought: 0,
+        totalSpent: 0,
+        machineUsage: {},
+        visitsByWeekday: {},
+        visitHours: {},
+      },
+    });
+
+    await logAuditAction(firestore, {
+      action: 'customer.create',
+      target: 'customers',
+      targetId: docRef.id,
+      actor: auditActor,
+      details: {
+        customerCode: code,
+        fullName: name,
+      },
+    });
+    toast({ title: "Cliente creado" });
+  };
+
+  const handleEditCustomer = async (id: string, updates: Partial<Customer>) => {
+    const nextCode = updates.customerCode?.trim().toUpperCase();
+    if (nextCode) {
+      const duplicated = customers.some(
+        (item) => item.id !== id && item.customerCode.trim().toUpperCase() === nextCode
+      );
+      if (duplicated) {
+        throw new Error("Ya existe un cliente con ese codigo");
+      }
+    }
+
+    await updateDoc(doc(firestore, "customers", id), {
+      ...updates,
+      ...(nextCode ? { customerCode: nextCode } : {}),
+      ...(updates.fullName ? { fullName: updates.fullName.trim() } : {}),
+      updatedAt: serverTimestamp(),
+    });
+    await logAuditAction(firestore, {
+      action: 'customer.update',
+      target: 'customers',
+      targetId: id,
+      actor: auditActor,
+      details: { updates: { ...updates, ...(nextCode ? { customerCode: nextCode } : {}) } },
+    });
+    toast({ title: "Cliente actualizado" });
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    await deleteDoc(doc(firestore, "customers", id));
+    await logAuditAction(firestore, {
+      action: 'customer.delete',
+      target: 'customers',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
+    toast({ title: "Cliente eliminado" });
+  };
+
   const handleChangeUserRole = async (userId: string, role: UserRole, locationIds: string[]) => {
     await updateDoc(doc(firestore, "users", userId), {
       role,
@@ -346,170 +430,11 @@ export default function AdminPage() {
     toast({ title: "Cierre reabierto" });
   };
 
-  const handleSeedMockData = async () => {
-    setIsSeeding(true);
-    try {
-      const [machinesSnap, locationsSnap, productsSnap, usersSnap, salesSnap] = await Promise.all([
-        getDocs(query(collection(firestore, "machines"), limit(1))),
-        getDocs(query(collection(firestore, "locations"), limit(1))),
-        getDocs(query(collection(firestore, "products"), limit(1))),
-        getDocs(query(collection(firestore, "users"), limit(1))),
-        getDocs(query(collection(firestore, "sales"), limit(1))),
-      ]);
-
-      const batch = writeBatch(firestore);
-
-      if (locationsSnap.empty) {
-        const centroRef = doc(collection(firestore, "locations"));
-        const norteRef = doc(collection(firestore, "locations"));
-
-        batch.set(centroRef, {
-          name: "Cabine Grid Centro",
-          address: "Av. Principal 120 - Centro",
-          phone: "(01) 555-1200",
-          fractionMinutes: 5,
-          isActive: true,
-          createdAt: serverTimestamp(),
-          updateAt: serverTimestamp(),
-        });
-
-        batch.set(norteRef, {
-          name: "Cabine Grid Norte",
-          address: "Jr. Los Pinos 450 - Norte",
-          phone: "(01) 555-4500",
-          fractionMinutes: 5,
-          isActive: true,
-          createdAt: serverTimestamp(),
-          updateAt: serverTimestamp(),
-        });
-
-        if (machinesSnap.empty) {
-          initialMachines.forEach((machine, index) => {
-            const machineRef = doc(collection(firestore, "machines"));
-            batch.set(machineRef, {
-              ...machine,
-              locationId: index < 6 ? centroRef.id : norteRef.id,
-              specs: {
-                processor: index % 3 === 0 ? "Ryzen 5 5600G" : "Core i5 10400",
-                ram: index % 2 === 0 ? "16GB" : "8GB",
-                storage: index % 4 === 0 ? "1TB SSD" : "512GB SSD",
-              },
-            });
-          });
-        }
-      } else if (machinesSnap.empty) {
-        const locationIds = locationsSnap.docs.map((locationDoc) => locationDoc.id);
-        initialMachines.forEach((machine, index) => {
-          const machineRef = doc(collection(firestore, "machines"));
-          batch.set(machineRef, {
-            ...machine,
-            ...(locationIds.length > 0 ? { locationId: locationIds[index % locationIds.length] } : {}),
-            specs: {
-              processor: index % 3 === 0 ? "Ryzen 5 5600G" : "Core i5 10400",
-              ram: index % 2 === 0 ? "16GB" : "8GB",
-              storage: index % 4 === 0 ? "1TB SSD" : "512GB SSD",
-            },
-          });
-        });
-      }
-
-      if (productsSnap.empty) {
-        defaultProducts.forEach((product) => {
-          const productRef = doc(collection(firestore, "products"));
-          batch.set(productRef, {
-            name: product.name,
-            price: product.price,
-            category: product.category,
-            stock: product.stock ?? 0,
-            isActive: true,
-            createdAt: serverTimestamp(),
-          });
-        });
-      }
-
-      if (usersSnap.empty) {
-        batch.set(doc(firestore, "users", "demo-admin"), {
-          uid: "demo-admin",
-          email: "admin@cabinegrid.com",
-          name: "Administrador Demo",
-          role: "admin",
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
-        batch.set(doc(firestore, "users", "demo-operator"), {
-          uid: "demo-operator",
-          email: "operador@cabinegrid.com",
-          name: "Operador Demo",
-          role: "operator",
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      if (salesSnap.empty) {
-        const now = new Date();
-        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-        const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-        const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-
-        const sampleSales: Omit<Sale, "id">[] = [
-          {
-            machineName: "PC 01",
-            clientName: "PlayerOne",
-            startTime: Timestamp.fromDate(twoHoursAgo),
-            endTime: Timestamp.fromDate(oneHourAgo),
-            totalMinutes: 60,
-            amount: 3,
-            hourlyRate: 3,
-            paymentMethod: "efectivo",
-            soldProducts: [
-              { productId: "demo-p1", productName: "Inka Kola 500ml", quantity: 1, unitPrice: 2.5 },
-            ],
-          },
-          {
-            machineName: "PC 03",
-            clientName: "Nexus",
-            startTime: Timestamp.fromDate(threeHoursAgo),
-            endTime: Timestamp.fromDate(twoHoursAgo),
-            totalMinutes: 60,
-            amount: 5,
-            hourlyRate: 5,
-            paymentMethod: "yape",
-          },
-        ];
-
-        sampleSales.forEach((sale) => {
-          const saleRef = doc(collection(firestore, "sales"));
-          batch.set(saleRef, sale);
-        });
-      }
-
-      await batch.commit();
-      await logAuditAction(firestore, {
-        action: 'system.seed.mock',
-        target: 'system',
-        targetId: 'seed',
-        actor: auditActor,
-        severity: 'medium',
-      });
-      toast({ title: "Datos mock cargados", description: "Ya puedes probar flujos completos en el sistema." });
-    } catch (error) {
-      console.error(error);
-      await logAuditFailure(firestore, {
-        action: 'system.seed.mock.error',
-        target: 'system',
-        targetId: 'seed',
-        actor: auditActor,
-        error,
-      });
-      toast({
-        variant: "destructive",
-        title: "Error al crear datos mock",
-        description: "Verifica permisos de Firestore y vuelve a intentar.",
-      });
-    } finally {
-      setIsSeeding(false);
-    }
+  const handleQuickActionSelect = (tab: string) => {
+    setActiveTab(tab);
+    requestAnimationFrame(() => {
+      tabsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   return (
@@ -557,27 +482,7 @@ export default function AdminPage() {
               <StatQuick label="Locales" value={locations.length} icon={<MapPin className="w-4 h-4" />} />
               <StatQuick label="Productos" value={products.length} icon={<ShoppingCart className="w-4 h-4" />} />
               <StatQuick label="Usuarios" value={users.length} icon={<Users className="w-4 h-4" />} />
-              <div className="flex items-center justify-end gap-2">
-                <Button 
-                  onClick={handleSeedMockData} 
-                  disabled={isSeeding}
-                  variant="default" 
-                  size="sm" 
-                  className="gap-2 h-9"
-                >
-                  {isSeeding ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="hidden md:inline">Cargando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Database className="w-4 h-4" />
-                      <span className="hidden md:inline">Datos Prueba</span>
-                    </>
-                  )}
-                </Button>
-              </div>
+              <StatQuick label="Clientes" value={customers.length} icon={<UserRound className="w-4 h-4" />} />
             </div>
           </div>
         </header>
@@ -593,6 +498,7 @@ export default function AdminPage() {
                 icon={<Cpu className="w-5 h-5" />}
                 count={machines.length}
                 tabValue="machines"
+                onSelectTab={handleQuickActionSelect}
               />
               <QuickActionCard
                 title="Locales"
@@ -600,6 +506,7 @@ export default function AdminPage() {
                 icon={<MapPin className="w-5 h-5" />}
                 count={locations.length}
                 tabValue="locations"
+                onSelectTab={handleQuickActionSelect}
               />
               <QuickActionCard
                 title="Productos"
@@ -607,6 +514,15 @@ export default function AdminPage() {
                 icon={<ShoppingCart className="w-5 h-5" />}
                 count={products.length}
                 tabValue="products"
+                onSelectTab={handleQuickActionSelect}
+              />
+              <QuickActionCard
+                title="Clientes"
+                description="CRM y fidelizacion"
+                icon={<UserRound className="w-5 h-5" />}
+                count={customers.length}
+                tabValue="customers"
+                onSelectTab={handleQuickActionSelect}
               />
               <QuickActionCard
                 title="Usuarios"
@@ -614,17 +530,20 @@ export default function AdminPage() {
                 icon={<Users className="w-5 h-5" />}
                 count={users.length}
                 tabValue={userProfile?.role === "admin" ? "users" : null}
+                onSelectTab={handleQuickActionSelect}
               />
             </div>
           </div>
 
           {/* Tabs de Gestión */}
+          <div ref={tabsSectionRef}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="bg-card/80 rounded-lg border border-border/50 p-4 mb-6">
-              <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 bg-transparent h-auto">
+              <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 bg-transparent h-auto">
                 <TabTriggerWithIcon value="machines" icon={<Cpu className="w-4 h-4" />} label="Cabinas" />
                 <TabTriggerWithIcon value="locations" icon={<MapPin className="w-4 h-4" />} label="Locales" />
                 <TabTriggerWithIcon value="products" icon={<ShoppingCart className="w-4 h-4" />} label="Productos" />
+                <TabTriggerWithIcon value="customers" icon={<UserRound className="w-4 h-4" />} label="Clientes" />
                 <TabTriggerWithIcon value="finance" icon={<BarChart3 className="w-4 h-4" />} label="Finanzas" />
                 <TabTriggerWithIcon value="logs" icon={<FileText className="w-4 h-4" />} label="Auditoría" />
                 <TabTriggerWithIcon value="closures" icon={<Settings className="w-4 h-4" />} label="Cierres" />
@@ -662,6 +581,15 @@ export default function AdminPage() {
                   onAdd={handleAddProduct}
                   onEdit={handleEditProduct}
                   onDelete={handleDeleteProduct}
+                />
+              </TabsContent>
+
+              <TabsContent value="customers">
+                <CustomerManager
+                  customers={customers}
+                  onAdd={handleAddCustomer}
+                  onEdit={handleEditCustomer}
+                  onDelete={handleDeleteCustomer}
                 />
               </TabsContent>
 
@@ -705,6 +633,7 @@ export default function AdminPage() {
               )}
             </div>
           </Tabs>
+          </div>
         </main>
       </div>
     </RoleGuard>
@@ -729,16 +658,37 @@ function QuickActionCard({
   description, 
   icon, 
   count,
-  tabValue
+  tabValue,
+  onSelectTab,
 }: { 
   title: string;
   description: string;
   icon: React.ReactNode;
   count: number;
   tabValue: string | null;
+  onSelectTab: (tab: string) => void;
 }) {
+  const isDisabled = !tabValue;
+
+  const handleOpenTab = () => {
+    if (!tabValue) return;
+    onSelectTab(tabValue);
+  };
+
   return (
-    <Card className="group hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer overflow-hidden">
+    <Card
+      className={`group overflow-hidden transition-all ${isDisabled ? "opacity-70" : "cursor-pointer hover:shadow-lg hover:border-primary/50"}`}
+      onClick={handleOpenTab}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleOpenTab();
+        }
+      }}
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      aria-disabled={isDisabled}
+    >
       <CardContent className="p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="rounded-lg bg-primary/10 p-3 text-primary group-hover:bg-primary/20 transition-colors">
@@ -748,7 +698,16 @@ function QuickActionCard({
         </div>
         <h3 className="font-bold text-lg mb-1">{title}</h3>
         <p className="text-sm text-muted-foreground mb-4">{description}</p>
-        <Button variant="ghost" size="sm" className="w-full gap-2 opacity-75 group-hover:opacity-100 transition-opacity justify-start">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full gap-2 opacity-75 group-hover:opacity-100 transition-opacity justify-start"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleOpenTab();
+          }}
+          disabled={isDisabled}
+        >
           <span>Ir a {title.toLowerCase()}</span>
           <ArrowLeft className="w-4 h-4 rotate-180" />
         </Button>
