@@ -23,7 +23,7 @@ import { canAccessMachine, useAccessibleMachines } from "@/hooks/useMachineAcces
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin } from "lucide-react";
+import { MapPin, PanelTopClose, PanelTopOpen } from "lucide-react";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 
 
@@ -174,6 +174,7 @@ export default function Dashboard() {
 
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
   const [machineViewFilter, setMachineViewFilter] = useState<"active" | "all" | "available">("active");
+  const [isTopPanelHidden, setIsTopPanelHidden] = useState(false);
   
   const { toast } = useToast();
 
@@ -539,75 +540,99 @@ export default function Dashboard() {
 
       {/* Sección compacta de filtros */}
       <div className="border-b border-border/40 bg-card/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-3">
-          <div className="flex items-center justify-between gap-3">
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isTopPanelHidden ? "py-2" : "py-3"} space-y-3`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-base md:text-lg font-semibold">Cabinas</h2>
             </div>
-            <Badge variant="secondary" className="text-xs md:text-sm">
-              Activas: {occupiedMachines}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs md:text-sm whitespace-nowrap">
+                Activas: {occupiedMachines}
+              </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsTopPanelHidden((prev) => !prev)}
+                className="h-8 px-2.5"
+              >
+                {isTopPanelHidden ? <PanelTopOpen className="w-4 h-4" /> : <PanelTopClose className="w-4 h-4" />}
+                <span className="ml-1 hidden sm:inline">{isTopPanelHidden ? "Mostrar" : "Ocultar"}</span>
+              </Button>
+            </div>
           </div>
 
-          {/* Filtros rápidos para operación */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <Button
-              size="sm"
-              variant={machineViewFilter === "active" ? "default" : "outline"}
-              onClick={() => setMachineViewFilter("active")}
-              className="whitespace-nowrap"
-            >
-              Activas ({occupiedMachines})
-            </Button>
-            <Button
-              size="sm"
-              variant={machineViewFilter === "available" ? "default" : "outline"}
-              onClick={() => setMachineViewFilter("available")}
-              className="whitespace-nowrap"
-            >
-              Libres ({availableMachines})
-            </Button>
-            <Button
-              size="sm"
-              variant={machineViewFilter === "all" ? "default" : "outline"}
-              onClick={() => setMachineViewFilter("all")}
-              className="whitespace-nowrap"
-            >
-              Todas ({visibleMachines.length})
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">{filterLabel}</p>
-
-          {/* Alertas de Inventario */}
-          {inventoryAlerts.length > 0 && (
-            <InventoryAlertsDisplay alerts={inventoryAlerts} maxDisplay={3} />
-          )}
-
-          {/* Selección de Local */}
-          {availableLocations.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 md:p-4 rounded-lg bg-background/50 border border-border/30">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <MapPin className="w-4 h-4" />
-                <span>Filtrando por:</span>
-              </div>
-              <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                <SelectTrigger className="w-full sm:w-64">
-                  <SelectValue placeholder="Selecciona local" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableLocations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      <span className="font-medium">{location.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedLocationId && availableLocations.length > 1 && (
-                <Badge variant="secondary" className="hidden sm:flex">
-                  {availableLocations.find(l => l.id === selectedLocationId)?.name}
+          {isTopPanelHidden ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{filterLabel}</span>
+              {selectedLocationId && (
+                <Badge variant="secondary" className="text-[11px]">
+                  {availableLocations.find((location) => location.id === selectedLocationId)?.name || "Local"}
                 </Badge>
               )}
             </div>
+          ) : (
+            <>
+              {/* Filtros rápidos para operación */}
+              <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
+                <Button
+                  size="sm"
+                  variant={machineViewFilter === "active" ? "default" : "outline"}
+                  onClick={() => setMachineViewFilter("active")}
+                  className="whitespace-nowrap"
+                >
+                  Activas ({occupiedMachines})
+                </Button>
+                <Button
+                  size="sm"
+                  variant={machineViewFilter === "available" ? "default" : "outline"}
+                  onClick={() => setMachineViewFilter("available")}
+                  className="whitespace-nowrap"
+                >
+                  Libres ({availableMachines})
+                </Button>
+                <Button
+                  size="sm"
+                  variant={machineViewFilter === "all" ? "default" : "outline"}
+                  onClick={() => setMachineViewFilter("all")}
+                  className="whitespace-nowrap"
+                >
+                  Todas ({visibleMachines.length})
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">{filterLabel}</p>
+
+              {/* Alertas de Inventario */}
+              {inventoryAlerts.length > 0 && (
+                <InventoryAlertsDisplay alerts={inventoryAlerts} maxDisplay={3} />
+              )}
+
+              {/* Selección de Local */}
+              {availableLocations.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 md:p-4 rounded-lg bg-background/50 border border-border/30">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <MapPin className="w-4 h-4" />
+                    <span>Filtrando por:</span>
+                  </div>
+                  <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                    <SelectTrigger className="w-full sm:w-64">
+                      <SelectValue placeholder="Selecciona local" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableLocations.map((location) => (
+                        <SelectItem key={location.id} value={location.id}>
+                          <span className="font-medium">{location.name}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedLocationId && availableLocations.length > 1 && (
+                    <Badge variant="secondary" className="hidden sm:flex">
+                      {availableLocations.find(l => l.id === selectedLocationId)?.name}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
