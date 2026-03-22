@@ -61,7 +61,7 @@ export default function ChargeDialog({
     chargeDescription,
   } = costCalculation;
 
-  const numAmountPaid = parseFloat(amountPaid) || 0;
+  const numAmountPaid = Math.max(0, parseFloat(amountPaid) || 0);
   const change = numAmountPaid > finalCost ? numAmountPaid - finalCost : 0;
 
   const quickAmounts = [
@@ -147,8 +147,8 @@ export default function ChargeDialog({
             </div>
           </div>
 
-          <aside className="mt-4 lg:mt-0 border-t lg:border-t-0 lg:border-l border-border/40 pt-4 lg:pt-0 lg:pl-4 flex flex-col min-h-0">
-            <div className="space-y-3">
+          <aside className="mt-4 lg:mt-0 border-t lg:border-t-0 lg:border-l border-border/40 pt-4 lg:pt-0 lg:pl-4 flex flex-col min-h-0 overflow-hidden">
+            <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-1">
               <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Pago</Label>
               <RadioGroup
                 value={paymentMethod}
@@ -175,9 +175,20 @@ export default function ChargeDialog({
                   <Input
                     id="amount-paid"
                     type="number"
+                    min={0}
                     placeholder={finalCost.toFixed(2)}
                     value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      if (nextValue === "") {
+                        setAmountPaid("");
+                        return;
+                      }
+
+                      const parsedValue = Number(nextValue);
+                      if (Number.isNaN(parsedValue)) return;
+                      setAmountPaid(String(Math.max(0, parsedValue)));
+                    }}
                     className="text-right font-mono text-lg font-bold h-12 border-status-available/30"
                     autoFocus
                   />
@@ -204,7 +215,7 @@ export default function ChargeDialog({
               )}
             </div>
 
-            <div className="mt-auto pt-4 flex flex-col gap-2">
+            <div className="pt-3 mt-3 border-t border-border/40 flex flex-col gap-2 shrink-0 bg-background/70">
               <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full h-11 font-semibold">
                 Cancelar
               </Button>
