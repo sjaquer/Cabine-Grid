@@ -92,22 +92,22 @@ export async function closeSession(
         throw new Error(`Machine ${machineId} not found`);
       }
 
-      // 2. Create Sale document
-      const salesCollection = collection(firestore, 'sales');
-      const saleRef = doc(salesCollection);
-      transaction.set(saleRef, newSale);
+      // 2. Read all inventory docs before any write (Firestore requirement)
+      const inventoryAdjustments: Array<{
+        productId: string;
+        productName: string;
+        quantity: number;
+        currentStock: number;
+        newStock: number;
+        inventoryDocId: string;
+      }> = [];
 
-      const stockMovementIds: string[] = [];
-
-      // 3. Update inventory and create stock movements for each product
       if (locationId && soldProducts.length > 0) {
         const inventoryCollection = collection(firestore, 'inventory');
-        const stockMovementsCollection = collection(firestore, 'stockMovements');
 
         for (const product of soldProducts) {
           if (!product.productId) continue;
 
-          // Get current inventory
           const inventoryDocId = `${locationId}_${product.productId}`;
           const inventoryRef = doc(inventoryCollection, inventoryDocId);
           const inventorySnap = await transaction.get(inventoryRef);
@@ -118,14 +118,39 @@ export async function closeSession(
 
           const newStock = Math.max(0, currentStock - product.quantity);
 
+          inventoryAdjustments.push({
+            productId: product.productId,
+            productName: product.productName,
+            quantity: product.quantity,
+            currentStock,
+            newStock,
+            inventoryDocId,
+          });
+        }
+      }
+
+      // 3. Create sale and apply writes
+      const salesCollection = collection(firestore, 'sales');
+      const saleRef = doc(salesCollection);
+      transaction.set(saleRef, newSale);
+
+      const stockMovementIds: string[] = [];
+
+      if (locationId && inventoryAdjustments.length > 0) {
+        const inventoryCollection = collection(firestore, 'inventory');
+        const stockMovementsCollection = collection(firestore, 'stockMovements');
+
+        for (const adjustment of inventoryAdjustments) {
+          const inventoryRef = doc(inventoryCollection, adjustment.inventoryDocId);
+
           // Update inventory
           transaction.set(
             inventoryRef,
             {
               locationId,
-              productId: product.productId,
-              productName: product.productName,
-              currentStock: newStock,
+              productId: adjustment.productId,
+              productName: adjustment.productName,
+              currentStock: adjustment.newStock,
               updatedAt: serverTimestamp(),
             },
             { merge: true },
@@ -135,12 +160,12 @@ export async function closeSession(
           const stockMovementRef = doc(stockMovementsCollection);
           const stockMovement: Omit<StockMovement, 'id'> = {
             locationId,
-            productId: product.productId,
-            productName: product.productName,
+            productId: adjustment.productId,
+            productName: adjustment.productName,
             type: 'sale',
-            quantity: product.quantity,
-            quantityBefore: currentStock,
-            quantityAfter: newStock,
+            quantity: adjustment.quantity,
+            quantityBefore: adjustment.currentStock,
+            quantityAfter: adjustment.newStock,
             reason: `Sale from ${machine.name}`,
             saleId: saleRef.id,
             shiftId: shiftId || undefined,
