@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Database, Loader2, Package } from "lucide-react";
+import { ArrowLeft, Database, Loader2, Package, Cpu, MapPin, ShoppingCart, BarChart3, FileText, Home, Users } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MachineManager from "@/components/admin/MachineManager";
@@ -35,6 +35,9 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Settings } from "lucide-react";
 
 export default function AdminPage() {
   const { user, userProfile } = useAuth();
@@ -496,121 +499,256 @@ export default function AdminPage() {
 
   return (
     <RoleGuard requiredRoles={["admin", "manager"]}>
-      <div className="min-h-screen bg-secondary">
-        <div className="border-b border-border/50 bg-card/80 backdrop-blur-lg sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h1 className="text-2xl font-headline font-bold">Panel de Administración</h1>
-              <div className="flex items-center gap-2">
+      <div className="min-h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
+        {/* Header Profesional Mejorado */}
+        <header className="sticky top-0 z-50 border-b border-border/50 bg-card/95 backdrop-blur-xl">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Navegación Principal */}
+            <div className="flex items-center justify-between py-4 gap-4">
+              <div className="flex items-center gap-3">
+                <div className="hidden md:flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
+                    <Cpu className="w-5 h-5 text-primary-foreground" />
+                  </div>
+                  <span className="font-headline font-bold text-lg">Cabine Grid</span>
+                </div>
+                <div className="hidden lg:block h-6 w-px bg-border/50"></div>
+                <div className="flex flex-col gap-0.5">
+                  <h1 className="text-xl font-headline font-bold">Panel Administrativo</h1>
+                  <p className="text-xs text-muted-foreground">Gestión integral del sistema</p>
+                </div>
+              </div>
+
+              {/* Botones de Navegación Secundaria - Reorganizados */}
+              <div className="flex items-center gap-3">
+                <Link href="/">
+                  <Button variant="outline" size="sm" className="gap-2 h-9">
+                    <Home className="w-4 h-4" />
+                    <span className="hidden md:inline">Dashboard</span>
+                  </Button>
+                </Link>
+                <Link href="/inventario">
+                  <Button variant="outline" size="sm" className="gap-2 h-9">
+                    <Package className="w-4 h-4" />
+                    <span className="hidden md:inline">Inventario</span>
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* Estadísticas Rápidas */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 py-4 border-t border-border/30">
+              <StatQuick label="Cabinas" value={machines.length} icon={<Cpu className="w-4 h-4" />} />
+              <StatQuick label="Locales" value={locations.length} icon={<MapPin className="w-4 h-4" />} />
+              <StatQuick label="Productos" value={products.length} icon={<ShoppingCart className="w-4 h-4" />} />
+              <StatQuick label="Usuarios" value={users.length} icon={<Users className="w-4 h-4" />} />
+              <div className="flex items-center justify-end gap-2">
                 <Button 
                   onClick={handleSeedMockData} 
                   disabled={isSeeding}
                   variant="default" 
                   size="sm" 
-                  className="gap-2"
+                  className="gap-2 h-9"
                 >
-                  {isSeeding ? "Cargando..." : "Cargar datos de prueba"}
+                  {isSeeding ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="hidden md:inline">Cargando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-4 h-4" />
+                      <span className="hidden md:inline">Datos Prueba</span>
+                    </>
+                  )}
                 </Button>
-                <Link href="/inventario">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Package className="w-4 h-4" />
-                    Inventario por Local
-                  </Button>
-                </Link>
-                <Link href="/">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <ArrowLeft className="w-4 h-4" />
-                    Volver al Dashboard
-                  </Button>
-                </Link>
               </div>
             </div>
           </div>
-        </div>
+        </header>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Contenido Principal */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Sección de Quick Actions */}
+          <div className="mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <QuickActionCard
+                title="Cabinas"
+                description="Gestiona máquinas y especificaciones"
+                icon={<Cpu className="w-5 h-5" />}
+                count={machines.length}
+                tabValue="machines"
+              />
+              <QuickActionCard
+                title="Locales"
+                description="Administra locales de negocio"
+                icon={<MapPin className="w-5 h-5" />}
+                count={locations.length}
+                tabValue="locations"
+              />
+              <QuickActionCard
+                title="Productos"
+                description="Inventario y precios"
+                icon={<ShoppingCart className="w-5 h-5" />}
+                count={products.length}
+                tabValue="products"
+              />
+              <QuickActionCard
+                title="Usuarios"
+                description="Roles y permisos"
+                icon={<Users className="w-5 h-5" />}
+                count={users.length}
+                tabValue={userProfile?.role === "admin" ? "users" : null}
+              />
+            </div>
+          </div>
+
+          {/* Tabs de Gestión */}
           <Tabs defaultValue="machines" className="w-full">
-            <TabsList className="grid w-full grid-cols-7 mb-8">
-              <TabsTrigger value="machines">Cabinas</TabsTrigger>
-              <TabsTrigger value="locations">Locales</TabsTrigger>
-              <TabsTrigger value="products">Productos</TabsTrigger>
-              <TabsTrigger value="finance">Finanzas</TabsTrigger>
-              <TabsTrigger value="logs">Logs</TabsTrigger>
-              <TabsTrigger value="closures">Cierres</TabsTrigger>
-              {userProfile?.role === "admin" && (
-                <TabsTrigger value="users">Usuarios</TabsTrigger>
-              )}
-            </TabsList>
+            <div className="bg-card/80 rounded-lg border border-border/50 p-4 mb-6">
+              <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 bg-transparent h-auto">
+                <TabTriggerWithIcon value="machines" icon={<Cpu className="w-4 h-4" />} label="Cabinas" />
+                <TabTriggerWithIcon value="locations" icon={<MapPin className="w-4 h-4" />} label="Locales" />
+                <TabTriggerWithIcon value="products" icon={<ShoppingCart className="w-4 h-4" />} label="Productos" />
+                <TabTriggerWithIcon value="finance" icon={<BarChart3 className="w-4 h-4" />} label="Finanzas" />
+                <TabTriggerWithIcon value="logs" icon={<FileText className="w-4 h-4" />} label="Auditoría" />
+                <TabTriggerWithIcon value="closures" icon={<Settings className="w-4 h-4" />} label="Cierres" />
+                {userProfile?.role === "admin" && (
+                  <TabTriggerWithIcon value="users" icon={<Users className="w-4 h-4" />} label="Usuarios" />
+                )}
+              </TabsList>
+            </div>
 
-            <TabsContent value="machines" className="space-y-6">
-              <MachineManager
-                machines={machines}
-                locations={locations}
-                onAdd={handleAddMachine}
-                onEdit={handleEditMachine}
-                onDelete={handleDeleteMachine}
-                onToggleStatus={handleToggleMachineStatus}
-              />
-            </TabsContent>
-
-            <TabsContent value="locations" className="space-y-6">
-              <LocationManager
-                locations={locations}
-                onAdd={handleAddLocation}
-                onEdit={handleEditLocation}
-                onDelete={handleDeleteLocation}
-              />
-            </TabsContent>
-
-            <TabsContent value="products" className="space-y-6">
-              <ProductManager
-                products={products}
-                onAdd={handleAddProduct}
-                onEdit={handleEditProduct}
-                onDelete={handleDeleteProduct}
-              />
-            </TabsContent>
-
-            <TabsContent value="finance" className="space-y-6">
-              <FinanceReportsManager
-                sales={sales}
-                machines={machines}
-                locations={locations}
-                users={users}
-                auditLogs={auditLogs}
-                closures={closures}
-              />
-            </TabsContent>
-
-            <TabsContent value="logs" className="space-y-6">
-              <AuditLogsManager
-                logs={auditLogs}
-                locations={locations}
-                users={users}
-              />
-            </TabsContent>
-
-            <TabsContent value="closures" className="space-y-6">
-              <ShiftClosureManager
-                closures={closures}
-                userProfile={userProfile}
-                onReopenShift={handleReopenShift}
-              />
-            </TabsContent>
-
-            {userProfile?.role === "admin" && (
-              <TabsContent value="users" className="space-y-6">
-                <UserManager
-                  users={users}
-                  onCreateUser={handleCreateUser}
-                  onChangeRole={handleChangeUserRole}
-                  onDeactivate={handleDeactivateUser}
+            {/* Contenido de Tabs */}
+            <div className="space-y-6">
+              <TabsContent value="machines">
+                <MachineManager
+                  machines={machines}
+                  locations={locations}
+                  onAdd={handleAddMachine}
+                  onEdit={handleEditMachine}
+                  onDelete={handleDeleteMachine}
+                  onToggleStatus={handleToggleMachineStatus}
                 />
               </TabsContent>
-            )}
+
+              <TabsContent value="locations">
+                <LocationManager
+                  locations={locations}
+                  onAdd={handleAddLocation}
+                  onEdit={handleEditLocation}
+                  onDelete={handleDeleteLocation}
+                />
+              </TabsContent>
+
+              <TabsContent value="products">
+                <ProductManager
+                  products={products}
+                  onAdd={handleAddProduct}
+                  onEdit={handleEditProduct}
+                  onDelete={handleDeleteProduct}
+                />
+              </TabsContent>
+
+              <TabsContent value="finance">
+                <FinanceReportsManager
+                  sales={sales}
+                  machines={machines}
+                  locations={locations}
+                  users={users}
+                  auditLogs={auditLogs}
+                  closures={closures}
+                />
+              </TabsContent>
+
+              <TabsContent value="logs">
+                <AuditLogsManager
+                  logs={auditLogs}
+                  locations={locations}
+                  users={users}
+                />
+              </TabsContent>
+
+              <TabsContent value="closures">
+                <ShiftClosureManager
+                  closures={closures}
+                  userProfile={userProfile}
+                  onReopenShift={handleReopenShift}
+                />
+              </TabsContent>
+
+              {userProfile?.role === "admin" && (
+                <TabsContent value="users">
+                  <UserManager
+                    users={users}
+                    onCreateUser={handleCreateUser}
+                    onChangeRole={handleChangeUserRole}
+                    onDeactivate={handleDeactivateUser}
+                  />
+                </TabsContent>
+              )}
+            </div>
           </Tabs>
-        </div>
+        </main>
       </div>
     </RoleGuard>
+  );
+}
+
+// Componentes Auxiliares para mejor diseño
+function StatQuick({ label, value, icon }: { label: string; value: number; icon?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30 hover:border-border/50 transition-colors">
+      {icon && <span className="text-primary flex-shrink-0">{icon}</span>}
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground truncate">{label}</p>
+        <p className="text-sm font-bold">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function QuickActionCard({ 
+  title, 
+  description, 
+  icon, 
+  count,
+  tabValue
+}: { 
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  count: number;
+  tabValue: string | null;
+}) {
+  return (
+    <Card className="group hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer overflow-hidden">
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="rounded-lg bg-primary/10 p-3 text-primary group-hover:bg-primary/20 transition-colors">
+            {icon}
+          </div>
+          <Badge variant="secondary" className="text-xs">{count} items</Badge>
+        </div>
+        <h3 className="font-bold text-lg mb-1">{title}</h3>
+        <p className="text-sm text-muted-foreground mb-4">{description}</p>
+        <Button variant="ghost" size="sm" className="w-full gap-2 opacity-75 group-hover:opacity-100 transition-opacity justify-start">
+          <span>Ir a {title.toLowerCase()}</span>
+          <ArrowLeft className="w-4 h-4 rotate-180" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TabTriggerWithIcon({ value, icon, label }: { value: string; icon: React.ReactNode; label: string }) {
+  return (
+    <TabsTrigger 
+      value={value}
+      className="flex items-center gap-2 px-3 py-2 text-xs md:text-sm data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-md transition-all"
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </TabsTrigger>
   );
 }

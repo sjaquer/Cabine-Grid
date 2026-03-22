@@ -17,6 +17,9 @@ import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getShiftStart, setShiftLocation } from "@/lib/shift-session";
 import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { MapPin, Clock, TrendingUp } from "lucide-react";
 
 
 export default function Dashboard() {
@@ -540,9 +543,10 @@ export default function Dashboard() {
   const availableMachines = visibleMachines.filter(m => m.status === 'available').length;
   const occupiedMachines = visibleMachines.length - availableMachines;
   const dailySales = visibleSales.reduce((sum, sale) => sum + sale.amount, 0);
+  const utilizationRate = visibleMachines.length > 0 ? Math.round((occupiedMachines / visibleMachines.length) * 100) : 0;
 
   return (
-    <div className="flex flex-col h-screen bg-secondary">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
       <Header 
         dailySales={dailySales}
         availableMachines={availableMachines}
@@ -551,24 +555,70 @@ export default function Dashboard() {
         onSettingsClick={handleHeaderSettingsClick}
         userProfile={userProfile}
       />
-      {availableLocations.length > 0 && (
-        <div className="px-4 sm:px-6 lg:px-8 py-3 border-b border-border/40 bg-card/70">
-          <div className="max-w-sm">
-            <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona local" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableLocations.map((location) => (
-                  <SelectItem key={location.id} value={location.id}>
-                    {location.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+      {/* Sección de Estadísticas y Selección de Local */}
+      <div className="border-b border-border/40 bg-card/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+          {/* Grid de Estadísticas */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard 
+              label="Cabinas Disponibles"
+              value={availableMachines}
+              total={visibleMachines.length}
+              color="text-status-available"
+              icon={<Clock className="w-4 h-4" />}
+            />
+            <StatCard 
+              label="En uso"
+              value={occupiedMachines}
+              total={visibleMachines.length}
+              color="text-status-occupied"
+              icon={<TrendingUp className="w-4 h-4" />}
+            />
+            <StatCard 
+              label="Ocupación"
+              value={`${utilizationRate}%`}
+              color="text-primary"
+              icon={null}
+            />
+            <StatCard 
+              label="Recaudación hoy"
+              value={formatCurrency(dailySales)}
+              color="text-accent"
+              icon={null}
+            />
           </div>
+
+          {/* Selección de Local */}
+          {availableLocations.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg bg-background/50 border border-border/30">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <MapPin className="w-4 h-4" />
+                <span>Filtrando por:</span>
+              </div>
+              <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                <SelectTrigger className="w-full sm:w-64">
+                  <SelectValue placeholder="Selecciona local" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableLocations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      <span className="font-medium">{location.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedLocationId && availableLocations.length > 1 && (
+                <Badge variant="secondary" className="hidden sm:flex">
+                  {availableLocations.find(l => l.id === selectedLocationId)?.name}
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* Grid de Máquinas */}
       <main className="flex-1 overflow-y-auto">
         <PCGrid machines={visibleMachines} onCardAction={handleCardAction} isLoading={machinesLoading} />
       </main>
@@ -604,6 +654,42 @@ export default function Dashboard() {
         onSaveProducts={handleSaveProducts}
         onGoToCharge={handleGoToCharge}
       />
+    </div>
+  );
+}
+
+// Componente para Tarjeta de Estadística
+function StatCard({ 
+  label, 
+  value, 
+  total,
+  color,
+  icon 
+}: { 
+  label: string;
+  value: string | number;
+  total?: number;
+  color: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="p-4 rounded-lg bg-background/50 border border-border/50 hover:border-border/80 transition-all">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-muted-foreground truncate">{label}</p>
+          <div className="flex items-baseline gap-1 mt-1">
+            <p className={`text-2xl font-bold pretype-number ${color}`}>{value}</p>
+            {total !== undefined && (
+              <p className="text-xs text-muted-foreground">/ {total}</p>
+            )}
+          </div>
+        </div>
+        {icon && (
+          <div className={`p-2 rounded-md bg-primary/10 text-primary flex-shrink-0`}>
+            {icon}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

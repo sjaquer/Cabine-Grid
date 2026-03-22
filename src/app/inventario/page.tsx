@@ -24,6 +24,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Ban,
+  Package,
+  TrendingDown,
+  TrendingUp,
+  Home,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -362,174 +366,219 @@ export default function InventoryPage() {
 
   return (
     <RoleGuard>
-      <div className="min-h-screen bg-gradient-to-b from-secondary to-secondary/70">
-        <div className="border-b border-border/40 bg-card/85 backdrop-blur-lg sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-headline font-bold">Inventario General</h1>
-              <p className="text-sm text-muted-foreground">
-                Control de stock por local con alertas e incongruencias.
-              </p>
+      <div className="min-h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
+        {/* Header Profesional */}
+        <header className="sticky top-0 z-50 border-b border-border/40 bg-card/95 backdrop-blur-xl">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between py-4 gap-4">
+              <div className="flex items-center gap-3">
+                <div className="hidden md:flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent to-accent/70 flex items-center justify-center">
+                    <Package className="w-5 h-5 text-accent-foreground" />
+                  </div>
+                  <span className="font-headline font-bold text-lg">Cabine Grid</span>
+                </div>
+                <div className="hidden lg:block h-6 w-px bg-border/50"></div>
+                <div className="flex flex-col gap-0.5">
+                  <h1 className="text-xl font-headline font-bold">Gestión de Inventario</h1>
+                  <p className="text-xs text-muted-foreground">Control de stock por local</p>
+                </div>
+              </div>
+              <Link href="/">
+                <Button variant="outline" size="sm" className="gap-2 h-9">
+                  <Home className="w-4 h-4" />
+                  <span className="hidden md:inline">Dashboard</span>
+                </Button>
+              </Link>
             </div>
-            <Link href="/">
-              <Button variant="outline" className="gap-2">
-                <ArrowLeft className="w-4 h-4" /> Volver al Dashboard
-              </Button>
-            </Link>
-          </div>
-        </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="pt-6 flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-muted-foreground">Productos agotados</div>
-                  <div className="text-2xl font-black text-red-600">{outOfStockCount}</div>
+            {/* Stats rápidas en el header */}
+            <div className="grid grid-cols-3 gap-2 py-4 border-t border-border/30">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30">
+                <div className="rounded bg-red-500/15 p-1.5 flex-shrink-0">
+                  <Ban className="w-4 h-4 text-red-600" />
                 </div>
-                <Ban className="w-6 h-6 text-red-500" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-muted-foreground">Stock bajo</div>
-                  <div className="text-2xl font-black text-amber-600">{lowStockCount}</div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">Agotados</p>
+                  <p className="text-sm font-bold text-red-600">{outOfStockCount}</p>
                 </div>
-                <AlertCircle className="w-6 h-6 text-amber-500" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6 flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-muted-foreground">Stock estable</div>
-                  <div className="text-2xl font-black text-green-600">{healthyCount}</div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30">
+                <div className="rounded bg-amber-500/15 p-1.5 flex-shrink-0">
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
                 </div>
-                <CheckCircle2 className="w-6 h-6 text-green-500" />
-              </CardContent>
-            </Card>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">Stock Bajo</p>
+                  <p className="text-sm font-bold text-amber-600">{lowStockCount}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30">
+                <div className="rounded bg-green-500/15 p-1.5 flex-shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">Estable</p>
+                  <p className="text-sm font-bold text-green-600">{healthyCount}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Contenido Principal */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+          {/* Tarjetas de Estadísticas */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <InventoryStatCard
+              title="Productos Agotados"
+              value={outOfStockCount}
+              icon={<Ban className="w-5 h-5" />}
+              color="text-red-600"
+              bgColor="bg-red-500/10"
+              borderColor="border-red-300/30"
+            />
+            <InventoryStatCard
+              title="Stock Bajo"
+              value={lowStockCount}
+              icon={<AlertCircle className="w-5 h-5" />}
+              color="text-amber-600"
+              bgColor="bg-amber-500/10"
+              borderColor="border-amber-300/30"
+            />
+            <InventoryStatCard
+              title="Stock Estable"
+              value={healthyCount}
+              icon={<CheckCircle2 className="w-5 h-5" />}
+              color="text-green-600"
+              bgColor="bg-green-500/10"
+              borderColor="border-green-300/30"
+            />
           </div>
 
-          <Card className="border-border/60">
+          {/* Filtros y Búsqueda */}
+          <Card className="border-border/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Boxes className="w-5 h-5" /> Operación de Inventario
+                <Search className="w-5 h-5" /> Filtros y Búsqueda
               </CardTitle>
               <CardDescription>
-                Filtra por local, busca productos y ajusta stock con botones rápidos por fila.
+                Selecciona local y busca productos para gestionar stock
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-              <div className="space-y-2 xl:col-span-2">
-                <Label>Local</Label>
-                <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona local" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map((location) => (
-                      <SelectItem key={location.id} value={location.id}>
-                        {location.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Local</Label>
+                  <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Selecciona local" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((location) => (
+                        <SelectItem key={location.id} value={location.id}>
+                          {location.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2 xl:col-span-2">
-                <Label>Buscar producto o categoría</Label>
-                <div className="relative">
-                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                    placeholder="Ej. Inka, Snacks, Servicios"
-                  />
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Buscar Producto</Label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Input
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9 h-9"
+                      placeholder="Bebidas, snacks, productos..."
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="xl:col-span-4 flex items-center justify-end">
-                {!canManage && (
-                  <span className="text-xs text-amber-700 bg-amber-500/10 border border-amber-300 rounded px-2 py-1">
-                    Tu rol es solo lectura.
-                  </span>
-                )}
-              </div>
+
+              {!canManage && (
+                <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-300/50">
+                  <AlertCircle className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                  <span className="text-xs text-amber-700">Tu rol permite solo lectura del inventario</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          <Card>
+          {/* Tabla de Inventario */}
+          <Card className="border-border/50">
             <CardHeader>
-              <CardTitle>
-                Stock Actual {selectedLocation ? `- ${selectedLocation.name}` : ""}
+              <CardTitle className="flex items-center gap-2">
+                <Boxes className="w-5 h-5" /> 
+                Stock Actual {selectedLocation ? <Badge variant="secondary">{selectedLocation.name}</Badge> : null}
               </CardTitle>
               <CardDescription>
-                Estado por producto con categorías claras y reporte de incongruencias.
+                Gestiona stock con ajustes rápidos, reporta incongruencias
               </CardDescription>
             </CardHeader>
             <CardContent>
               {!selectedLocationId ? (
-                <div className="text-sm text-muted-foreground">
-                  Selecciona un local para visualizar su inventario.
+                <div className="py-12 text-center">
+                  <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">Selecciona un local para ver su inventario</p>
+                </div>
+              ) : rows.length === 0 ? (
+                <div className="py-12 text-center">
+                  <AlertCircle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No hay productos que coincidan con la búsqueda</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto border rounded-lg">
+                <div className="overflow-x-auto border border-border/50 rounded-lg">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Categoría</TableHead>
-                        <TableHead className="text-right">Stock</TableHead>
-                        <TableHead className="text-right">Mínimo</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Ajuste rápido</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
+                    <TableHeader className="bg-background/50">
+                      <TableRow className="border-border/50 hover:bg-background/50">
+                        <TableHead className="font-semibold">Producto</TableHead>
+                        <TableHead className="font-semibold">Categoría</TableHead>
+                        <TableHead className="text-right font-semibold">Stock</TableHead>
+                        <TableHead className="text-right font-semibold">Mín.</TableHead>
+                        <TableHead className="font-semibold">Estado</TableHead>
+                        <TableHead className="font-semibold">Ajuste Rápido</TableHead>
+                        <TableHead className="text-right font-semibold">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rows.map((row) => {
                         const status = indicator(row.stock, row.minStock);
                         return (
-                          <TableRow key={row.productId}>
-                            <TableCell className="font-medium">{row.productName}</TableCell>
+                          <TableRow key={row.productId} className="border-border/30 hover:bg-background/30 transition-colors">
+                            <TableCell className="font-medium text-sm">{row.productName}</TableCell>
                             <TableCell>
-                              <Badge className={`${categoryStyles[row.category]} border`}>
+                              <Badge className={`${categoryStyles[row.category]} border text-xs`}>
                                 {row.categoryLabel}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right font-mono">{row.stock}</TableCell>
-                            <TableCell className="text-right font-mono">{row.minStock}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold text-sm">{row.stock}</TableCell>
+                            <TableCell className="text-right font-mono text-muted-foreground text-sm">{row.minStock}</TableCell>
                             <TableCell>
-                              <Badge className={`${status.className} border`}>{status.label}</Badge>
+                              <Badge className={`${status.className} border text-xs`}>{status.label}</Badge>
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-1 flex-wrap">
+                              <div className="flex items-center gap-1">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-8"
+                                  className="h-7 px-2 text-xs"
                                   disabled={!canManage || !selectedLocationId || busyActionKey !== null}
                                   onClick={() => applyInventoryAdjustment(row, "entry", 1, "Ajuste rápido +1")}
+                                  title="Agregar 1 unidad"
                                 >
-                                  +1
+                                  <TrendingUp className="w-3 h-3" />
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-8"
-                                  disabled={!canManage || !selectedLocationId || busyActionKey !== null}
-                                  onClick={() => applyInventoryAdjustment(row, "entry", 5, "Ajuste rápido +5")}
-                                >
-                                  +5
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8"
+                                  className="h-7 px-2 text-xs"
                                   disabled={!canManage || !selectedLocationId || row.stock <= 0 || busyActionKey !== null}
                                   onClick={() => applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1")}
+                                  title="Restar 1 unidad"
                                 >
-                                  -1
+                                  <TrendingDown className="w-3 h-3" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -538,22 +587,22 @@ export default function InventoryPage() {
                                 <Button
                                   variant="secondary"
                                   size="sm"
-                                  className="gap-2"
+                                  className="gap-1 h-8 text-xs"
                                   disabled={!canManage || !selectedLocationId}
                                   onClick={() => openAdjustDialog(row)}
                                 >
-                                  <PlusCircle className="w-4 h-4" />
-                                  Ajustar
+                                  <PlusCircle className="w-3 h-3" />
+                                  <span className="hidden sm:inline">Ajustar</span>
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="gap-2"
+                                  className="gap-1 h-8 text-xs"
                                   onClick={() => openDiscrepancyDialog(row)}
                                   disabled={!canManage}
+                                  title="Reportar diferencia"
                                 >
-                                  <AlertTriangle className="w-4 h-4" />
-                                  Incongruencia
+                                  <AlertTriangle className="w-3 h-3" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -566,7 +615,7 @@ export default function InventoryPage() {
               )}
             </CardContent>
           </Card>
-        </div>
+        </main>
       </div>
 
       <Dialog open={isDiscrepancyOpen} onOpenChange={setIsDiscrepancyOpen}>
@@ -670,5 +719,38 @@ export default function InventoryPage() {
         </DialogContent>
       </Dialog>
     </RoleGuard>
+  );
+}
+
+// Componente para Tarjeta de Estadística de Inventario
+function InventoryStatCard({
+  title,
+  value,
+  icon,
+  color,
+  bgColor,
+  borderColor,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}) {
+  return (
+    <Card className={`border-border/50 hover:shadow-lg transition-all ${borderColor}`}>
+      <CardContent className="pt-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">{title}</p>
+            <p className={`text-3xl font-bold ${color}`}>{value}</p>
+          </div>
+          <div className={`p-3 rounded-lg ${bgColor} text-center flex-shrink-0`}>
+            <span className={`flex items-center justify-center ${color}`}>{icon}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
