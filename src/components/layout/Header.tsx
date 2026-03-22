@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut, Settings, BarChart3, Package } from "lucide-react";
+import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut, Settings, BarChart3, Package, Loader2, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
@@ -40,17 +40,74 @@ type HeaderProps = {
 };
 
 export default function Header({ dailySales, availableMachines, occupiedMachines, onHistoryClick, onSettingsClick, userProfile }: HeaderProps) {
-  const { logout } = useAuth();
+  const { logout, getShiftClosurePreview } = useAuth();
   const { toast } = useToast();
   const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
   const [countedCash, setCountedCash] = useState<string>("");
+  const [countedYape, setCountedYape] = useState<string>("0");
+  const [countedOther, setCountedOther] = useState<string>("0");
   const [inventoryChecked, setInventoryChecked] = useState(false);
   const [discrepancyReason, setDiscrepancyReason] = useState("");
   const [isClosingShift, setIsClosingShift] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [closurePreview, setClosurePreview] = useState<{
+    shiftId: string;
+    shiftStartMs: number;
+    shiftLocationId?: string;
+    salesCount: number;
+    expectedCash: number;
+    expectedYape: number;
+    expectedOther: number;
+    totalExpected: number;
+    openMachinesCount: number;
+  } | null>(null);
   
   const totalMachines = availableMachines + occupiedMachines;
   const utilizationRate = totalMachines > 0 ? ((occupiedMachines / totalMachines) * 100).toFixed(0) : "0";
   const requiresFormalClose = userProfile?.role === "operator" || userProfile?.role === "manager";
+
+  const parsedCash = useMemo(() => Number(countedCash || 0), [countedCash]);
+  const parsedYape = useMemo(() => Number(countedYape || 0), [countedYape]);
+  const parsedOther = useMemo(() => Number(countedOther || 0), [countedOther]);
+  const isInvalidCount = [parsedCash, parsedYape, parsedOther].some((n) => Number.isNaN(n) || n < 0);
+
+  const expectedCash = closurePreview?.expectedCash ?? 0;
+  const expectedYape = closurePreview?.expectedYape ?? 0;
+  const expectedOther = closurePreview?.expectedOther ?? 0;
+
+  const cashDifference = useMemo(() => Math.round((parsedCash - expectedCash) * 100) / 100, [parsedCash, expectedCash]);
+  const yapeDifference = useMemo(() => Math.round((parsedYape - expectedYape) * 100) / 100, [parsedYape, expectedYape]);
+  const otherDifference = useMemo(() => Math.round((parsedOther - expectedOther) * 100) / 100, [parsedOther, expectedOther]);
+  const totalCounted = useMemo(() => Math.round((parsedCash + parsedYape + parsedOther) * 100) / 100, [parsedCash, parsedYape, parsedOther]);
+  const totalExpected = closurePreview?.totalExpected ?? 0;
+  const totalDifference = useMemo(() => Math.round((totalCounted - totalExpected) * 100) / 100, [totalCounted, totalExpected]);
+
+  useEffect(() => {
+    if (!isCloseShiftOpen || !requiresFormalClose) return;
+
+    let isMounted = true;
+    const loadPreview = async () => {
+      try {
+        setIsLoadingPreview(true);
+        const preview = await getShiftClosurePreview();
+        if (!isMounted || !preview) return;
+        setClosurePreview(preview);
+        setCountedCash(String(preview.expectedCash));
+        setCountedYape(String(preview.expectedYape));
+        setCountedOther(String(preview.expectedOther));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "No se pudo cargar el cierre de turno.";
+        toast({ variant: "destructive", title: message });
+      } finally {
+        if (isMounted) setIsLoadingPreview(false);
+      }
+    };
+
+    void loadPreview();
+    return () => {
+      isMounted = false;
+    };
+  }, [isCloseShiftOpen, requiresFormalClose, getShiftClosurePreview, toast]);
 
   const handleLogoutClick = async () => {
     if (requiresFormalClose) {
@@ -62,9 +119,8 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
   };
 
   const confirmCloseShiftAndLogout = async () => {
-    const parsedCash = Number(countedCash);
-    if (Number.isNaN(parsedCash) || parsedCash < 0) {
-      toast({ variant: "destructive", title: "Ingresa un conteo de caja valido" });
+    if (isInvalidCount) {
+      toast({ variant: "destructive", title: "Revisa los montos ingresados" });
       return;
     }
     if (!inventoryChecked) {
@@ -76,6 +132,8 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
       setIsClosingShift(true);
       await logout({
         countedCash: parsedCash,
+        countedYape: parsedYape,
+        countedOther: parsedOther,
         inventoryChecked,
         discrepancyReason,
       });
@@ -197,22 +255,86 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
           <DialogHeader>
             <DialogTitle>Cierre Formal de Turno</DialogTitle>
             <DialogDescription>
-              Debes completar arqueo de caja e inventario antes de cerrar sesión.
+              Completa el arqueo completo aqui mismo para cerrar y salir rapidamente.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Monto contado en caja (efectivo)</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={countedCash}
-                onChange={(e) => setCountedCash(e.target.value)}
-                placeholder="Ej. 150.50"
-              />
-            </div>
+            {isLoadingPreview ? (
+              <div className="flex items-center justify-center py-10 text-muted-foreground">
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Cargando resumen del turno...
+              </div>
+            ) : (
+              <>
+                {closurePreview && (
+                  <div className="rounded-md border bg-secondary/20 p-3 space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Ventas del turno</span>
+                      <span className="font-semibold">{closurePreview.salesCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Total esperado</span>
+                      <span className="font-semibold">{formatCurrency(closurePreview.totalExpected)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Maquinas abiertas</span>
+                      <span className={`font-semibold ${closurePreview.openMachinesCount > 0 ? "text-destructive" : "text-status-available"}`}>
+                        {closurePreview.openMachinesCount}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <MoneyInput
+                    label="Efectivo contado"
+                    value={countedCash}
+                    onChange={setCountedCash}
+                    expected={expectedCash}
+                    difference={cashDifference}
+                  />
+                  <MoneyInput
+                    label="Yape contado"
+                    value={countedYape}
+                    onChange={setCountedYape}
+                    expected={expectedYape}
+                    difference={yapeDifference}
+                  />
+                  <MoneyInput
+                    label="Otros medios"
+                    value={countedOther}
+                    onChange={setCountedOther}
+                    expected={expectedOther}
+                    difference={otherDifference}
+                  />
+                </div>
+
+                <div className="rounded-md border p-3 space-y-1.5 bg-background/70">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Total contado</span>
+                    <span className="font-semibold">{formatCurrency(totalCounted)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Total esperado</span>
+                    <span className="font-semibold">{formatCurrency(totalExpected)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm border-t pt-1.5">
+                    <span className="text-muted-foreground">Diferencia total</span>
+                    <span className={`font-semibold ${totalDifference === 0 ? "text-status-available" : "text-destructive"}`}>
+                      {formatCurrency(totalDifference)}
+                    </span>
+                  </div>
+                </div>
+
+                {totalDifference !== 0 && (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <p>Hay diferencia en el cierre. Debes detallar el motivo para continuar.</p>
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="space-y-2">
               <Label>Motivo de diferencia (si aplica)</Label>
@@ -239,13 +361,44 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
             <Button variant="outline" onClick={() => setIsCloseShiftOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={confirmCloseShiftAndLogout} disabled={isClosingShift}>
+            <Button onClick={confirmCloseShiftAndLogout} disabled={isClosingShift || isLoadingPreview}>
               {isClosingShift ? "Cerrando turno..." : "Cerrar Turno y Salir"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </header>
+  );
+}
+
+function MoneyInput({
+  label,
+  value,
+  onChange,
+  expected,
+  difference,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  expected: number;
+  difference: number;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border p-3 bg-background/60">
+      <Label>{label}</Label>
+      <Input
+        type="number"
+        min={0}
+        step="0.01"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <div className="text-xs text-muted-foreground">Esperado: {formatCurrency(expected)}</div>
+      <div className={`text-xs font-medium ${difference === 0 ? "text-status-available" : "text-destructive"}`}>
+        Diferencia: {formatCurrency(difference)}
+      </div>
+    </div>
   );
 }
 

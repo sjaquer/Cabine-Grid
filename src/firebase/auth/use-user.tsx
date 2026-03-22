@@ -18,14 +18,26 @@ import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
 import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftId, getShiftLocation, getShiftStart } from '@/lib/shift-session';
 import { logAuditAction, logAuditFailure } from '@/lib/audit-log';
-import { getActiveShift, closeShift } from '@/lib/shift-management';
 
 export interface AuthContextValue {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  getShiftClosurePreview: () => Promise<{
+    shiftId: string;
+    shiftStartMs: number;
+    shiftLocationId?: string;
+    salesCount: number;
+    expectedCash: number;
+    expectedYape: number;
+    expectedOther: number;
+    totalExpected: number;
+    openMachinesCount: number;
+  } | null>;
   logout: (payload?: {
     countedCash?: number;
+    countedYape?: number;
+    countedOther?: number;
     inventoryChecked?: boolean;
     discrepancyReason?: string;
   }) => Promise<void>;
@@ -85,6 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async (payload?: {
     countedCash?: number;
+    countedYape?: number;
+    countedOther?: number;
     inventoryChecked?: boolean;
     discrepancyReason?: string;
   }) => {
@@ -97,6 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userProfile.role === 'operator' || userProfile.role === 'manager') {
       if (!payload || typeof payload.countedCash !== 'number' || payload.countedCash < 0) {
         throw new Error('Debes registrar el conteo de caja antes de cerrar turno.');
+      }
+      if (typeof payload.countedYape !== 'number' || payload.countedYape < 0) {
+        throw new Error('Debes registrar el conteo de Yape antes de cerrar turno.');
+      }
+      if (typeof payload.countedOther !== 'number' || payload.countedOther < 0) {
+        throw new Error('Debes registrar el conteo de otros medios antes de cerrar turno.');
       }
       if (!payload.inventoryChecked) {
         throw new Error('Debes confirmar el conteo de inventario antes de cerrar turno.');
@@ -128,15 +148,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return sale.locationId === shiftLocationId;
         });
 
-        // Calculate expected cash from cash payments
         const expectedCash = operatorShiftSales
           .filter((sale) => sale.paymentMethod === 'efectivo')
           .reduce((sum, sale) => sum + sale.amount, 0);
+        const expectedYape = operatorShiftSales
+          .filter((sale) => sale.paymentMethod === 'yape')
+          .reduce((sum, sale) => sum + sale.amount, 0);
+        const expectedOther = operatorShiftSales
+          .filter((sale) => sale.paymentMethod === 'otro')
+          .reduce((sum, sale) => sum + sale.amount, 0);
+
         const countedCash = Math.round(payload.countedCash * 100) / 100;
+        const countedYape = Math.round(payload.countedYape * 100) / 100;
+        const countedOther = Math.round(payload.countedOther * 100) / 100;
+
         const cashDifference = Math.round((countedCash - expectedCash) * 100) / 100;
+        const yapeDifference = Math.round((countedYape - expectedYape) * 100) / 100;
+        const otherDifference = Math.round((countedOther - expectedOther) * 100) / 100;
+        const totalDifference = Math.round((cashDifference + yapeDifference + otherDifference) * 100) / 100;
 
         // Validate cash difference
-        if (cashDifference !== 0 && !payload.discrepancyReason?.trim()) {
+        if ((cashDifference !== 0 || yapeDifference !== 0 || otherDifference !== 0) && !payload.discrepancyReason?.trim()) {
           throw new Error('Existe diferencia en caja. Debes ingresar un motivo para cerrar turno.');
         }
 
@@ -167,6 +199,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           expectedCash,
           countedCash,
           cashDifference,
+          expectedYape,
+          countedYape,
+          yapeDifference,
+          expectedOther,
+          countedOther,
+          otherDifference,
+          totalDifference,
           discrepancyReason: payload.discrepancyReason?.trim() || null,
           inventoryChecked: true,
           salesCount: operatorShiftSales.length,
@@ -181,14 +220,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           target: 'shiftClosures',
           targetId: shiftId,
           locationId: shiftLocationId || undefined,
-          severity: Math.abs(cashDifference) >= 20 ? 'critical' : cashDifference !== 0 ? 'high' : 'medium',
-          anomalyScore: Math.abs(cashDifference) >= 50 ? 90 : Math.abs(cashDifference) >= 20 ? 75 : cashDifference !== 0 ? 55 : 10,
-          riskTags: cashDifference !== 0 ? ['cash-difference'] : [],
+          severity: Math.abs(totalDifference) >= 20 ? 'critical' : totalDifference !== 0 ? 'high' : 'medium',
+          anomalyScore: Math.abs(totalDifference) >= 50 ? 90 : Math.abs(totalDifference) >= 20 ? 75 : totalDifference !== 0 ? 55 : 10,
+          riskTags: totalDifference !== 0 ? ['cash-difference'] : [],
           actor: { id: user.uid, email: user.email, role: userProfile.role },
           details: {
             expectedCash,
             countedCash,
             cashDifference,
+            expectedYape,
+            countedYape,
+            yapeDifference,
+            expectedOther,
+            countedOther,
+            otherDifference,
+            totalDifference,
             salesCount: operatorShiftSales.length,
           },
         });
@@ -235,10 +281,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   };
 
+  const getShiftClosurePreview = async () => {
+    if (!user || !userProfile || !firestore) return null;
+    if (!(userProfile.role === 'operator' || userProfile.role === 'manager')) return null;
+
+    const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
+    const shiftLocationId = getShiftLocation(user.uid) || undefined;
+    const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
+
+    const salesRef = collection(firestore, 'sales');
+    const salesQuery = query(
+      salesRef,
+      where('endTime', '>=', Timestamp.fromMillis(shiftStartMs)),
+      where('endTime', '<=', Timestamp.fromMillis(Date.now())),
+    );
+    const salesSnap = await getDocs(salesQuery);
+    const allShiftSales: Sale[] = salesSnap.docs.map((snapshot) => ({
+      id: snapshot.id,
+      ...(snapshot.data() as Omit<Sale, 'id'>),
+    }));
+
+    const operatorShiftSales = allShiftSales.filter((sale) => {
+      if (sale.operator?.id !== user.uid) return false;
+      if (!shiftLocationId) return true;
+      return sale.locationId === shiftLocationId;
+    });
+
+    const expectedCash = operatorShiftSales
+      .filter((sale) => sale.paymentMethod === 'efectivo')
+      .reduce((sum, sale) => sum + sale.amount, 0);
+    const expectedYape = operatorShiftSales
+      .filter((sale) => sale.paymentMethod === 'yape')
+      .reduce((sum, sale) => sum + sale.amount, 0);
+    const expectedOther = operatorShiftSales
+      .filter((sale) => sale.paymentMethod === 'otro')
+      .reduce((sum, sale) => sum + sale.amount, 0);
+    const totalExpected = Math.round((expectedCash + expectedYape + expectedOther) * 100) / 100;
+
+    const machinesRef = collection(firestore, 'machines');
+    const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
+    const machinesSnap = await getDocs(machinesQuery);
+    const allOpenMachines: Machine[] = machinesSnap.docs.map((snapshot) => ({
+      id: snapshot.id,
+      ...(snapshot.data() as Omit<Machine, 'id'>),
+    }));
+    const openMachines = shiftLocationId
+      ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
+      : allOpenMachines;
+
+    return {
+      shiftId,
+      shiftStartMs,
+      shiftLocationId,
+      salesCount: operatorShiftSales.length,
+      expectedCash: Math.round(expectedCash * 100) / 100,
+      expectedYape: Math.round(expectedYape * 100) / 100,
+      expectedOther: Math.round(expectedOther * 100) / 100,
+      totalExpected,
+      openMachinesCount: openMachines.length,
+    };
+  };
+
   const value = { 
     user, 
     userProfile: userProfile as UserProfile | null, 
     loading: loading || isProfileLoading, 
+    getShiftClosurePreview,
     logout 
   };
 
