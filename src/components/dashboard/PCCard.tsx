@@ -67,14 +67,14 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
   return (
     <Card
       className={cn(
-        "flex flex-col transition-all duration-300 border-2 hover:shadow-xl hover:scale-105 cursor-pointer overflow-hidden",
+        "flex flex-col transition-all duration-300 border-2 hover:shadow-xl md:hover:scale-105 cursor-pointer overflow-hidden",
         statusColors[status]
       )}
       onClick={() => status !== "maintenance" && onAction(machine)}
     >
-      <CardHeader className="flex-row items-start justify-between space-y-0 pb-3 pt-4 px-4">
+      <CardHeader className="flex-row items-start justify-between space-y-0 pb-2 pt-3 px-3 md:pb-3 md:pt-4 md:px-4">
         <div className="flex flex-col gap-2 flex-1">
-          <CardTitle className="text-lg font-headline font-bold">{machine.name}</CardTitle>
+          <CardTitle className="text-base md:text-lg font-headline font-bold">{machine.name}</CardTitle>
           <Badge className={`w-fit text-xs font-semibold ${statusBadge[status].color}`}>
             {statusBadge[status].label}
           </Badge>
@@ -91,14 +91,14 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
       
       {status === 'available' ? (
         <>
-          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-6">
-            {getStatusIcon()}
+          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-4 md:py-6">
+            <div className="scale-75 md:scale-100">{getStatusIcon()}</div>
             <p className="text-sm font-medium text-muted-foreground">
               {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
             </p>
-            <p className="text-xs text-muted-foreground">Haz clic para asignar</p>
+            <p className="hidden md:block text-xs text-muted-foreground">Haz clic para asignar</p>
           </CardContent>
-          <CardFooter className="p-3 pt-0">
+          <CardFooter className="p-2 md:p-3 pt-0">
             <Button 
               variant="default" 
               className="w-full font-semibold" 
@@ -115,11 +115,11 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
         </>
       ) : status === 'maintenance' ? (
         <>
-          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-6">
-            {getStatusIcon()}
+          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-4 md:py-6">
+            <div className="scale-75 md:scale-100">{getStatusIcon()}</div>
             <p className="text-sm font-semibold text-muted-foreground">En Mantenimiento</p>
           </CardContent>
-          <CardFooter className="p-3 pt-0">
+          <CardFooter className="p-2 md:p-3 pt-0">
             <Button 
               variant="outline" 
               className="w-full" 
@@ -132,7 +132,7 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
         </>
       ) : (
         <>
-          <CardContent className="flex-1 flex flex-col justify-between gap-3 py-4 px-4">
+          <CardContent className="flex-1 flex flex-col justify-between gap-2 py-3 px-3 md:gap-3 md:py-4 md:px-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <User className="text-accent w-4 h-4"/>
@@ -151,7 +151,7 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
               "bg-secondary/60 rounded-lg p-3 text-center",
               isWarning && "bg-status-warning/20 border border-status-warning/50"
             )}>
-              <div className="text-2xl font-mono font-bold text-primary">
+              <div className="text-xl md:text-2xl font-mono font-bold text-primary">
                 {formatTime(Math.floor(timeToShow))}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
@@ -167,7 +167,7 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
             )}
           </CardContent>
           
-          <CardFooter className="p-3 pt-0">
+          <CardFooter className="p-2 md:p-3 pt-0">
             <Button 
               variant={isWarning ? "destructive" : "secondary"}
               className="w-full font-semibold" 

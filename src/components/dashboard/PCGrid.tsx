@@ -41,17 +41,17 @@ export default function PCGrid({ machines, onCardAction, isLoading }: PCGridProp
 
   return (
     <div className="flex-1 p-4 sm:p-6 lg:p-8">
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         {/* Encabezado con contador */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold">Cabinas de Internet</h2>
-            <p className="text-sm text-muted-foreground">{machines.length} {machines.length === 1 ? 'cabina' : 'cabinas'} disponibles</p>
+            <h2 className="text-base md:text-lg font-bold">Cabinas</h2>
+            <p className="text-xs md:text-sm text-muted-foreground">{machines.length} {machines.length === 1 ? 'resultado' : 'resultados'}</p>
           </div>
         </div>
         
         {/* Grid de máquinas */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4 md:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3 md:gap-4">
           {machines.map((machine) => (
             <PCCard
               key={machine.id}

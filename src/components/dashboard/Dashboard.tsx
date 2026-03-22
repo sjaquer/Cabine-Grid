@@ -21,9 +21,9 @@ import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
 import { closeSession } from "@/lib/close-session";
 import { canAccessMachine, useAccessibleMachines } from "@/hooks/useMachineAccess";
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Clock, TrendingUp } from "lucide-react";
+import { MapPin } from "lucide-react";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 
 
@@ -173,6 +173,7 @@ export default function Dashboard() {
   const [machineToPos, setMachineToPos] = useState<Machine | null>(null);
 
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
+  const [machineViewFilter, setMachineViewFilter] = useState<"active" | "all" | "available">("active");
   
   const { toast } = useToast();
 
@@ -505,42 +506,25 @@ export default function Dashboard() {
 
   const availableMachines = visibleMachines.filter(m => m.status === 'available').length;
   const occupiedMachines = visibleMachines.length - availableMachines;
+  const filteredMachines = useMemo(() => {
+    if (machineViewFilter === "active") {
+      return visibleMachines.filter((machine) => machine.status === "occupied" || machine.status === "warning");
+    }
+    if (machineViewFilter === "available") {
+      return visibleMachines.filter((machine) => machine.status === "available");
+    }
+    return visibleMachines;
+  }, [visibleMachines, machineViewFilter]);
   const dailySales = visibleSales.reduce((sum, sale) => sum + sale.amount, 0);
-  const utilizationRate = visibleMachines.length > 0 ? Math.round((occupiedMachines / visibleMachines.length) * 100) : 0;
 
-  // Cálculos KPI avanzados
-  const machineRevenue = useMemo(() => {
-    const revenueByMachine: Record<string, number> = {};
-    visibleSales.forEach(sale => {
-      revenueByMachine[sale.machineName] = (revenueByMachine[sale.machineName] || 0) + sale.amount;
-    });
-    return revenueByMachine;
-  }, [visibleSales]);
-
-  const topMachine = useMemo(() => {
-    if (Object.keys(machineRevenue).length === 0) return null;
-    const [machine, revenue] = Object.entries(machineRevenue).reduce((acc, [name, rev]) => 
-      rev > acc[1] ? [name, rev] : acc
-    , ['', 0]) as [string, number];
-    return { machine, revenue };
-  }, [machineRevenue]);
-
-  const avgTransactionValue = visibleSales.length > 0 
-    ? Math.round((dailySales / visibleSales.length) * 100) / 100 
-    : 0;
-
-
-  const grossMargin = useMemo(() => {
-    // Margen: costo máquina vs venta (asumiendo 70% costo operacional base)
-    const machineRevenue = visibleSales.reduce((sum, sale) => sum + (sale.hourlyRate ? Math.ceil(sale.totalMinutes / 60) * sale.hourlyRate : 0), 0);
-    const productRevenue = visibleSales.reduce((sum, sale) => sum + (sale.soldProducts?.reduce((pSum, p) => pSum + (p.quantity * p.unitPrice), 0) || 0), 0);
-    
-    // Estimado: 30% margen en máquinas, 50% en productos
-    const estimatedCost = (machineRevenue * 0.3) + (productRevenue * 0.5);
-    return dailySales > 0 ? Math.round(((dailySales - estimatedCost) / dailySales) * 100) : 0;
-  }, [visibleSales, dailySales]);
   // Hook para obtener alertas de inventario
   const inventoryAlerts = useInventoryAlerts(inventoryData || []);
+
+  const filterLabel = useMemo(() => {
+    if (machineViewFilter === "active") return "Mostrando cabinas activas";
+    if (machineViewFilter === "available") return "Mostrando cabinas libres";
+    return "Mostrando todas las cabinas";
+  }, [machineViewFilter]);
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
@@ -553,77 +537,56 @@ export default function Dashboard() {
         userProfile={userProfile}
       />
 
-      {/* Sección de Estadísticas y Selección de Local */}
+      {/* Sección compacta de filtros */}
       <div className="border-b border-border/40 bg-card/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-          {/* Grid de Estadísticas */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard 
-              label="Cabinas Disponibles"
-              value={availableMachines}
-              total={visibleMachines.length}
-              color="text-status-available"
-              icon={<Clock className="w-4 h-4" />}
-            />
-            <StatCard 
-              label="En uso"
-              value={occupiedMachines}
-              total={visibleMachines.length}
-              color="text-status-occupied"
-              icon={<TrendingUp className="w-4 h-4" />}
-            />
-            <StatCard 
-              label="Ocupación"
-              value={`${utilizationRate}%`}
-              color="text-primary"
-              icon={null}
-            />
-            <StatCard 
-              label="Recaudación hoy"
-              value={formatCurrency(dailySales)}
-              color="text-accent"
-              icon={null}
-            />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Vista rápida</p>
+              <h2 className="text-base md:text-lg font-semibold">Cabinas</h2>
+            </div>
+            <Badge variant="secondary" className="text-xs md:text-sm">
+              Activas: {occupiedMachines}
+            </Badge>
           </div>
 
-          {/* Estadísticas Avanzadas */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard 
-              label="Margen Bruto"
-              value={`${grossMargin}%`}
-              color={grossMargin >= 40 ? "text-status-available" : "text-yellow-500"}
-              icon={null}
-            />
-            <StatCard 
-              label="Transacciones"
-              value={visibleSales.length}
-              color="text-blue-500"
-              icon={null}
-            />
-            <StatCard 
-              label="Ticket promedio"
-              value={formatCurrency(avgTransactionValue)}
-              color="text-purple-500"
-              icon={null}
-            />
-            {topMachine && (
-              <StatCard 
-                label="Mejor máquina"
-                value={topMachine.machine}
-                color="text-amber-500"
-                icon={null}
-              />
-            )}
-
-                                {/* Alertas de Inventario */}
-                                {inventoryAlerts.length > 0 && (
-                                  <InventoryAlertsDisplay alerts={inventoryAlerts} />
-                                )}
+          {/* Filtros rápidos para operación */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <Button
+              size="sm"
+              variant={machineViewFilter === "active" ? "default" : "outline"}
+              onClick={() => setMachineViewFilter("active")}
+              className="whitespace-nowrap"
+            >
+              Activas ({occupiedMachines})
+            </Button>
+            <Button
+              size="sm"
+              variant={machineViewFilter === "available" ? "default" : "outline"}
+              onClick={() => setMachineViewFilter("available")}
+              className="whitespace-nowrap"
+            >
+              Libres ({availableMachines})
+            </Button>
+            <Button
+              size="sm"
+              variant={machineViewFilter === "all" ? "default" : "outline"}
+              onClick={() => setMachineViewFilter("all")}
+              className="whitespace-nowrap"
+            >
+              Todas ({visibleMachines.length})
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground">{filterLabel}</p>
+
+          {/* Alertas de Inventario */}
+          {inventoryAlerts.length > 0 && (
+            <InventoryAlertsDisplay alerts={inventoryAlerts} maxDisplay={3} />
+          )}
 
           {/* Selección de Local */}
           {availableLocations.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg bg-background/50 border border-border/30">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 md:p-4 rounded-lg bg-background/50 border border-border/30">
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <MapPin className="w-4 h-4" />
                 <span>Filtrando por:</span>
@@ -652,7 +615,7 @@ export default function Dashboard() {
 
       {/* Grid de Máquinas */}
       <main className="flex-1 overflow-y-auto">
-        <PCGrid machines={visibleMachines} onCardAction={handleCardAction} isLoading={machinesLoading} />
+        <PCGrid machines={filteredMachines} onCardAction={handleCardAction} isLoading={machinesLoading} />
       </main>
       
       <AssignPCDialog 
@@ -687,47 +650,6 @@ export default function Dashboard() {
         onGoToCharge={handleGoToCharge}
         inventoryByProduct={inventoryByProduct}
       />
-    </div>
-  );
-}
-
-// Componente para Tarjeta de Estadística
-function StatCard({ 
-  label, 
-  value, 
-  total,
-  color,
-  icon,
-  subtitle
-}: { 
-  label: string;
-  value: string | number;
-  total?: number;
-  color: string;
-  icon?: React.ReactNode;
-  subtitle?: string;
-}) {
-  return (
-    <div className="p-4 rounded-lg bg-background/50 border border-border/50 hover:border-border/80 transition-all">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-muted-foreground truncate">{label}</p>
-          <div className="flex items-baseline gap-1 mt-1">
-            <p className={`text-2xl font-bold pretype-number ${color}`}>{value}</p>
-            {total !== undefined && (
-              <p className="text-xs text-muted-foreground">/ {total}</p>
-            )}
-          </div>
-          {subtitle && (
-            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
-          )}
-        </div>
-        {icon && (
-          <div className={`p-2 rounded-md bg-primary/10 text-primary flex-shrink-0`}>
-            {icon}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

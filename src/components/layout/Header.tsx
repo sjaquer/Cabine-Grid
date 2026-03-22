@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Cpu, History, CircleUser, Monitor, MonitorCheck, LogOut, Settings, BarChart3, Package, Loader2, AlertTriangle } from "lucide-react";
+import { Cpu, History, CircleUser, LogOut, Settings, Package, Loader2, AlertTriangle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
@@ -63,7 +63,6 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
   } | null>(null);
   
   const totalMachines = availableMachines + occupiedMachines;
-  const utilizationRate = totalMachines > 0 ? ((occupiedMachines / totalMachines) * 100).toFixed(0) : "0";
   const requiresFormalClose = userProfile?.role === "operator" || userProfile?.role === "manager";
 
   const parsedCash = useMemo(() => Number(countedCash || 0), [countedCash]);
@@ -161,37 +160,6 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
           </div>
         </div>
 
-        {/* Estadísticas (Desktop) */}
-        <div className="hidden lg:flex items-center gap-6">
-          <div className="flex gap-3">
-            <StatBadge 
-              icon={<MonitorCheck className="h-4 w-4" />}
-              label="Disponibles"
-              value={availableMachines}
-              color="text-status-available"
-            />
-            <StatBadge 
-              icon={<Monitor className="h-4 w-4" />}
-              label="En Uso"
-              value={occupiedMachines}
-              color="text-status-occupied"
-            />
-            <StatBadge 
-              icon={<BarChart3 className="h-4 w-4" />}
-              label="Ocupación"
-              value={`${utilizationRate}%`}
-              color="text-primary"
-            />
-          </div>
-
-          {(userProfile?.role === 'admin' || userProfile?.role === 'manager') && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent/10 border border-accent/40">
-              <span className="text-xs text-muted-foreground">Recaudación hoy:</span>
-              <span className="font-bold text-accent">{formatCurrency(dailySales)}</span>
-            </div>
-          )}
-        </div>
-
         {/* Botones de Acción */}
         <div className="flex items-center gap-2">
           <Button 
@@ -248,6 +216,13 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {(userProfile?.role === 'admin' || userProfile?.role === 'manager') && (
+          <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/10 border border-accent/40">
+            <span className="text-xs text-muted-foreground">Hoy:</span>
+            <span className="font-bold text-accent text-sm">{formatCurrency(dailySales)}</span>
+          </div>
+        )}
       </div>
 
       <Dialog open={isCloseShiftOpen} onOpenChange={setIsCloseShiftOpen}>
@@ -397,29 +372,6 @@ function MoneyInput({
       <div className="text-xs text-muted-foreground">Esperado: {formatCurrency(expected)}</div>
       <div className={`text-xs font-medium ${difference === 0 ? "text-status-available" : "text-destructive"}`}>
         Diferencia: {formatCurrency(difference)}
-      </div>
-    </div>
-  );
-}
-
-// Componente para Badge de Estadística
-function StatBadge({ 
-  icon, 
-  label, 
-  value,
-  color 
-}: { 
-  icon: React.ReactNode;
-  label: string;
-  value: string | number;
-  color: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/50 border border-border/50 hover:border-border/80 transition-colors">
-      <span className={`${color} flex-shrink-0`}>{icon}</span>
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={`font-bold text-sm ${color}`}>{value}</p>
       </div>
     </div>
   );
