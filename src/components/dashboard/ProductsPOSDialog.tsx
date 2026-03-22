@@ -7,11 +7,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import ProductsPOS from "./ProductsPOS";
 
  type ProductsPOSDialogProps = {
@@ -44,14 +42,14 @@ export default function ProductsPOSDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:max-w-4xl p-0 overflow-hidden max-h-[92vh] flex flex-col shadow-2xl rounded-2xl border-accent/20">
+      <DialogContent className="w-[96vw] sm:max-w-4xl lg:max-w-6xl p-0 overflow-hidden max-h-[92vh] lg:h-[88vh] flex flex-col shadow-2xl rounded-2xl border-accent/20">
         <div className="bg-gradient-to-r from-background via-accent/5 to-secondary p-4 sm:p-6 border-b relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
           <DialogHeader className="space-y-1 relative z-10">
             <DialogTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2 font-black">
               TPV - <span className="text-accent">{machine.name}</span>
             </DialogTitle>
-            <DialogDescription className="text-sm font-medium text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
+            <DialogDescription className="text-xs font-medium text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
               <span className="bg-secondary/40 px-2.5 py-1 rounded-md text-foreground/80 font-semibold shadow-sm">
                 {sanitizeString(session.client) || "Cliente Ocasional"}
               </span>

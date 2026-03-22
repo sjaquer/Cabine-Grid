@@ -5,7 +5,7 @@ import type { Product, SoldProduct } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, MinusCircle, ShoppingCart, AlertCircle } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -131,8 +131,8 @@ export default function ProductsPOS({
     });
 
     return (
-        <Card className="border-0 shadow-none flex flex-col h-full min-h-0">
-            <CardHeader className="pb-3">
+        <Card className="border-0 shadow-none h-full min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-0">
+            <CardHeader className="pb-3 lg:col-start-1 lg:row-start-1">
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
                         <div>
@@ -140,9 +140,6 @@ export default function ProductsPOS({
                                 <ShoppingCart className="w-5 h-5 text-accent" />
                                 Punto de Venta (TPV)
                             </CardTitle>
-                            <CardDescription className="text-sm mt-1">
-                                1) Elige productos 2) Ajusta cantidad 3) Guarda o cobra.
-                            </CardDescription>
                         </div>
                         {itemCount > 0 && (
                             <Badge className="bg-accent text-accent-foreground text-base px-3 py-2">
@@ -174,7 +171,7 @@ export default function ProductsPOS({
                 </div>
             </CardHeader>
 
-            <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+            <CardContent className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden lg:col-start-1 lg:row-start-2 lg:pb-4">
                 {outOfStockProducts.length > 0 && (
                     <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
                         <AlertCircle className="h-4 w-4" />
@@ -195,10 +192,10 @@ export default function ProductsPOS({
 
                     {Array.from(products.entries()).map(([category, categoryProducts]) => (
                         <TabsContent key={category} value={category} className="flex-1 min-h-0 overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
-                            <div className="pr-2 space-y-3 pb-4 h-max">
+                            <div className="pr-2 space-y-2 pb-2 h-max">
                                 {categoryProducts.length === 0 ? (
                                     <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
-                                        <p>No hay productos en esta categoría</p>
+                                        <p>Sin productos</p>
                                     </div>
                                 ) : (
                                     categoryProducts.map(product => {
@@ -209,7 +206,7 @@ export default function ProductsPOS({
                                         return (
                                             <div
                                                 key={product.id}
-                                                className={`flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-background transition shadow-sm ${
+                                                className={`flex items-center justify-between p-3 rounded-xl border border-border/80 bg-background transition shadow-sm ${
                                                     isOutOfStock 
                                                         ? 'opacity-50 cursor-not-allowed' 
                                                         : 'hover:bg-secondary/40'
@@ -264,9 +261,10 @@ export default function ProductsPOS({
                 </Tabs>
             </CardContent>
 
-            <div className="border-t border-border/50 bg-secondary/10 p-4 sm:p-5 mt-auto shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.5)] z-10">
+            <aside className="border-t lg:border-t-0 lg:border-l border-border/50 bg-secondary/10 p-4 sm:p-5 lg:col-start-2 lg:row-span-2 flex flex-col min-h-0">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumen</h3>
                 {Object.entries(quantities).length > 0 && (
-                    <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40">
+                    <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40 overflow-y-auto max-h-48 lg:max-h-[45vh] pr-1">
                         {Object.entries(quantities).map(([productId, qty]) => {
                             const product = availableProducts.find(p => p.id === productId);
                             if (!product) return null;
@@ -285,13 +283,13 @@ export default function ProductsPOS({
                         {formatCurrency(total)}
                     </span>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="mt-auto flex flex-col gap-3">
                     {onClose && (
                         <Button 
                             variant="outline" 
                             onClick={onClose} 
                             disabled={isSaving}
-                            className="w-full sm:w-1/4 h-12 font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
+                            className="w-full h-12 font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
                         >
                             Cancelar
                         </Button>
@@ -307,7 +305,7 @@ export default function ProductsPOS({
                             }
                         }} 
                         disabled={isSaving}
-                        className="w-full sm:flex-1 h-14 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
+                        className="w-full h-14 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
                     >
                         <ShoppingCart className="w-5 h-5 mr-2" />
                         {isSaving ? "Guardando..." : "Guardar productos"}
@@ -324,13 +322,13 @@ export default function ProductsPOS({
                                 }
                             }} 
                             disabled={isSaving}
-                            className="w-full sm:flex-1 h-14 bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
+                            className="w-full h-14 bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
                         >
                             {isSaving ? "Guardando..." : "💰 Guardar y cobrar"}
                         </Button>
                     )}
                 </div>
-            </div>
+            </aside>
         </Card>
     );
 }
