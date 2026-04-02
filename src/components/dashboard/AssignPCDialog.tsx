@@ -75,6 +75,29 @@ function normalizeText(value: string): string {
     .trim();
 }
 
+function customerMatchScore(customer: Customer, query: string): number {
+  const needle = normalizeText(query);
+  if (!needle) return 0;
+
+  const name = normalizeText(customer.fullName);
+  const code = normalizeText(customer.customerCode);
+
+  if (code === needle) return 1200;
+  if (name === needle) return 1100;
+  if (code.startsWith(needle)) return 900;
+  if (name.startsWith(needle)) return 800;
+
+  let score = 0;
+  if (code.includes(needle)) score += 600;
+  if (name.includes(needle)) score += 500;
+
+  const terms = needle.split(/\s+/).filter(Boolean);
+  const termHits = terms.reduce((acc, term) => acc + (name.includes(term) || code.includes(term) ? 1 : 0), 0);
+  score += termHits * 60;
+
+  return score;
+}
+
 type AssignPCDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -181,6 +204,27 @@ export default function AssignPCDialog({
     form.reset();
   };
 
+  const handleSearchEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+
+    const bestMatch = [...filteredCustomers]
+      .sort((a, b) => customerMatchScore(b, customerSearch) - customerMatchScore(a, customerSearch))[0];
+
+    if (!bestMatch) return;
+
+    form.setValue("customerId", bestMatch.id, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    setCustomerSearch(bestMatch.fullName);
+
+    setTimeout(() => {
+      void form.handleSubmit(onSubmit)();
+    }, 0);
+  };
+
   const handleQuickCreateCustomer = async (values: QuickCustomerFormValues) => {
     try {
       setIsCreatingCustomer(true);
@@ -252,6 +296,7 @@ export default function AssignPCDialog({
                       <Input
                         value={customerSearch}
                         onChange={(event) => setCustomerSearch(event.target.value)}
+                        onKeyDown={handleSearchEnter}
                         placeholder="Buscar cliente por nombre o codigo"
                         className="pl-9 pr-9"
                       />

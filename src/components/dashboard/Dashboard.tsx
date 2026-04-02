@@ -23,8 +23,9 @@ import { canAccessMachine, useAccessibleMachines } from "@/hooks/useMachineAcces
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, PanelTopClose, PanelTopOpen } from "lucide-react";
+import { AlertTriangle, Building2, Settings, SlidersHorizontal } from "lucide-react";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 
 export default function Dashboard() {
@@ -32,11 +33,8 @@ export default function Dashboard() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
 
-  console.log('DEBUG Dashboard: firestore disponible:', !!firestore, 'user:', user?.email);
-
   const machinesQuery = useMemoFirebase(() => {
     if (!firestore) {
-      console.log('DEBUG: firestore no está disponible');
       return null;
     }
     return query(collection(firestore, "machines"));
@@ -85,12 +83,7 @@ export default function Dashboard() {
   }, [inventoryData]);
 
   const machines = useMemo(() => {
-    if (!machinesData) {
-      console.log('DEBUG: machinesData es null/undefined');
-      return [];
-    }
-    
-    console.log('DEBUG: machinesData loaded:', machinesData.length, 'máquinas');
+    if (!machinesData) return [];
     
     // Sort by name, assuming format "PC XX"
     return machinesData.sort((a, b) => {
@@ -155,22 +148,12 @@ export default function Dashboard() {
   }, [user?.uid, selectedLocationId]);
 
   const visibleMachines = useMemo(() => {
-    console.log('DEBUG: visibleMachines:', {
-      totalAccessibleMachines: accessibleMachines.length,
-      selectedLocationId,
-      hasMachinesWithLocation,
-      machinesLoading,
-    });
-    
     if (!selectedLocationId || !hasMachinesWithLocation) {
-      console.log('DEBUG: Mostrando todas las máquinas accesibles:', accessibleMachines.length);
       return accessibleMachines;
     }
 
-    const filtered = accessibleMachines.filter((machine) => machine.locationId === selectedLocationId);
-    console.log('DEBUG: Máquinas filtradas por local:', filtered.length);
-    return filtered;
-  }, [accessibleMachines, selectedLocationId, hasMachinesWithLocation, machinesLoading]);
+    return accessibleMachines.filter((machine) => machine.locationId === selectedLocationId);
+  }, [accessibleMachines, selectedLocationId, hasMachinesWithLocation]);
 
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
   const [machineToAssign, setMachineToAssign] = useState<Machine | null>(null);
@@ -184,7 +167,7 @@ export default function Dashboard() {
 
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
   const [machineViewFilter, setMachineViewFilter] = useState<"active" | "all" | "available">("active");
-  const [isTopPanelHidden, setIsTopPanelHidden] = useState(false);
+  const [showMobileControls, setShowMobileControls] = useState(false);
   
   const { toast } = useToast();
 
@@ -197,7 +180,7 @@ export default function Dashboard() {
     return query(collection(firestore, "sales"), where("endTime", ">=", startOfToday));
   }, [firestore, user]);
 
-  const { data: sales, isLoading: salesLoading } = useCollection<Sale>(salesQuery);
+  const { data: sales } = useCollection<Sale>(salesQuery);
   const sortedSales = useMemo(() => sales ? [...sales].sort((a, b) => (b.endTime as Timestamp).toMillis() - (a.endTime as Timestamp).toMillis()) : [], [sales]);
 
   const visibleSales = useMemo(() => {
@@ -253,10 +236,6 @@ export default function Dashboard() {
       setPosDialogOpen(true);
     }
   }, []);
-
-  const handleHeaderSettingsClick = useCallback(() => {
-    router.push('/admin');
-  }, [router]);
 
   const handleAssignDialogChange = useCallback((open: boolean) => {
     setAssignDialogOpen(open);
@@ -583,7 +562,7 @@ export default function Dashboard() {
     }
   }, [accessibleMachines, firestore, toast, selectedLocationId, user?.uid, user?.email, userProfile]);
 
-  const handleGoToCharge = useCallback((machineId: string) => {
+  const handleGoToCharge = useCallback((machineId: string, selectedProducts?: SoldProduct[]) => {
     const machine = accessibleMachines.find((item) => item.id === machineId) ?? null;
     if (!machine) return;
     
@@ -599,12 +578,25 @@ export default function Dashboard() {
 
     // Cerrar el POS antes de abrir cobro para evitar doble modal y clics extra.
     handlePosDialogChange(false);
-    setMachineToCharge(machine);
+    const machineForCharge = selectedProducts
+      ? {
+          ...machine,
+          session: machine.session
+            ? {
+                ...machine.session,
+                soldProducts: selectedProducts,
+              }
+            : machine.session,
+        }
+      : machine;
+
+    setMachineToCharge(machineForCharge);
     setChargeDialogOpen(true);
   }, [accessibleMachines, handlePosDialogChange, toast, userProfile]);
 
-  const availableMachines = visibleMachines.filter(m => m.status === 'available').length;
-  const occupiedMachines = visibleMachines.length - availableMachines;
+  const availableMachines = visibleMachines.filter((machine) => machine.status === "available").length;
+  const activeMachines = visibleMachines.filter((machine) => machine.status === "occupied" || machine.status === "warning").length;
+  const maintenanceMachines = visibleMachines.filter((machine) => machine.status === "maintenance").length;
   const filteredMachines = useMemo(() => {
     if (machineViewFilter === "active") {
       return visibleMachines.filter((machine) => machine.status === "occupied" || machine.status === "warning");
@@ -618,127 +610,186 @@ export default function Dashboard() {
 
   // Hook para obtener alertas de inventario
   const inventoryAlerts = useInventoryAlerts(inventoryData || []);
+  const selectedLocationName = useMemo(
+    () => availableLocations.find((location) => location.id === selectedLocationId)?.name,
+    [availableLocations, selectedLocationId]
+  );
 
-  const filterLabel = useMemo(() => {
-    if (machineViewFilter === "active") return "Mostrando cabinas activas";
-    if (machineViewFilter === "available") return "Mostrando cabinas libres";
-    return "Mostrando todas las cabinas";
-  }, [machineViewFilter]);
-
-  return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
-      <Header 
-        dailySales={dailySales}
-        availableMachines={availableMachines}
-        occupiedMachines={occupiedMachines}
-        onHistoryClick={() => setHistorySheetOpen(true)}
-        onSettingsClick={handleHeaderSettingsClick}
-        userProfile={userProfile}
-      />
-
-      {/* Sección compacta de filtros */}
-      <div className="border-b border-border/40 bg-card/80 backdrop-blur-sm">
-        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isTopPanelHidden ? "py-2" : "py-3"} space-y-3`}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-base md:text-lg font-semibold">Cabinas</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs md:text-sm whitespace-nowrap">
-                Activas: {occupiedMachines}
-              </Badge>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsTopPanelHidden((prev) => !prev)}
-                className="h-8 px-2.5"
-              >
-                {isTopPanelHidden ? <PanelTopOpen className="w-4 h-4" /> : <PanelTopClose className="w-4 h-4" />}
-                <span className="ml-1 hidden sm:inline">{isTopPanelHidden ? "Mostrar" : "Ocultar"}</span>
-              </Button>
-            </div>
+  const operationPanel = (
+    <div className="space-y-4">
+      <div className="space-y-2 rounded-xl border border-border/50 bg-card/60 p-3.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Control operativo</p>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">Gestor de cabinas</p>
+            <p className="text-xs text-muted-foreground">Monitoreo en tiempo real</p>
           </div>
-
-          {isTopPanelHidden ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{filterLabel}</span>
-              {selectedLocationId && (
-                <Badge variant="secondary" className="text-[11px]">
-                  {availableLocations.find((location) => location.id === selectedLocationId)?.name || "Local"}
-                </Badge>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Filtros rápidos para operación */}
-              <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
-                <Button
-                  size="sm"
-                  variant={machineViewFilter === "active" ? "default" : "outline"}
-                  onClick={() => setMachineViewFilter("active")}
-                  className="whitespace-nowrap"
-                >
-                  Activas ({occupiedMachines})
-                </Button>
-                <Button
-                  size="sm"
-                  variant={machineViewFilter === "available" ? "default" : "outline"}
-                  onClick={() => setMachineViewFilter("available")}
-                  className="whitespace-nowrap"
-                >
-                  Libres ({availableMachines})
-                </Button>
-                <Button
-                  size="sm"
-                  variant={machineViewFilter === "all" ? "default" : "outline"}
-                  onClick={() => setMachineViewFilter("all")}
-                  className="whitespace-nowrap"
-                >
-                  Todas ({visibleMachines.length})
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">{filterLabel}</p>
-
-              {/* Alertas de Inventario */}
-              {inventoryAlerts.length > 0 && (
-                <InventoryAlertsDisplay alerts={inventoryAlerts} maxDisplay={3} />
-              )}
-
-              {/* Selección de Local */}
-              {availableLocations.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 md:p-4 rounded-lg bg-background/50 border border-border/30">
-                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <MapPin className="w-4 h-4" />
-                    <span>Filtrando por:</span>
-                  </div>
-                  <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                    <SelectTrigger className="w-full sm:w-64">
-                      <SelectValue placeholder="Selecciona local" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableLocations.map((location) => (
-                        <SelectItem key={location.id} value={location.id}>
-                          <span className="font-medium">{location.name}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedLocationId && availableLocations.length > 1 && (
-                    <Badge variant="secondary" className="hidden sm:flex">
-                      {availableLocations.find(l => l.id === selectedLocationId)?.name}
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+          {selectedLocationName && <Badge variant="secondary" className="h-7 rounded-full px-2.5 text-[11px]">{selectedLocationName}</Badge>}
         </div>
       </div>
 
-      {/* Grid de Máquinas */}
-      <main className="flex-1 overflow-y-auto">
-        <PCGrid machines={filteredMachines} onCardAction={handleCardAction} isLoading={machinesLoading} />
+      <div className="surface-soft space-y-2 p-3.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cambiar local</p>
+        <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+          <SelectTrigger className="h-10 w-full">
+            <SelectValue placeholder="Selecciona local" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableLocations.map((location) => (
+              <SelectItem key={location.id} value={location.id}>
+                {location.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="surface-soft p-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Libres</p>
+          <p className="text-2xl font-bold leading-none">{availableMachines}</p>
+        </div>
+        <div className="surface-soft p-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Activas</p>
+          <p className="text-2xl font-bold leading-none">{activeMachines}</p>
+        </div>
+        <div className="surface-soft p-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Mantenimiento</p>
+          <p className="text-2xl font-bold leading-none">{maintenanceMachines}</p>
+        </div>
+        <div className="surface-soft p-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Alertas</p>
+          <p className="text-2xl font-bold leading-none">{inventoryAlerts.length}</p>
+        </div>
+      </div>
+
+      {(userProfile?.role === "admin" || userProfile?.role === "manager") && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-10 w-full gap-2"
+          onClick={() => {
+            setShowMobileControls(false);
+            router.push("/admin");
+          }}
+        >
+          <Settings className="h-4 w-4" />
+          Administración
+        </Button>
+      )}
+
+      {inventoryAlerts.length > 0 && (
+        <InventoryAlertsDisplay alerts={inventoryAlerts} maxDisplay={3} />
+      )}
+    </div>
+  );
+
+  return (
+    <div className="app-shell app-enter flex h-screen flex-col">
+      <Header 
+        dailySales={dailySales}
+        availableMachines={availableMachines}
+        occupiedMachines={activeMachines}
+        onHistoryClick={() => setHistorySheetOpen(true)}
+        userProfile={userProfile}
+      />
+
+      <main className="app-container flex-1 overflow-hidden py-3 sm:py-4">
+        <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="surface-card hidden h-full overflow-y-auto p-4 lg:block">
+            {operationPanel}
+          </aside>
+
+          <section className="surface-card flex h-full min-h-0 flex-col overflow-hidden">
+            <div className="border-b border-border/40 p-3 sm:p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold sm:text-lg">Cabinas operativas</h2>
+                  <p className="text-xs text-muted-foreground sm:text-sm">Selecciona una cabina para asignar, cobrar o abrir TPV.</p>
+                </div>
+                <div className="hidden items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:flex">
+                  <Building2 className="h-3.5 w-3.5" />
+                  {selectedLocationName || "Sin local"}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <Button
+                size="sm"
+                className="h-9 rounded-full px-4 text-sm"
+                variant={machineViewFilter === "available" ? "default" : "outline"}
+                onClick={() => setMachineViewFilter("available")}
+              >
+                Libres {availableMachines}
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 rounded-full px-4 text-sm"
+                variant={machineViewFilter === "active" ? "default" : "outline"}
+                onClick={() => setMachineViewFilter("active")}
+              >
+                Activas {activeMachines}
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 rounded-full px-4 text-sm"
+                variant={machineViewFilter === "all" ? "default" : "outline"}
+                onClick={() => setMachineViewFilter("all")}
+              >
+                Todas {visibleMachines.length}
+              </Button>
+
+              {selectedLocationName && (
+                <Badge variant="secondary" className="h-9 rounded-full px-3 text-xs sm:hidden">
+                  {selectedLocationName}
+                </Badge>
+              )}
+
+              {maintenanceMachines > 0 && (
+                <Badge variant="outline" className="h-9 rounded-full px-3 text-xs">
+                  Mantenimiento {maintenanceMachines}
+                </Badge>
+              )}
+
+              {inventoryAlerts.length > 0 && (
+                <Badge variant="outline" className="h-9 rounded-full px-3 text-xs lg:hidden">
+                  <AlertTriangle className="mr-1 h-3.5 w-3.5" />
+                  Alertas {inventoryAlerts.length}
+                </Badge>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto h-9 gap-1 px-3 lg:hidden"
+                onClick={() => setShowMobileControls(true)}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Panel
+              </Button>
+            </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <PCGrid machines={filteredMachines} onCardAction={handleCardAction} isLoading={machinesLoading} />
+            </div>
+          </section>
+        </div>
       </main>
+
+      <Sheet open={showMobileControls} onOpenChange={setShowMobileControls}>
+        <SheetContent side="left" className="w-[88vw] p-4 sm:max-w-sm">
+          <SheetHeader>
+            <SheetTitle>Panel lateral</SheetTitle>
+            <SheetDescription>
+              Cambia local y revisa informacion rapida sin quitar espacio a las cabinas.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1">
+            {operationPanel}
+          </div>
+        </SheetContent>
+      </Sheet>
       
       <AssignPCDialog 
         isOpen={isAssignDialogOpen} 

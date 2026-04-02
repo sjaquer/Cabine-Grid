@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Package, Cpu, MapPin, ShoppingCart, BarChart3, FileText, Home, Users, UserRound } from "lucide-react";
+import { ArrowLeft, BarChart3, Cpu, FileText, Home, MapPin, Package, ShoppingCart, Users, UserRound } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MachineManager from "@/components/admin/MachineManager";
@@ -441,15 +441,15 @@ export default function AdminPage() {
 
   return (
     <RoleGuard requiredRoles={["admin", "manager"]}>
-      <div className="min-h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
+      <div className="app-shell app-enter">
         {/* Header Profesional Mejorado */}
-        <header className="sticky top-0 z-50 border-b border-border/50 bg-card/95 backdrop-blur-xl">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <header className="app-sticky-header">
+          <div className="app-container">
             {/* Navegación Principal */}
-            <div className="flex items-center justify-between py-4 gap-4">
+            <div className="app-header-row">
               <div className="flex items-center gap-3">
-                <div className="hidden md:flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
+                <div className="brand-chip">
+                  <div className="brand-chip-icon">
                     <Cpu className="w-5 h-5 text-primary-foreground" />
                   </div>
                   <span className="font-headline font-bold text-lg">Cabine Grid</span>
@@ -462,24 +462,24 @@ export default function AdminPage() {
               </div>
 
               {/* Botones de Navegación Secundaria - Reorganizados */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <Link href="/">
-                  <Button variant="outline" size="sm" className="gap-2 h-9">
+                  <Button variant="outline" size="sm" className="gap-2 h-9 whitespace-nowrap">
                     <Home className="w-4 h-4" />
-                    <span className="hidden md:inline">Dashboard</span>
+                    <span className="hidden sm:inline">Dashboard</span>
                   </Button>
                 </Link>
                 <Link href="/inventario">
-                  <Button variant="outline" size="sm" className="gap-2 h-9">
+                  <Button variant="outline" size="sm" className="gap-2 h-9 whitespace-nowrap">
                     <Package className="w-4 h-4" />
-                    <span className="hidden md:inline">Inventario</span>
+                    <span className="hidden sm:inline">Inventario</span>
                   </Button>
                 </Link>
               </div>
             </div>
 
             {/* Estadísticas Rápidas */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 py-4 border-t border-border/30">
+            <div className="kpi-strip grid-cols-2 md:grid-cols-5">
               <StatQuick label="Cabinas" value={machines.length} icon={<Cpu className="w-4 h-4" />} />
               <StatQuick label="Locales" value={locations.length} icon={<MapPin className="w-4 h-4" />} />
               <StatQuick label="Productos" value={products.length} icon={<ShoppingCart className="w-4 h-4" />} />
@@ -490,54 +490,52 @@ export default function AdminPage() {
         </header>
 
         {/* Contenido Principal */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Sección de Quick Actions */}
+        <main className="app-container py-8">
           <div className="mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <QuickActionCard
-                title="Cabinas"
-                description="Gestiona máquinas y especificaciones"
-                icon={<Cpu className="w-5 h-5" />}
-                count={machines.length}
-                tabValue="machines"
-                onSelectTab={handleQuickActionSelect}
-              />
-              <QuickActionCard
-                title="Locales"
-                description="Administra locales de negocio"
-                icon={<MapPin className="w-5 h-5" />}
-                count={locations.length}
-                tabValue="locations"
-                onSelectTab={handleQuickActionSelect}
-              />
-              <QuickActionCard
-                title="Productos"
-                description="Inventario y precios"
-                icon={<ShoppingCart className="w-5 h-5" />}
-                count={products.length}
-                tabValue="products"
-                onSelectTab={handleQuickActionSelect}
-              />
-              <QuickActionCard
-                title="Clientes"
-                description="CRM y fidelizacion"
-                icon={<UserRound className="w-5 h-5" />}
-                count={customers.length}
-                tabValue="customers"
-                onSelectTab={handleQuickActionSelect}
-              />
-              <QuickActionCard
-                title="Usuarios"
-                description="Roles y permisos"
-                icon={<Users className="w-5 h-5" />}
-                count={users.length}
-                tabValue={userProfile?.role === "admin" ? "users" : null}
-                onSelectTab={handleQuickActionSelect}
-              />
+            <div className="app-stagger grid grid-cols-1 md:grid-cols-4 gap-4">
+                <QuickActionCard
+                  title="Cabinas"
+                  description="Gestiona máquinas y especificaciones"
+                  icon={<Cpu className="w-5 h-5" />}
+                  count={machines.length}
+                  tabValue="machines"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Locales"
+                  description="Administra locales de negocio"
+                  icon={<MapPin className="w-5 h-5" />}
+                  count={locations.length}
+                  tabValue="locations"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Productos"
+                  description="Inventario y precios"
+                  icon={<ShoppingCart className="w-5 h-5" />}
+                  count={products.length}
+                  tabValue="products"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Clientes"
+                  description="CRM y fidelizacion"
+                  icon={<UserRound className="w-5 h-5" />}
+                  count={customers.length}
+                  tabValue="customers"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Usuarios"
+                  description="Roles y permisos"
+                  icon={<Users className="w-5 h-5" />}
+                  count={users.length}
+                  tabValue={userProfile?.role === "admin" ? "users" : null}
+                  onSelectTab={handleQuickActionSelect}
+                />
             </div>
           </div>
 
-          {/* Tabs de Gestión */}
           <div ref={tabsSectionRef}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="bg-card/80 rounded-lg border border-border/50 p-4 mb-6">
@@ -645,7 +643,7 @@ export default function AdminPage() {
 // Componentes Auxiliares para mejor diseño
 function StatQuick({ label, value, icon }: { label: string; value: number; icon?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30 hover:border-border/50 transition-colors">
+    <div className="surface-stat">
       {icon && <span className="text-primary flex-shrink-0">{icon}</span>}
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground truncate">{label}</p>

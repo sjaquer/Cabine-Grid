@@ -52,6 +52,44 @@ function severityVariant(value?: AuditLogRecord["severity"]): "default" | "secon
   return "outline";
 }
 
+function explainRisk(log: AuditLogRecord): { reason: string; action: string } {
+  const tags = log.riskTags || [];
+  const score = log.anomalyScore || 0;
+
+  if (tags.includes("destructive-action") || /delete|deactivate/i.test(log.action)) {
+    return {
+      reason: "Accion destructiva detectada sobre datos operativos.",
+      action: "Validar autorizacion y revisar bitacora del mismo operador en las ultimas 2 horas.",
+    };
+  }
+
+  if (/shift\.reopen|closure/i.test(log.action)) {
+    return {
+      reason: "Cambio en cierre de turno con impacto en control de caja.",
+      action: "Confirmar motivo documentado y conciliar ventas vs efectivo contado.",
+    };
+  }
+
+  if (/inventory|stock/i.test(log.action) || tags.includes("inventory-risk")) {
+    return {
+      reason: "Movimiento de inventario con posible impacto en margen y disponibilidad.",
+      action: "Cruzar con ajustes del turno y verificar diferencia fisica del producto.",
+    };
+  }
+
+  if (score >= 75) {
+    return {
+      reason: "Patron atipico de alta severidad segun puntaje de riesgo.",
+      action: "Escalar a supervisor y congelar cambios sensibles hasta validacion.",
+    };
+  }
+
+  return {
+    reason: "Evento con riesgo operativo moderado.",
+    action: "Monitorear recurrencia y documentar seguimiento en el cierre del turno.",
+  };
+}
+
 export default function AuditLogsManager({ logs, locations, users }: AuditLogsManagerProps) {
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -190,11 +228,13 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
           </CardHeader>
           <CardContent className="space-y-2">
             {anomalies.slice(0, 5).map((log) => (
-              <div key={`anomaly-${log.id}`} className="rounded-md border border-red-300/60 bg-red-50/40 p-3 text-sm">
+              <div key={`anomaly-${log.id}`} className="rounded-md border border-red-300/60 bg-red-50/40 p-3 text-sm space-y-1">
                 <div className="font-semibold">{log.action}</div>
                 <div>Operador: {log.actor?.email || "No identificado"}</div>
                 <div>Local: {locationsMap.get(log.locationId || "") || log.locationId || "Sin local"}</div>
                 <div>Puntaje: {log.anomalyScore || 0} - Tags: {(log.riskTags || []).join(", ") || "N/A"}</div>
+                <div className="text-xs text-red-800"><strong>Motivo:</strong> {explainRisk(log).reason}</div>
+                <div className="text-xs text-red-800"><strong>Accion sugerida:</strong> {explainRisk(log).action}</div>
               </div>
             ))}
           </CardContent>
@@ -218,6 +258,7 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
                 <TableHead>Local</TableHead>
                 <TableHead>Severidad</TableHead>
                 <TableHead className="text-right">Riesgo</TableHead>
+                <TableHead>Recomendacion</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -239,6 +280,7 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
                   <TableCell className="text-right">
                     <Badge variant={(log.anomalyScore || 0) >= 60 ? "destructive" : "secondary"}>{log.anomalyScore || 0}</Badge>
                   </TableCell>
+                  <TableCell className="max-w-[320px] text-xs text-muted-foreground">{explainRisk(log).action}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -17,10 +17,10 @@ type PCCardProps = {
 };
 
 const statusColors = {
-  available: "border-status-available/40 hover:border-status-available/80 bg-gradient-to-br from-status-available/5 to-transparent",
-  occupied: "border-status-occupied/40 hover:border-status-occupied/80 bg-gradient-to-br from-status-occupied/5 to-transparent",
-  warning: "border-status-warning/60 hover:border-status-warning bg-gradient-to-br from-status-warning/10 to-transparent animate-pulse",
-  maintenance: "border-muted/40 hover:border-muted/60 bg-gradient-to-br from-muted/5 to-transparent",
+  available: "border-status-available/45 hover:border-status-available/80 bg-gradient-to-b from-status-available/5 to-transparent",
+  occupied: "border-status-occupied/45 hover:border-status-occupied/80 bg-gradient-to-b from-status-occupied/5 to-transparent",
+  warning: "border-status-warning/70 hover:border-status-warning bg-gradient-to-b from-status-warning/15 to-transparent",
+  maintenance: "border-muted/45 hover:border-muted/70 bg-gradient-to-b from-muted/5 to-transparent",
 };
 
 const statusBg = {
@@ -67,15 +67,15 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
   return (
     <Card
       className={cn(
-        "flex flex-col transition-all duration-300 border-2 hover:shadow-xl md:hover:scale-105 cursor-pointer overflow-hidden",
+        "group flex min-h-[230px] flex-col overflow-hidden border-2 transition-all duration-300 hover:shadow-xl cursor-pointer",
         statusColors[status]
       )}
       onClick={() => status !== "maintenance" && onAction(machine)}
     >
-      <CardHeader className="flex-row items-start justify-between space-y-0 pb-2 pt-3 px-3 md:pb-3 md:pt-4 md:px-4">
+      <CardHeader className="flex-row items-start justify-between space-y-0 px-3 pb-2.5 pt-3.5">
         <div className="flex flex-col gap-2 flex-1">
-          <CardTitle className="text-base md:text-lg font-headline font-bold">{machine.name}</CardTitle>
-          <Badge className={`w-fit text-xs font-semibold ${statusBadge[status].color}`}>
+          <CardTitle className="text-xl font-headline font-bold tracking-tight">{machine.name}</CardTitle>
+          <Badge className={`w-fit px-2.5 py-0.5 text-xs font-semibold ${statusBadge[status].color}`}>
             {statusBadge[status].label}
           </Badge>
         </div>
@@ -91,38 +91,38 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
       
       {status === 'available' ? (
         <>
-          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-4 md:py-6">
-            <div className="scale-75 md:scale-100">{getStatusIcon()}</div>
+          <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 px-3 py-3 text-center">
+            <div className="scale-90 transition-transform duration-300 group-hover:scale-100">{getStatusIcon()}</div>
             <p className="text-sm font-medium text-muted-foreground">
               {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
             </p>
-            <p className="hidden md:block text-xs text-muted-foreground">Haz clic para asignar</p>
+            <p className="text-xs text-muted-foreground">Lista para nueva sesion</p>
           </CardContent>
-          <CardFooter className="p-2 md:p-3 pt-0">
+          <CardFooter className="p-3 pt-0">
             <Button 
               variant="default" 
-              className="w-full font-semibold" 
+              className="h-10 w-full font-semibold text-sm" 
               size="sm" 
               onClick={(event) => {
                 event.stopPropagation();
                 onAction(machine);
               }}
             >
-              <PlusCircle className="w-4 h-4 mr-2" /> 
+              <PlusCircle className="mr-2 h-4 w-4" /> 
               Asignar
             </Button>
           </CardFooter>
         </>
       ) : status === 'maintenance' ? (
         <>
-          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-4 md:py-6">
-            <div className="scale-75 md:scale-100">{getStatusIcon()}</div>
+          <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 py-3 text-center">
+            <div className="scale-90">{getStatusIcon()}</div>
             <p className="text-sm font-semibold text-muted-foreground">En Mantenimiento</p>
           </CardContent>
-          <CardFooter className="p-2 md:p-3 pt-0">
+          <CardFooter className="p-3 pt-0">
             <Button 
               variant="outline" 
-              className="w-full" 
+              className="h-10 w-full text-sm" 
               size="sm" 
               disabled
             >
@@ -132,52 +132,52 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
         </>
       ) : (
         <>
-          <CardContent className="flex-1 flex flex-col justify-between gap-2 py-3 px-3 md:gap-3 md:py-4 md:px-4">
+          <CardContent className="flex flex-1 flex-col justify-between gap-3 px-3 py-3">
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="text-accent w-4 h-4"/>
-                <span className="font-semibold truncate text-foreground">{sanitizeString(session?.client) || 'Cliente Ocasional'}</span>
+                <User className="h-4 w-4 text-accent"/>
+                <span className="truncate font-semibold text-foreground">{sanitizeString(session?.client) || 'Cliente Ocasional'}</span>
               </div>
               
               <div className="flex items-center gap-2 text-sm">
-                <Clock className="text-primary w-4 h-4"/>
-                <span className="text-xs text-muted-foreground flex-1">
+                <Clock className="h-4 w-4 text-primary"/>
+                <span className="flex-1 text-xs text-muted-foreground">
                   {isPrepaid ? (timeIsUp ? "Tiempo Extra" : "Tiempo Restante") : "Tiempo Transcurrido"}
                 </span>
               </div>
             </div>
 
             <div className={cn(
-              "bg-secondary/60 rounded-lg p-3 text-center",
+              "rounded-lg bg-secondary/60 p-3 text-center",
               isWarning && "bg-status-warning/20 border border-status-warning/50"
             )}>
-              <div className="text-xl md:text-2xl font-mono font-bold text-primary">
+              <div className="text-2xl font-mono font-bold leading-none text-primary">
                 {formatTime(Math.floor(timeToShow))}
               </div>
-              <div className="text-xs text-muted-foreground mt-1">
+              <div className="mt-1.5 text-xs text-muted-foreground">
                 {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
               </div>
             </div>
 
             {isWarning && (
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-status-warning/15 border border-status-warning/40">
-                <AlertTriangle className="w-4 h-4 text-status-warning flex-shrink-0" />
-                <span className="text-xs font-semibold text-status-warning">{isPrepaid ? "Tiempo prepagado por terminar" : "Tiempo por terminar"}</span>
+              <div className="flex items-center gap-2 rounded-lg border border-status-warning/40 bg-status-warning/15 px-2.5 py-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-status-warning" />
+                <span className="text-xs font-semibold text-status-warning">{isPrepaid ? "Prepagado por terminar" : "Tiempo por terminar"}</span>
               </div>
             )}
           </CardContent>
           
-          <CardFooter className="p-2 md:p-3 pt-0">
+          <CardFooter className="p-3 pt-0">
             <Button 
               variant={isWarning ? "destructive" : "secondary"}
-              className="w-full font-semibold" 
+              className="h-10 w-full font-semibold text-sm" 
               size="sm" 
               onClick={(event) => {
                 event.stopPropagation();
                 onAction(machine);
               }}
             >
-              {isWarning ? "Abrir TPV" : "Abrir TPV"}
+              Abrir TPV
             </Button>
           </CardFooter>
         </>

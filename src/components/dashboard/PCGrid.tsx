@@ -12,11 +12,11 @@ type PCGridProps = {
 export default function PCGrid({ machines, onCardAction, isLoading }: PCGridProps) {
   if (isLoading) {
     return (
-      <div className="flex-1 p-4 sm:p-6 lg:p-8">
+      <div className="flex-1 p-3 sm:p-4 lg:p-6">
         <div className="space-y-4">
-          <div className="h-10 bg-background/50 rounded-lg animate-pulse" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3 sm:gap-4 md:gap-5">
-            {Array.from({length: 12}).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-lg" />)}
+          <div className="h-11 bg-background/50 rounded-lg animate-pulse" />
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
+            {Array.from({length: 12}).map((_, i) => <Skeleton key={i} className="h-56 w-full rounded-xl" />)}
           </div>
         </div>
       </div>
@@ -25,7 +25,7 @@ export default function PCGrid({ machines, onCardAction, isLoading }: PCGridProp
 
   if (machines.length === 0) {
     return (
-      <div className="flex-1 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
+      <div className="flex-1 p-3 sm:p-4 lg:p-6 flex items-center justify-center">
         <div className="max-w-sm text-center">
           <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
             <AlertCircle className="w-6 h-6 text-muted-foreground" />
@@ -40,18 +40,18 @@ export default function PCGrid({ machines, onCardAction, isLoading }: PCGridProp
   }
 
   return (
-    <div className="flex-1 p-4 sm:p-6 lg:p-8">
-      <div className="space-y-3 md:space-y-4">
+    <div className="flex-1 p-3 sm:p-4 lg:p-6">
+      <div className="space-y-4">
         {/* Encabezado con contador */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
           <div>
-            <h2 className="text-base md:text-lg font-bold">Cabinas</h2>
-            <p className="text-xs md:text-sm text-muted-foreground">{machines.length} {machines.length === 1 ? 'resultado' : 'resultados'}</p>
+            <h2 className="text-sm font-semibold md:text-base">Disponibles en pantalla</h2>
+            <p className="text-xs text-muted-foreground">{machines.length} {machines.length === 1 ? 'cabina' : 'cabinas'} en esta vista</p>
           </div>
         </div>
         
         {/* Grid de máquinas */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3 md:gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
           {machines.map((machine) => (
             <PCCard
               key={machine.id}

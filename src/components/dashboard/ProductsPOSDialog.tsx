@@ -18,7 +18,7 @@ import ProductsPOS from "./ProductsPOS";
   machine: Machine | null;
   products: Product[];
   onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
-  onGoToCharge: (machineId: string) => void;
+  onGoToCharge: (machineId: string, products: SoldProduct[]) => void;
   inventoryByProduct?: Record<string, number>; // productId -> stock
  };
 
@@ -42,7 +42,7 @@ export default function ProductsPOSDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] sm:max-w-4xl lg:max-w-6xl p-0 overflow-hidden max-h-[92vh] lg:h-[88vh] flex flex-col shadow-2xl rounded-2xl border-accent/20">
+      <DialogContent className="w-[96vw] p-0 overflow-hidden h-[calc(100dvh-0.75rem)] max-h-[calc(100dvh-0.75rem)] sm:max-w-4xl sm:max-h-[92vh] lg:max-w-6xl lg:h-[88vh] flex flex-col shadow-2xl rounded-2xl border-accent/20">
         <div className="bg-gradient-to-r from-background via-accent/5 to-secondary p-4 sm:p-6 border-b relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
           <DialogHeader className="space-y-1 relative z-10">
@@ -60,13 +60,13 @@ export default function ProductsPOSDialog({
           </DialogHeader>
         </div>
 
-        <div className="flex-1 min-h-0 bg-background/50 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-background/50">
           <ProductsPOS
             availableProducts={products}
             initialProducts={session.soldProducts}
             onSave={handleSave}
             onClose={() => onOpenChange(false)}
-            onGoToCharge={() => onGoToCharge(machine.id)}
+            onGoToCharge={(selectedProducts) => onGoToCharge(machine.id, selectedProducts)}
             inventoryByProduct={inventoryByProduct}
           />
         </div>

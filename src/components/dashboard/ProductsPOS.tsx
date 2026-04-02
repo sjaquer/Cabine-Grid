@@ -18,7 +18,7 @@ interface ProductsPOSProps {
     initialProducts?: SoldProduct[];
     onSave: (products: SoldProduct[]) => Promise<void>;
     onClose?: () => void;
-    onGoToCharge?: () => void;
+    onGoToCharge?: (products: SoldProduct[]) => void;
     inventoryByProduct?: Record<string, number>; // productId -> stock
 }
 
@@ -130,8 +130,65 @@ export default function ProductsPOS({
         return stock === 0 && p.isActive !== false;
     });
 
+    const renderProductRow = (product: Product) => {
+        const availableStock = getAvailableStock(product.id, product);
+        const isOutOfStock = availableStock === 0;
+        const currentQty = quantities[product.id] || 0;
+
+        return (
+            <div
+                key={product.id}
+                className={`flex items-center justify-between p-3 rounded-xl border border-border/80 bg-background transition shadow-sm ${
+                    isOutOfStock
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'hover:bg-secondary/40'
+                }`}
+            >
+                <div className="flex-1 min-w-0 pr-3">
+                    <div className="flex items-center gap-2">
+                        <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
+                        {availableStock > 0 && (
+                            <Badge variant="outline" className="text-xs bg-secondary/60 text-foreground/70 font-semibold">
+                                Stock: {availableStock}
+                            </Badge>
+                        )}
+                        {isOutOfStock && (
+                            <Badge variant="destructive" className="text-xs font-semibold">
+                                Sin stock
+                            </Badge>
+                        )}
+                    </div>
+                    <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
+                </div>
+                <div className="flex items-center gap-2 bg-secondary/30 rounded-lg p-1.5 border border-border/50">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => handleQuantityChange(product.id, -1)}
+                        disabled={isOutOfStock || currentQty === 0}
+                    >
+                        <MinusCircle className="w-5 h-5" />
+                    </Button>
+                    <div className="w-10 md:w-12 text-center flex items-center justify-center">
+                        <span className="font-bold text-lg md:text-xl tabular-nums">{currentQty}</span>
+                    </div>
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => handleQuantityChange(product.id, 1)}
+                        disabled={isOutOfStock || currentQty >= availableStock}
+                    >
+                        <PlusCircle className="w-5 h-5" />
+                    </Button>
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <Card className="border-0 shadow-none h-full min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-0">
+        <Card className="border-0 shadow-none min-h-full flex flex-col lg:h-full lg:min-h-0 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-0">
             <CardHeader className="pb-3 lg:col-start-1 lg:row-start-1">
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -171,7 +228,7 @@ export default function ProductsPOS({
                 </div>
             </CardHeader>
 
-            <CardContent className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden lg:col-start-1 lg:row-start-2 lg:pb-4">
+            <CardContent className="flex-1 min-h-0 flex flex-col gap-3 overflow-visible lg:overflow-hidden lg:col-start-1 lg:row-start-2 lg:pb-4">
                 {outOfStockProducts.length > 0 && (
                     <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
                         <AlertCircle className="h-4 w-4" />
@@ -180,7 +237,19 @@ export default function ProductsPOS({
                         </AlertDescription>
                     </Alert>
                 )}
-                <Tabs defaultValue="drink" className="flex-1 min-h-0 flex flex-col">
+                <div className="lg:hidden flex-1 min-h-0 overflow-y-auto">
+                    <div className="pr-2 space-y-2 pb-2 h-max">
+                        {filteredProducts.length === 0 ? (
+                            <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
+                                <p>Sin productos</p>
+                            </div>
+                        ) : (
+                            filteredProducts.map(renderProductRow)
+                        )}
+                    </div>
+                </div>
+
+                <Tabs defaultValue="drink" className="hidden lg:flex flex-1 min-h-0 flex-col">
                     <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60 p-1">
                         {Object.entries(categoryLabels).map(([cat, label]) => (
                             <TabsTrigger key={cat} value={cat} className="text-sm flex gap-1 h-11">
@@ -191,69 +260,14 @@ export default function ProductsPOS({
                     </TabsList>
 
                     {Array.from(products.entries()).map(([category, categoryProducts]) => (
-                        <TabsContent key={category} value={category} className="flex-1 min-h-0 overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
+                        <TabsContent key={category} value={category} className="flex-1 min-h-0 overflow-visible lg:overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
                             <div className="pr-2 space-y-2 pb-2 h-max">
                                 {categoryProducts.length === 0 ? (
                                     <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
                                         <p>Sin productos</p>
                                     </div>
                                 ) : (
-                                    categoryProducts.map(product => {
-                                        const availableStock = getAvailableStock(product.id, product);
-                                        const isOutOfStock = availableStock === 0;
-                                        const currentQty = quantities[product.id] || 0;
-                                        
-                                        return (
-                                            <div
-                                                key={product.id}
-                                                className={`flex items-center justify-between p-3 rounded-xl border border-border/80 bg-background transition shadow-sm ${
-                                                    isOutOfStock 
-                                                        ? 'opacity-50 cursor-not-allowed' 
-                                                        : 'hover:bg-secondary/40'
-                                                }`}
-                                            >
-                                                <div className="flex-1 min-w-0 pr-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
-                                                        {availableStock > 0 && (
-                                                            <Badge variant="outline" className="text-xs bg-secondary/60 text-foreground/70 font-semibold">
-                                                                Stock: {availableStock}
-                                                            </Badge>
-                                                        )}
-                                                        {isOutOfStock && (
-                                                            <Badge variant="destructive" className="text-xs font-semibold">
-                                                                Sin stock
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
-                                                </div>
-                                                <div className="flex items-center gap-2 bg-secondary/30 rounded-lg p-1.5 border border-border/50">
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        onClick={() => handleQuantityChange(product.id, -1)}
-                                                        disabled={isOutOfStock || currentQty === 0}
-                                                    >
-                                                        <MinusCircle className="w-5 h-5" />
-                                                    </Button>
-                                                    <div className="w-10 md:w-12 text-center flex items-center justify-center">
-                                                        <span className="font-bold text-lg md:text-xl tabular-nums">{quantities[product.id] || 0}</span>
-                                                    </div>
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="icon"
-                                                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        onClick={() => handleQuantityChange(product.id, 1)}
-                                                        disabled={isOutOfStock || currentQty >= availableStock}
-                                                    >
-                                                        <PlusCircle className="w-5 h-5" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
+                                    categoryProducts.map(renderProductRow)
                                 )}
                             </div>
                         </TabsContent>
@@ -261,7 +275,7 @@ export default function ProductsPOS({
                 </Tabs>
             </CardContent>
 
-            <aside className="border-t lg:border-t-0 lg:border-l border-border/50 bg-secondary/10 p-4 sm:p-5 lg:col-start-2 lg:row-span-2 flex flex-col min-h-0">
+            <aside className="border-t lg:border-t-0 lg:border-l border-border/50 bg-secondary/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-5 lg:pb-5 lg:col-start-2 lg:row-span-2 flex flex-col min-h-0">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumen</h3>
                 {Object.entries(quantities).length > 0 && (
                     <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40 overflow-y-auto max-h-48 lg:max-h-[45vh] pr-1">
@@ -283,7 +297,7 @@ export default function ProductsPOS({
                         {formatCurrency(total)}
                     </span>
                 </div>
-                <div className="mt-auto flex flex-col gap-3">
+                <div className="mt-auto flex flex-col gap-3 sticky bottom-0 bg-secondary/10 pt-3">
                     {onClose && (
                         <Button 
                             variant="outline" 
@@ -316,7 +330,7 @@ export default function ProductsPOS({
                                 try {
                                     setIsSaving(true);
                                     await onSave(soldProducts);
-                                    onGoToCharge();
+                                    onGoToCharge(soldProducts);
                                 } finally {
                                     setIsSaving(false);
                                 }

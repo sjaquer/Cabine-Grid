@@ -82,7 +82,12 @@ export type ConsolidatedClosure = {
 export type AuditLogLike = {
   action?: string;
   target?: string;
+  locationId?: string | null;
   createdAt?: Timestamp;
+  createdAtMs?: number;
+  severity?: "low" | "medium" | "high" | "critical";
+  anomalyScore?: number;
+  riskTags?: string[];
   actor?: {
     id?: string | null;
   };

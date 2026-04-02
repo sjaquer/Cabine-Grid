@@ -28,6 +28,7 @@ import {
   TrendingDown,
   TrendingUp,
   Home,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -363,18 +364,31 @@ export default function InventoryPage() {
   const outOfStockCount = allRows.filter((row) => row.stock <= 0).length;
   const lowStockCount = allRows.filter((row) => row.stock > 0 && row.stock <= row.minStock).length;
   const healthyCount = allRows.filter((row) => row.stock > row.minStock).length;
+  const priorityRows = useMemo(
+    () =>
+      allRows
+        .filter((row) => row.stock <= row.minStock)
+        .sort((a, b) => {
+          const aCritical = a.stock <= 0 ? 0 : 1;
+          const bCritical = b.stock <= 0 ? 0 : 1;
+          if (aCritical !== bCritical) return aCritical - bCritical;
+          return a.stock - b.stock;
+        })
+        .slice(0, 6),
+    [allRows]
+  );
 
   return (
     <RoleGuard>
-      <div className="min-h-screen bg-gradient-to-br from-secondary via-secondary to-secondary/80">
+      <div className="app-shell app-enter">
         {/* Header Profesional */}
-        <header className="sticky top-0 z-50 border-b border-border/40 bg-card/95 backdrop-blur-xl">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between py-4 gap-4">
+        <header className="app-sticky-header">
+          <div className="app-container">
+            <div className="app-header-row">
               <div className="flex items-center gap-3">
-                <div className="hidden md:flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent to-accent/70 flex items-center justify-center">
-                    <Package className="w-5 h-5 text-accent-foreground" />
+                <div className="brand-chip">
+                  <div className="brand-chip-icon">
+                    <Package className="w-5 h-5 text-primary-foreground" />
                   </div>
                   <span className="font-headline font-bold text-lg">Cabine Grid</span>
                 </div>
@@ -384,17 +398,25 @@ export default function InventoryPage() {
                   <p className="text-xs text-muted-foreground">Control de stock por local</p>
                 </div>
               </div>
-              <Link href="/">
-                <Button variant="outline" size="sm" className="gap-2 h-9">
-                  <Home className="w-4 h-4" />
-                  <span className="hidden md:inline">Dashboard</span>
-                </Button>
-              </Link>
+              <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
+                <Link href="/">
+                  <Button variant="outline" size="sm" className="h-9 gap-2 whitespace-nowrap">
+                    <Home className="w-4 h-4" />
+                    <span className="hidden sm:inline">Dashboard</span>
+                  </Button>
+                </Link>
+                <Link href="/admin">
+                  <Button variant="outline" size="sm" className="h-9 gap-2 whitespace-nowrap">
+                    <Settings className="w-4 h-4" />
+                    <span className="hidden sm:inline">Administración</span>
+                  </Button>
+                </Link>
+              </div>
             </div>
 
             {/* Stats rápidas en el header */}
-            <div className="grid grid-cols-3 gap-2 py-4 border-t border-border/30">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30">
+            <div className="kpi-strip grid-cols-3 gap-2">
+              <div className="surface-stat">
                 <div className="rounded bg-red-500/15 p-1.5 flex-shrink-0">
                   <Ban className="w-4 h-4 text-red-600" />
                 </div>
@@ -403,7 +425,7 @@ export default function InventoryPage() {
                   <p className="text-sm font-bold text-red-600">{outOfStockCount}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30">
+              <div className="surface-stat">
                 <div className="rounded bg-amber-500/15 p-1.5 flex-shrink-0">
                   <AlertCircle className="w-4 h-4 text-amber-600" />
                 </div>
@@ -412,7 +434,7 @@ export default function InventoryPage() {
                   <p className="text-sm font-bold text-amber-600">{lowStockCount}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background/50 border border-border/30">
+              <div className="surface-stat">
                 <div className="rounded bg-green-500/15 p-1.5 flex-shrink-0">
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
                 </div>
@@ -426,34 +448,76 @@ export default function InventoryPage() {
         </header>
 
         {/* Contenido Principal */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-          {/* Tarjetas de Estadísticas */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <InventoryStatCard
-              title="Productos Agotados"
-              value={outOfStockCount}
-              icon={<Ban className="w-5 h-5" />}
-              color="text-red-600"
-              bgColor="bg-red-500/10"
-              borderColor="border-red-300/30"
-            />
-            <InventoryStatCard
-              title="Stock Bajo"
-              value={lowStockCount}
-              icon={<AlertCircle className="w-5 h-5" />}
-              color="text-amber-600"
-              bgColor="bg-amber-500/10"
-              borderColor="border-amber-300/30"
-            />
-            <InventoryStatCard
-              title="Stock Estable"
-              value={healthyCount}
-              icon={<CheckCircle2 className="w-5 h-5" />}
-              color="text-green-600"
-              bgColor="bg-green-500/10"
-              borderColor="border-green-300/30"
-            />
-          </div>
+        <main className="app-container py-8 space-y-6">
+          {selectedLocationId && (
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-status-warning" /> Cola de prioridades
+                </CardTitle>
+                <CardDescription>
+                  Productos con stock critico o bajo para actuar en menos de 1 minuto.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {priorityRows.length === 0 ? (
+                  <div className="surface-soft px-4 py-6 text-sm text-muted-foreground text-center">
+                    Todo en rango estable para este local.
+                  </div>
+                ) : (
+                  <div className="app-stagger grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {priorityRows.map((row) => {
+                      const status = indicator(row.stock, row.minStock);
+                      const isCritical = row.stock <= 0;
+                      return (
+                        <div
+                          key={`priority-${row.productId}`}
+                          className={`rounded-lg border p-3 space-y-3 ${
+                            isCritical ? "border-red-300/40 bg-red-500/10" : "border-amber-300/40 bg-amber-500/10"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold">{row.productName}</p>
+                              <p className="text-xs text-muted-foreground">Minimo: {row.minStock}</p>
+                            </div>
+                            <Badge className={`${status.className} border text-xs`}>{status.label}</Badge>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">Stock actual</span>
+                            <span className="font-mono font-bold text-sm">{row.stock}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              disabled={!canManage || busyActionKey !== null}
+                              onClick={() => applyInventoryAdjustment(row, "entry", 1, "Reposicion prioritaria +1")}
+                            >
+                              <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                              +1
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-8"
+                              disabled={!canManage}
+                              onClick={() => openAdjustDialog(row)}
+                            >
+                              Ajustar
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Filtros y Búsqueda */}
           <Card className="border-border/50">
@@ -719,38 +783,5 @@ export default function InventoryPage() {
         </DialogContent>
       </Dialog>
     </RoleGuard>
-  );
-}
-
-// Componente para Tarjeta de Estadística de Inventario
-function InventoryStatCard({
-  title,
-  value,
-  icon,
-  color,
-  bgColor,
-  borderColor,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-}) {
-  return (
-    <Card className={`border-border/50 hover:shadow-lg transition-all ${borderColor}`}>
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">{title}</p>
-            <p className={`text-3xl font-bold ${color}`}>{value}</p>
-          </div>
-          <div className={`p-3 rounded-lg ${bgColor} text-center flex-shrink-0`}>
-            <span className={`flex items-center justify-center ${color}`}>{icon}</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

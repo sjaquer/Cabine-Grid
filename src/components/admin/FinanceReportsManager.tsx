@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Download, FileText, Building2, TrendingUp, AlertTriangle } from "lucide-react";
+import { BrainCircuit, Download, FileText, Building2, TrendingUp, AlertTriangle } from "lucide-react";
 
 type ShiftClosureLike = {
   id: string;
@@ -106,6 +106,94 @@ export default function FinanceReportsManager({ sales, machines, locations, user
   const weightedMarginPercent = globalRevenue > 0 ? (weightedMargin / globalRevenue) * 100 : 0;
 
   const topLocation = analytics.executiveByLocation[0];
+
+  const financialForecast = useMemo(() => {
+    const now = Date.now();
+    const lastThreeHoursMs = now - (3 * 60 * 60 * 1000);
+    const recentSales = analytics.filteredSales.filter((sale) => {
+      const end = sale.endTime as Timestamp;
+      return end?.toMillis?.() >= lastThreeHoursMs;
+    });
+
+    const recentRevenue = recentSales.reduce((sum, sale) => sum + sale.amount, 0);
+    const hourlyRecentRevenue = recentRevenue / 3;
+    const hourlyBaseline = globalRevenue / Math.max(1, new Date().getHours() + 1);
+    const projectedRevenue = (hourlyRecentRevenue * 0.65) + (hourlyBaseline * 0.35);
+    const projectedSalesCount = Math.max(1, Math.round((recentSales.length / 3) * 0.7 + (globalSalesCount / Math.max(1, new Date().getHours() + 1)) * 0.3));
+
+    return {
+      projectedRevenue,
+      projectedSalesCount,
+    };
+  }, [analytics.filteredSales, globalRevenue, globalSalesCount]);
+
+  const filteredRiskLogs = useMemo(
+    () =>
+      auditLogs.filter((log) => {
+        if (filters.locationId && filters.locationId !== "all" && (log.locationId || "sin-local") !== filters.locationId) {
+          return false;
+        }
+        return true;
+      }),
+    [auditLogs, filters.locationId]
+  );
+
+  const riskExposure = useMemo(() => {
+    const criticalOrHigh = filteredRiskLogs.filter(
+      (log) => log.severity === "critical" || log.severity === "high" || (log.anomalyScore || 0) >= 60
+    );
+    const avgRisk = filteredRiskLogs.length > 0
+      ? filteredRiskLogs.reduce((sum, log) => sum + (log.anomalyScore || 0), 0) / filteredRiskLogs.length
+      : 0;
+
+    return {
+      criticalOrHighCount: criticalOrHigh.length,
+      averageRisk: avgRisk,
+    };
+  }, [filteredRiskLogs]);
+
+  const financeInsights = useMemo(() => {
+    const insights: Array<{ title: string; detail: string; action: string; tone: "good" | "warn" | "neutral" }> = [];
+
+    if (financialForecast.projectedRevenue > 0) {
+      insights.push({
+        title: "Proxima hora",
+        detail: `Proyeccion ${formatCurrency(financialForecast.projectedRevenue)} en ${financialForecast.projectedSalesCount} venta(s).`,
+        action: "Refuerza operador en hora pico y valida stock top.",
+        tone: "neutral",
+      });
+    }
+
+    const worstComparative = [...analytics.todayVsYesterday].sort((a, b) => a.variationPercent - b.variationPercent)[0];
+    if (worstComparative && worstComparative.variationPercent < -8) {
+      insights.push({
+        title: "Caida relevante",
+        detail: `${worstComparative.title} cae ${formatVariation(worstComparative.variationPercent)} vs ayer.`,
+        action: "Revisa operador, disponibilidad de cabinas y mix de productos en el turno actual.",
+        tone: "warn",
+      });
+    }
+
+    if (riskExposure.criticalOrHighCount > 0) {
+      insights.push({
+        title: "Riesgo operativo",
+        detail: `${riskExposure.criticalOrHighCount} evento(s) de alto riesgo en auditoria para este filtro.`,
+        action: "Abrir modulo de auditoria y cerrar hallazgos antes del cierre de caja.",
+        tone: "warn",
+      });
+    }
+
+    if (insights.length === 0) {
+      insights.push({
+        title: "Operacion estable",
+        detail: "Indicadores sin desviaciones fuertes en el rango seleccionado.",
+        action: "Mantener ritmo y validar cumplimiento de cierres.",
+        tone: "good",
+      });
+    }
+
+    return insights.slice(0, 3);
+  }, [financialForecast, analytics.todayVsYesterday, riskExposure]);
 
   const exportPdf = () => {
     exportFinancePdf({
@@ -225,6 +313,35 @@ export default function FinanceReportsManager({ sales, machines, locations, user
           icon={Building2}
         />
       </div>
+
+      <Card className="surface-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BrainCircuit className="w-5 h-5 text-accent" /> Copiloto financiero
+          </CardTitle>
+          <CardDescription>
+            Recomendaciones automaticas por tendencia, riesgo y proyeccion de la proxima hora.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          {financeInsights.map((insight, index) => (
+            <div
+              key={`${insight.title}-${index}`}
+              className={`rounded-lg border p-3 space-y-2 ${
+                insight.tone === "warn"
+                  ? "border-amber-300/50 bg-amber-500/10"
+                  : insight.tone === "good"
+                    ? "border-green-300/50 bg-green-500/10"
+                    : "border-border/50 bg-background/70"
+              }`}
+            >
+              <p className="text-sm font-semibold">{insight.title}</p>
+              <p className="text-xs text-muted-foreground">{insight.detail}</p>
+              <p className="text-xs font-medium">{insight.action}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="executive" className="w-full">
         <TabsList className="grid w-full grid-cols-5">
