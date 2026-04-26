@@ -2,41 +2,48 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
-import type { Customer, Sale } from "@/lib/types";
-import { collection, query } from "firebase/firestore";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type { Customer } from "@/lib/types";
+import { collection, query, addDoc, serverTimestamp } from "firebase/firestore";
+import { CustomerProfileDrawer } from "@/components/admin/CustomerProfileDrawer";
+import { logAuditAction } from "@/lib/audit-log";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Home, Search, UserRound, Trophy, Gamepad2, CalendarDays, Clock, HardDrive } from "lucide-react";
-import Link from "next/link";
-import { formatCurrency } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+import { Search, UserRound, Trophy, Gamepad2, Plus, UserPlus } from "lucide-react";
+import { formatCurrency, cn } from "@/lib/utils";
 
-const weekdayLabels = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
+type QuickFilter = 'all' | 'gold' | 'silver' | 'bronze';
 
 export default function ClientesPage() {
   const firestore = useFirestore();
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState<QuickFilter>('all');
   const [selectedGamer, setSelectedGamer] = useState<Customer | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  
+  // Keyboard Navigation State
+  const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Create client modal state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newFullName, setNewFullName] = useState("");
+  const [newDni, setNewDni] = useState("");
+  const [newCustomerCode, setNewCustomerCode] = useState("");
+  const [isSavingClient, setIsSavingClient] = useState(false);
 
   const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
   const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
@@ -44,255 +51,309 @@ export default function ClientesPage() {
   const customers = useMemo(() => (customersData ?? []) as Customer[], [customersData]);
 
   const filteredCustomers = useMemo(() => {
+    let result = customers;
+    
+    // Search term filter
     const needle = searchTerm.toLowerCase().trim();
-    if (!needle) return customers;
+    if (needle) {
+      result = result.filter((c) => {
+        const name = c.fullName?.toLowerCase() || "";
+        const code = c.customerCode?.toLowerCase() || "";
+        const dni = c.dni?.toLowerCase() || "";
+        return name.includes(needle) || code.includes(needle) || dni.includes(needle);
+      });
+    }
 
-    return customers.filter((customer) => {
-      const name = customer.fullName?.toLowerCase() || "";
-      const code = customer.customerCode?.toLowerCase() || "";
-      return name.includes(needle) || code.includes(needle);
-    });
-  }, [customers, searchTerm]);
+    // Quick filters
+    if (selectedFilter !== 'all') {
+      result = result.filter(c => (c.loyaltyLevel || 'bronze') === selectedFilter);
+    }
 
-  // Calculate helper stats for Gamer Profile
-  const getTopStat = (map?: Record<string, number>) => {
-    if (!map) return "N/A";
-    let bestKey = "N/A";
-    let bestValue = -1;
-    Object.entries(map).forEach(([key, value]) => {
-      if (value > bestValue) {
-        bestKey = key;
-        bestValue = value;
+    return result;
+  }, [customers, searchTerm, selectedFilter]);
+
+  // Autofocus Search on Mount
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, []);
+
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev < filteredCustomers.length - 1 ? prev + 1 : 0));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev > 0 ? prev - 1 : filteredCustomers.length - 1));
+      } else if (e.key === 'Enter' && activeIndex >= 0) {
+        e.preventDefault();
+        const client = filteredCustomers[activeIndex];
+        if (client) {
+          setSelectedGamer(client);
+          setIsDrawerOpen(true);
+        }
+      } else if (e.key.toLowerCase() === 'n' && document.activeElement !== searchInputRef.current && !isCreateModalOpen && !isDrawerOpen) {
+        e.preventDefault();
+        setNewFullName("");
+        setNewDni("");
+        setNewCustomerCode(`CLI-${Math.floor(1000 + Math.random() * 9000)}`);
+        setIsCreateModalOpen(true);
       }
-    });
-    return bestKey;
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [filteredCustomers, activeIndex, isCreateModalOpen, isDrawerOpen]);
+
+  const handleCreateClient = async () => {
+    if (!newFullName.trim()) return;
+    setIsSavingClient(true);
+    try {
+      const clientRef = await addDoc(collection(firestore, "customers"), {
+        fullName: newFullName.trim(),
+        dni: newDni.trim(),
+        customerCode: newCustomerCode,
+        loyaltyLevel: 'bronze',
+        totalSpent: 0,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        metrics: {
+          totalSessions: 0,
+          totalMinutesRented: 0,
+          totalProductsBought: 0,
+          totalSpent: 0,
+        }
+      });
+
+      await logAuditAction(firestore, {
+        action: "create_customer_crm",
+        target: "customers",
+        targetId: clientRef.id,
+        details: { customerAlias: newFullName.trim(), dni: newDni.trim() },
+        actor: { id: user?.uid || null, email: user?.email || null, role: userProfile?.role || null }
+      });
+
+      setIsCreateModalOpen(false);
+    } catch (e) {
+      console.error("Error creando cliente:", e);
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
+
+  const loyaltyColors = {
+    gold: "text-yellow-500 border-yellow-500/30 shadow-[0_0_10px_rgba(234,179,8,0.15)] bg-yellow-500/5",
+    silver: "text-zinc-400 border-zinc-700/30 bg-zinc-800/20",
+    bronze: "text-orange-500 border-orange-500/20 bg-orange-500/5"
   };
 
   return (
     <RoleGuard>
-      <div className="app-shell app-enter">
+      <div className="app-shell app-enter bg-zinc-950 text-zinc-100">
         {/* Header */}
-        <header className="app-sticky-header">
-          <div className="app-container">
-            <div className="app-header-row">
-              <div className="flex items-center gap-3">
-                <div className="brand-chip">
-                  <div className="brand-chip-icon">
-                    <UserRound className="w-5 h-5 text-primary-foreground" />
-                  </div>
-                  <span className="font-headline font-bold text-lg">Mini-CRM</span>
-                </div>
-                <div className="hidden lg:block h-6 w-px bg-border/50"></div>
-                <div className="flex flex-col gap-0.5">
-                  <h1 className="text-xl font-headline font-bold">Clientes</h1>
-                  <p className="text-xs text-muted-foreground">Estrategia de fidelización de jugadores</p>
-                </div>
-              </div>
-              <div>
-                <Link href="/">
-                  <Button variant="outline" size="sm" className="gap-2 h-9">
-                    <Home className="w-4 h-4" />
-                    Dashboard
-                  </Button>
-                </Link>
-              </div>
+        <header className="sticky top-0 z-40 border-b border-zinc-900 bg-zinc-950/90 backdrop-blur-xl px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-[0_0_15px_rgba(234,88,12,0.15)]">
+              <UserRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-headline font-bold tracking-tight">Mini-CRM Gamer</h1>
+              <p className="text-xs text-zinc-400 font-medium">Control de lealtad de la comunidad</p>
             </div>
           </div>
+
+          <Button 
+            onClick={() => {
+              setNewFullName("");
+              setNewDni("");
+              setNewCustomerCode(`CLI-${Math.floor(1000 + Math.random() * 9000)}`);
+              setIsCreateModalOpen(true);
+            }}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs h-9 shadow-[0_0_10px_rgba(234,88,12,0.2)]"
+          >
+            <Plus className="w-4 h-4" /> Nuevo Cliente (N)
+          </Button>
         </header>
 
-        <main className="app-container py-8 space-y-6">
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Search className="w-5 h-5 text-primary" /> Búsqueda y Filtros
-              </CardTitle>
-              <CardDescription>Localiza perfiles mediante Alias o DNI</CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center gap-4">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar por Alias, Nombre o DNI..."
-                  className="pl-9"
-                />
+        <main className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+          {/* Hero Search input */}
+          <div className="relative">
+            <Search className="w-6 h-6 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" />
+            <Input
+              ref={searchInputRef}
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setActiveIndex(-1);
+              }}
+              placeholder="Busca por Alias, Nombre, Código o DNI..."
+              className="h-14 pl-12 pr-4 bg-zinc-900/30 border border-zinc-800/60 focus-visible:ring-primary/50 text-base rounded-2xl font-medium text-zinc-100"
+            />
+            <Badge variant="outline" className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-zinc-500 border-zinc-800">
+              Foco Automático
+            </Badge>
+          </div>
+
+          {/* Quick Filters */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedFilter('all')}
+              className={cn("text-xs h-8 px-3 rounded-lg border border-transparent", selectedFilter === 'all' ? "bg-zinc-800 text-zinc-100 font-bold border-zinc-700" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900")}
+            >
+              Todos
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedFilter('gold')}
+              className={cn("text-xs h-8 px-3 rounded-lg border border-transparent text-yellow-500 hover:bg-yellow-500/10", selectedFilter === 'gold' && "bg-yellow-500/10 font-bold border-yellow-500/20")}
+            >
+              <Trophy className="w-3.5 h-3.5 mr-1.5" /> Oro / VIPs
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedFilter('silver')}
+              className={cn("text-xs h-8 px-3 rounded-lg border border-transparent text-zinc-400 hover:bg-zinc-800", selectedFilter === 'silver' && "bg-zinc-800 font-bold border-zinc-700")}
+            >
+              Plata
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedFilter('bronze')}
+              className={cn("text-xs h-8 px-3 rounded-lg border border-transparent text-orange-500 hover:bg-orange-500/10", selectedFilter === 'bronze' && "bg-orange-500/10 font-bold border-orange-500/20")}
+            >
+              Bronce
+            </Button>
+          </div>
+
+          {/* High Density Tactical List */}
+          <div className="border border-zinc-900 rounded-2xl bg-zinc-950/30 overflow-hidden">
+            {filteredCustomers.length === 0 ? (
+              <div className="py-12 text-center">
+                <UserRound className="w-12 h-12 text-zinc-800 mx-auto mb-3" />
+                <p className="text-sm text-zinc-600 font-medium">No se encontraron registros tácticos.</p>
               </div>
-              <Badge variant="secondary" className="h-9 font-mono text-sm px-3">
-                Total: {filteredCustomers.length}
-              </Badge>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gamepad2 className="w-5 h-5" /> Lista de Gamers
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {filteredCustomers.length === 0 ? (
-                <div className="py-12 text-center">
-                  <UserRound className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">No se encontraron clientes</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-border/50 rounded-lg">
-                  <Table>
-                    <TableHeader className="bg-background/50">
-                      <TableRow className="border-border/50 hover:bg-background/50">
-                        <TableHead>Nombre / Alias</TableHead>
-                        <TableHead>Código / DNI</TableHead>
-                        <TableHead className="text-right">Horas Jugadas</TableHead>
-                        <TableHead className="text-right">Gasto Total</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredCustomers.map((customer) => (
-                        <TableRow key={customer.id} className="border-border/30 hover:bg-background/30 transition-colors">
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <span className="p-1.5 rounded-md bg-primary/10 text-primary">
-                                <UserRound className="w-4 h-4" />
-                              </span>
-                              <span>{customer.fullName}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="font-mono">{customer.customerCode}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {(((customer.metrics?.totalMinutesRented ?? 0) / 60)).toFixed(1)} h
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatCurrency(customer.metrics?.totalSpent ?? 0)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="gap-1.5"
-                              onClick={() => setSelectedGamer(customer)}
-                            >
-                              <Trophy className="w-3.5 h-3.5 text-amber-500" />
-                              Perfil Gamer
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </main>
-
-        {/* MODAL PERFIL DEL GAMER */}
-        <Dialog open={!!selectedGamer} onOpenChange={(open) => !open && setSelectedGamer(null)}>
-          <DialogContent className="max-w-lg bg-background/95 border border-border/50 backdrop-blur-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-xl">
-                <Trophy className="w-6 h-6 text-amber-500 animate-pulse" /> Perfil del Gamer
-              </DialogTitle>
-              <DialogDescription>Analítica y preferencias de fidelización.</DialogDescription>
-            </DialogHeader>
-
-            {selectedGamer && (
-              <div className="space-y-6 py-4">
-                <div className="flex items-center gap-4 p-4 bg-primary/5 border border-primary/20 rounded-xl">
-                  <div className="h-14 w-14 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                    <UserRound className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h2 className="font-headline font-bold text-lg leading-tight">{selectedGamer.fullName}</h2>
-                    <p className="text-xs font-mono text-muted-foreground mt-0.5">Código: {selectedGamer.customerCode}</p>
-                    {selectedGamer.email && <p className="text-xs text-muted-foreground mt-1">{selectedGamer.email}</p>}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Card className="border-border/30">
-                    <CardContent className="p-3 flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10 text-primary">
-                        <Clock className="w-5 h-5" />
+            ) : (
+              <div className="divide-y divide-zinc-900/60">
+                {filteredCustomers.map((customer, index) => {
+                  const tier = customer.loyaltyLevel || 'bronze';
+                  return (
+                    <div
+                      key={customer.id}
+                      onClick={() => {
+                        setSelectedGamer(customer);
+                        setIsDrawerOpen(true);
+                        setActiveIndex(index);
+                      }}
+                      className={cn(
+                        "flex items-center justify-between p-4 transition-all cursor-pointer hover:bg-zinc-900/40",
+                        index === activeIndex && "bg-zinc-900/60 border-y border-zinc-800/50 shadow-[inset_0_0_15px_rgba(0,0,0,0.2)]"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-lg bg-zinc-900 flex items-center justify-center text-zinc-400 text-xs font-bold font-mono border border-zinc-800/40">
+                          {customer.fullName ? customer.fullName[0].toUpperCase() : "?"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-zinc-100 tracking-tight truncate">{customer.fullName}</p>
+                          <p className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                            {customer.dni ? `DNI: ${customer.dni}` : `Cod: ${customer.customerCode}`}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-2xs text-muted-foreground uppercase tracking-wider">Tiempo total</p>
-                        <p className="text-sm font-bold font-mono">
-                          {(((selectedGamer.metrics?.totalMinutesRented ?? 0) / 60)).toFixed(1)} h
-                        </p>
+
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Invertido</p>
+                          <p className="text-xs font-bold font-mono text-zinc-300 mt-0.5">
+                            {formatCurrency(customer.totalSpent ?? customer.metrics?.totalSpent ?? 0)}
+                          </p>
+                        </div>
+
+                        <Badge 
+                          variant="outline" 
+                          className={cn("text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md", loyaltyColors[tier])}
+                        >
+                          {tier}
+                        </Badge>
                       </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card className="border-border/30">
-                    <CardContent className="p-3 flex items-center gap-3">
-                      <div className="p-2 rounded-md bg-primary/10 text-primary">
-                        <Trophy className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-2xs text-muted-foreground uppercase tracking-wider">Gasto total</p>
-                        <p className="text-sm font-bold font-mono">
-                          {formatCurrency(selectedGamer.metrics?.totalSpent ?? 0)}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="space-y-3">
-                  <h3 className="text-sm font-bold flex items-center gap-2 px-1">
-                    <Gamepad2 className="w-4 h-4 text-primary" /> Hábitos del Jugador
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 gap-2">
-                    <div className="flex items-center justify-between p-2.5 bg-card border border-border/30 rounded-md text-sm">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <HardDrive className="w-3.5 h-3.5" /> Máquina Frecuente
-                      </span>
-                      <span className="font-bold font-mono">{getTopStat(selectedGamer.metrics?.machineUsage)}</span>
                     </div>
-
-                    <div className="flex items-center justify-between p-2.5 bg-card border border-border/30 rounded-md text-sm">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <CalendarDays className="w-3.5 h-3.5" /> Día Preferido
-                      </span>
-                      <span className="font-bold">
-                        {(() => {
-                          const day = getTopStat(selectedGamer.metrics?.visitsByWeekday);
-                          return day !== "N/A" ? weekdayLabels[Number(day)] : "N/A";
-                        })()}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2.5 bg-card border border-border/30 rounded-md text-sm">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5" /> Hora Frecuente
-                      </span>
-                      <span className="font-bold font-mono">
-                        {(() => {
-                          const hour = getTopStat(selectedGamer.metrics?.visitHours);
-                          return hour !== "N/A" ? `${String(Number(hour)).padStart(2, "0")}:00` : "N/A";
-                        })()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {selectedGamer.favoriteGames && selectedGamer.favoriteGames.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground px-1">Juegos Favoritos:</p>
-                    <div className="flex flex-wrap gap-1.5 px-1">
-                      {selectedGamer.favoriteGames.map((game, idx) => (
-                        <Badge key={idx} variant="secondary">{game}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             )}
+          </div>
+        </main>
+
+        {/* Side drawer Player profile */}
+        <CustomerProfileDrawer
+          customer={selectedGamer}
+          isOpen={isDrawerOpen}
+          onClose={() => {
+            setIsDrawerOpen(false);
+            setSelectedGamer(null);
+          }}
+        />
+
+        {/* Modal Creación Cliente Rápido */}
+        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-100 max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <UserPlus className="w-5 h-5 text-primary" /> Registrar Gamer
+              </DialogTitle>
+              <DialogDescription className="text-xs text-zinc-400">
+                Alta táctica rápida de cliente para el mostrador.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-zinc-400">Nombre Completo o Alias</Label>
+                <Input
+                  value={newFullName}
+                  onChange={(e) => setNewFullName(e.target.value)}
+                  placeholder="Alias Gamer"
+                  className="h-9 bg-zinc-900/50 border-zinc-800 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-zinc-400">DNI / Cédula</Label>
+                <Input
+                  value={newDni}
+                  onChange={(e) => setNewDni(e.target.value)}
+                  placeholder="Doc Identidad"
+                  className="h-9 bg-zinc-900/50 border-zinc-800 text-xs font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-zinc-500">Código Generado</Label>
+                <Input
+                  value={newCustomerCode}
+                  readOnly
+                  disabled
+                  className="h-9 bg-zinc-950 border-zinc-900 text-xs font-mono text-zinc-600 cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button 
+                onClick={handleCreateClient} 
+                disabled={isSavingClient || !newFullName.trim()}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-9"
+              >
+                {isSavingClient ? "Guardando..." : "Finalizar Registro"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

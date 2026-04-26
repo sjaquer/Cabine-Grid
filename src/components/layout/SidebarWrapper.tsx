@@ -3,7 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/firebase";
 import Link from "next/link";
-import { Cpu, Home, UserRound, Package, BarChart3, Settings, LogOut, Loader2, Menu, X } from "lucide-react";
+import { Cpu, Home, UserRound, Package, BarChart3, Settings, LogOut, Loader2, Menu, X, Sun, Moon, Palette } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +27,7 @@ import CommandPalette from "./CommandPalette";
 export default function SidebarWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, userProfile, loading, logout, getShiftClosurePreview } = useAuth();
+  const { mode, color, setMode, setColor } = useTheme();
   const { toast } = useToast();
 
   const [isCollapsed, setIsCollapsed] = useState(true);
@@ -143,7 +145,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
       {/* Sidebar colapsable dinámico */}
       <aside 
         className={cn(
-          "hidden lg:flex bg-zinc-950 border-r border-zinc-900 flex-col items-center py-4 justify-between z-30 shrink-0 transition-all duration-300 ease-in-out group/sidebar",
+          "hidden lg:flex bg-card border-r border-border flex-col items-center py-4 justify-between z-30 shrink-0 transition-all duration-300 ease-in-out group/sidebar",
           isCollapsed ? "w-16 sm:w-20 hover:w-60" : "w-60"
         )}
       >
@@ -179,6 +181,58 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
               );
             })}
           </nav>
+        </div>
+
+        {/* Theme Customizer */}
+        <div className={cn("flex flex-col gap-2 w-full p-2 bg-zinc-900/40 border border-zinc-800/40 rounded-xl mb-2", isCollapsed ? "hidden group-hover/sidebar:flex" : "flex")}>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 text-center flex items-center justify-center gap-1">
+            <Palette className="w-3 h-3" /> Tema
+          </span>
+          
+          {/* Mode Switch */}
+          <div className="flex items-center justify-around gap-1 bg-zinc-950/60 p-0.5 rounded-lg border border-zinc-800/50">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMode('light')}
+              className={cn("h-6 w-6 rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-all", mode === 'light' && "bg-zinc-800 text-primary font-bold shadow-sm")}
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMode('dark')}
+              className={cn("h-6 w-6 rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-all", mode === 'dark' && "bg-zinc-800 text-primary font-bold shadow-sm")}
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+
+          {/* Color variations */}
+          <div className="grid grid-cols-5 gap-1 mt-0.5 px-1">
+            {(['orange', 'emerald', 'blue', 'violet', 'amber'] as const).map((c) => {
+              const colorBg = {
+                orange: 'bg-orange-500',
+                emerald: 'bg-emerald-500',
+                blue: 'bg-blue-500',
+                violet: 'bg-violet-500',
+                amber: 'bg-amber-500',
+              }[c];
+              return (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  className={cn(
+                    "w-3.5 h-3.5 rounded-full transition-all border border-zinc-950/50 hover:scale-125 mx-auto shrink-0", 
+                    colorBg, 
+                    color === c && "ring-2 ring-primary ring-offset-1 ring-offset-zinc-950"
+                  )}
+                  title={c}
+                />
+              );
+            })}
+          </div>
         </div>
 
         {/* Perfil y Logout */}
@@ -252,7 +306,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
       )}
 
       {/* Contenido principal expandido */}
-      <main className="flex-1 h-full overflow-y-auto bg-slate-950 relative">
+      <main className="flex-1 h-full overflow-y-auto bg-transparent relative">
         {children}
       </main>
 

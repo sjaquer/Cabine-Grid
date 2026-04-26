@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/firebase';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import SidebarWrapper from '@/components/layout/SidebarWrapper';
+import { ThemeProvider } from '@/context/ThemeContext';
 
 export const metadata: Metadata = {
   title: 'Cabine Grid',
@@ -38,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark">
+    <html lang="es">
       <head>
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -46,11 +47,13 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Sora:wght@500;700;800&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased text-foreground">
-        <FirebaseClientProvider>
-          <AuthProvider>
-            <SidebarWrapper>{children}</SidebarWrapper>
-          </AuthProvider>
-        </FirebaseClientProvider>
+        <ThemeProvider>
+          <FirebaseClientProvider>
+            <AuthProvider>
+              <SidebarWrapper>{children}</SidebarWrapper>
+            </AuthProvider>
+          </FirebaseClientProvider>
+        </ThemeProvider>
         <Toaster />
       </body>
     </html>

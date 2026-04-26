@@ -80,4 +80,32 @@ export async function updateCustomer(firestore: any, id: string, payload: Partia
     updatedAt: serverTimestamp()
   });
 }
+export async function updateCustomerLoyalty(firestore: any, customerId: string) {
+  const { query, where, getDocs, collection, doc, updateDoc, serverTimestamp } = await import("firebase/firestore");
+  
+  const salesRef = collection(firestore, "sales");
+  const q = query(salesRef, where("customerId", "==", customerId));
+  const querySnapshot = await getDocs(q);
+  
+  let totalSpent = 0;
+  querySnapshot.forEach((d) => {
+    const data = d.data();
+    totalSpent += data.amount || 0;
+  });
 
+  let loyaltyLevel: 'bronze' | 'silver' | 'gold' = 'bronze';
+  if (totalSpent >= 300) {
+    loyaltyLevel = 'gold';
+  } else if (totalSpent >= 100) {
+    loyaltyLevel = 'silver';
+  }
+
+  const customerRef = doc(firestore, "customers", customerId);
+  await updateDoc(customerRef, {
+    totalSpent,
+    loyaltyLevel,
+    updatedAt: serverTimestamp()
+  });
+
+  return { totalSpent, loyaltyLevel };
+}

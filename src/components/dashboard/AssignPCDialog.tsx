@@ -142,6 +142,8 @@ export default function AssignPCDialog({
     },
   });
 
+  const [showQuickCustomer, setShowQuickCustomer] = useState(false);
+
   const sortedCustomers = useMemo(
     () => [...customers].filter((customer) => customer.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
     [customers]
@@ -166,6 +168,7 @@ export default function AssignPCDialog({
 
   useEffect(() => {
     if (isOpen) {
+      setShowQuickCustomer(false);
       form.reset({
         customerId: undefined,
         usageMode: 'free',
@@ -295,7 +298,18 @@ export default function AssignPCDialog({
               name="customerId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-semibold">Cliente (Opcional)</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-sm font-semibold">Cliente (Opcional)</FormLabel>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowQuickCustomer(!showQuickCustomer)}
+                      className="text-xs h-7 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                    >
+                      {showQuickCustomer ? "Ocultar Registro" : "¿Cliente nuevo?"}
+                    </Button>
+                  </div>
                   <div className="relative mb-2 flex items-center gap-2">
                     <div className="relative flex-1">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -450,121 +464,126 @@ export default function AssignPCDialog({
               </Card>
             )}
 
-            <Card className="border border-dashed">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Crear cliente rapido</CardTitle>
-                <CardDescription>Registra un cliente sin salir de esta asignacion.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...quickCustomerForm}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <FormField
-                      control={quickCustomerForm.control}
-                      name="customerCode"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Codigo</FormLabel>
-                          <FormControl>
-                            <Input placeholder="CLI-001" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+            {showQuickCustomer && (
+              <Card className="border border-zinc-800 bg-zinc-950/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Crear cliente rápido</CardTitle>
+                  <CardDescription className="text-xs text-zinc-400">Registra un cliente sin salir de esta asignación.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...quickCustomerForm}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <FormField
+                        control={quickCustomerForm.control}
+                        name="customerCode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-zinc-300 font-semibold">Código</FormLabel>
+                            <FormControl>
+                              <Input placeholder="CLI-001" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                            </FormControl>
+                            <FormMessage className="text-[10px]" />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={quickCustomerForm.control}
+                        name="fullName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-zinc-300 font-semibold">Nombre completo</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Cliente" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                            </FormControl>
+                            <FormMessage className="text-[10px]" />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={quickCustomerForm.control}
+                        name="age"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-zinc-300 font-semibold">Edad</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="5"
+                                max="110"
+                                placeholder="18"
+                                className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500"
+                                value={field.value ?? ""}
+                                onChange={(event) => {
+                                  const next = event.target.value;
+                                  field.onChange(next === "" ? undefined : Number(next));
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage className="text-[10px]" />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={quickCustomerForm.control}
+                        name="phone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-zinc-300 font-semibold">Número de celular</FormLabel>
+                            <FormControl>
+                              <Input placeholder="+51 900 123 456" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                            </FormControl>
+                            <FormMessage className="text-[10px]" />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={quickCustomerForm.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-zinc-300 font-semibold">Correo electrónico</FormLabel>
+                            <FormControl>
+                              <Input type="email" placeholder="cliente@email.com" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                            </FormControl>
+                            <FormMessage className="text-[10px]" />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={quickCustomerForm.control}
+                        name="favoriteGamesText"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-zinc-300 font-semibold">Juegos favoritos</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Valorant, Dota 2" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                            </FormControl>
+                            <FormMessage className="text-[10px]" />
+                          </FormItem>
+                        )}
+                      />
+                      {quickCustomerForm.formState.errors.root?.message && (
+                        <p className="sm:col-span-2 text-xs text-destructive">
+                          {quickCustomerForm.formState.errors.root.message}
+                        </p>
                       )}
-                    />
-                    <FormField
-                      control={quickCustomerForm.control}
-                      name="fullName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nombre completo</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Cliente" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={quickCustomerForm.control}
-                      name="age"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Edad</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="5"
-                              max="110"
-                              placeholder="18"
-                              value={field.value ?? ""}
-                              onChange={(event) => {
-                                const next = event.target.value;
-                                field.onChange(next === "" ? undefined : Number(next));
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={quickCustomerForm.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Número de celular</FormLabel>
-                          <FormControl>
-                            <Input placeholder="+51 900 123 456" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={quickCustomerForm.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Correo electrónico</FormLabel>
-                          <FormControl>
-                            <Input type="email" placeholder="cliente@email.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={quickCustomerForm.control}
-                      name="favoriteGamesText"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Juegos favoritos</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Valorant, Dota 2" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    {quickCustomerForm.formState.errors.root?.message && (
-                      <p className="sm:col-span-2 text-sm text-destructive">
-                        {quickCustomerForm.formState.errors.root.message}
-                      </p>
-                    )}
-                    <div className="sm:col-span-2 flex justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={isCreatingCustomer}
-                        onClick={quickCustomerForm.handleSubmit(handleQuickCreateCustomer)}
-                      >
-                        {isCreatingCustomer ? "Creando..." : "Crear cliente y seleccionar"}
-                      </Button>
+                      <div className="sm:col-span-2 flex justify-end pt-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 rounded-lg shadow-[0_0_10px_rgba(16,185,129,0.2)] transition-all"
+                          disabled={isCreatingCustomer}
+                          onClick={quickCustomerForm.handleSubmit(handleQuickCreateCustomer)}
+                        >
+                          {isCreatingCustomer ? "Creando..." : "Guardar y vincular"}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </Form>
-              </CardContent>
-            </Card>
+                  </Form>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Modo de Uso */}
             <FormField

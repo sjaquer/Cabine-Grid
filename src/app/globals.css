@@ -69,6 +69,41 @@
     --surface-soft: 240 5.9% 16%;
     --brand-glow: 24 95% 56%;
   }
+
+  [data-color="emerald"] {
+    --primary: 142 70% 45%;
+    --primary-foreground: 144 61% 98%;
+    --ring: 142 70% 45%;
+    --brand-glow: 142 70% 45%;
+  }
+
+  [data-color="blue"] {
+    --primary: 217 91% 60%;
+    --primary-foreground: 220 61% 98%;
+    --ring: 217 91% 60%;
+    --brand-glow: 217 91% 60%;
+  }
+
+  [data-color="violet"] {
+    --primary: 262 83% 58%;
+    --primary-foreground: 263 61% 98%;
+    --ring: 262 83% 58%;
+    --brand-glow: 262 83% 58%;
+  }
+
+  [data-color="amber"] {
+    --primary: 38 92% 50%;
+    --primary-foreground: 38 61% 98%;
+    --ring: 38 92% 50%;
+    --brand-glow: 38 92% 50%;
+  }
+
+  [data-color="orange"] {
+    --primary: 24 95% 56%;
+    --primary-foreground: 24 40% 98%;
+    --ring: 24 95% 56%;
+    --brand-glow: 24 95% 56%;
+  }
 }
 
 @layer base {

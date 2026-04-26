@@ -132,6 +132,12 @@ export type Customer = {
     email?: string;
   };
   metrics?: CustomerMetrics;
+  dni?: string;
+  whatsapp?: string;
+  loyaltyLevel?: 'bronze' | 'silver' | 'gold';
+  totalSpent?: number;
+  lastVisit?: Timestamp;
+  notes?: string;
 };
 
 export type UserProfile = {
