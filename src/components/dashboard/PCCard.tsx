@@ -1,6 +1,6 @@
 "use client";
 
-import type { Machine } from "@/lib/types";
+import type { Station } from "@/lib/types";
 import { rates } from "@/lib/data";
 import { sanitizeString } from "@/lib/sanitize";
 import { useTimer } from "@/hooks/useTimer";
@@ -8,19 +8,19 @@ import { formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Computer, Clock, User, PlusCircle, Zap, AlertTriangle, Wrench } from "lucide-react";
+import { Computer, Clock, User, PlusCircle, Zap, AlertTriangle, Wrench, Gamepad } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 type PCCardProps = {
-  machine: Machine;
-  onAction: (machine: Machine) => void;
+  machine: Station; // renamed to machine for component compatibility
+  onAction: (station: Station) => void;
 };
 
 const statusColors = {
-  available: "border-status-available/40 hover:border-status-available/80 bg-gradient-to-br from-status-available/5 to-transparent",
-  occupied: "border-status-occupied/40 hover:border-status-occupied/80 bg-gradient-to-br from-status-occupied/5 to-transparent",
-  warning: "border-status-warning/60 hover:border-status-warning bg-gradient-to-br from-status-warning/10 to-transparent animate-pulse",
-  maintenance: "border-muted/40 hover:border-muted/60 bg-gradient-to-br from-muted/5 to-transparent",
+  available: "border-status-available/45 hover:border-status-available/80 bg-gradient-to-b from-status-available/5 to-transparent",
+  occupied: "border-status-occupied/45 hover:border-status-occupied/80 bg-gradient-to-b from-status-occupied/5 to-transparent",
+  warning: "border-status-warning/70 hover:border-status-warning bg-gradient-to-b from-status-warning/15 to-transparent",
+  maintenance: "border-muted/45 hover:border-muted/70 bg-gradient-to-b from-muted/5 to-transparent",
 };
 
 const statusBg = {
@@ -37,10 +37,10 @@ const statusBadge = {
   maintenance: { label: "Mantenimiento", color: "bg-muted text-foreground" },
 };
 
-export default function PCCard({ machine, onAction }: PCCardProps) {
-  const { session, status } = machine;
-  const rate = rates.find(r => r.id === (session?.rateId || machine.rateId));
-  const hourlyRate = session?.hourlyRate || machine.hourlyRate || rate?.pricePerHour || 3.00;
+export default function PCCard({ machine: station, onAction }: PCCardProps) {
+  const { session, status } = station;
+  const rate = rates.find(r => r.id === (session?.rateId || station.rateId));
+  const hourlyRate = session?.hourlyRate || station.hourlyRate || rate?.pricePerHour || 3.00;
   const prepaidSeconds = session?.usageMode === 'prepaid' ? (session.prepaidHours || 0) * 3600 : undefined;
   
   const { elapsedSeconds, remainingSeconds } = useTimer(session?.startTime, prepaidSeconds);
@@ -52,32 +52,46 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
   const isWarning = remainingSeconds !== undefined && remainingSeconds > 0 && remainingSeconds <= 300;
 
   const getStatusIcon = () => {
-    switch (status) {
-      case 'available':
-        return <Computer className="w-12 h-12 text-status-available/80" />;
-      case 'occupied':
-        return <Zap className="w-12 h-12 text-status-occupied/80 animate-pulse" />;
-      case 'warning':
-        return <AlertTriangle className="w-12 h-12 text-status-warning/80 animate-bounce" />;
-      case 'maintenance':
-        return <Wrench className="w-12 h-12 text-muted-foreground/80" />;
+    if (status === 'maintenance') return <Wrench className="w-12 h-12 text-muted-foreground/80" />;
+    if (status === 'warning') return <AlertTriangle className="w-12 h-12 text-status-warning/80 animate-bounce" />;
+    
+    const isOccupied = status === 'occupied';
+    const iconClass = cn("w-12 h-12", isOccupied ? "text-status-occupied/80 animate-pulse" : "text-status-available/80");
+    
+    switch (station.type) {
+      case 'PS5':
+      case 'PS4':
+      case 'PS3':
+      case 'XBOX':
+      case 'NINTENDO':
+      case 'VR':
+      case 'SIMULADOR':
+        return <Gamepad className={iconClass} />;
+      case 'PC':
+      default:
+        return <Computer className={iconClass} />;
     }
   };
 
   return (
     <Card
       className={cn(
-        "flex flex-col transition-all duration-300 border-2 hover:shadow-xl hover:scale-105 cursor-pointer overflow-hidden",
+        "group flex min-h-[230px] flex-col overflow-hidden border-2 transition-all duration-300 hover:shadow-xl cursor-pointer",
         statusColors[status]
       )}
-      onClick={() => status !== "maintenance" && onAction(machine)}
+      onClick={() => status !== "maintenance" && onAction(station)}
     >
-      <CardHeader className="flex-row items-start justify-between space-y-0 pb-3 pt-4 px-4">
+      <CardHeader className="flex-row items-start justify-between space-y-0 px-3 pb-2.5 pt-3.5">
         <div className="flex flex-col gap-2 flex-1">
-          <CardTitle className="text-lg font-headline font-bold">{machine.name}</CardTitle>
-          <Badge className={`w-fit text-xs font-semibold ${statusBadge[status].color}`}>
-            {statusBadge[status].label}
-          </Badge>
+          <CardTitle className="text-xl font-headline font-bold tracking-tight">{station.name}</CardTitle>
+          <div className="flex gap-2 items-center">
+            <Badge className={`w-fit px-2.5 py-0.5 text-xs font-semibold ${statusBadge[status].color}`}>
+              {statusBadge[status].label}
+            </Badge>
+            <Badge variant="outline" className="w-fit text-xs font-medium border-primary/20 text-primary">
+              {station.type || 'PC'}
+            </Badge>
+          </div>
         </div>
         <div className="relative flex h-4 w-4">
           {status !== 'available' && (
@@ -91,38 +105,38 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
       
       {status === 'available' ? (
         <>
-          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-6">
-            {getStatusIcon()}
+          <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 px-3 py-3 text-center">
+            <div className="scale-90 transition-transform duration-300 group-hover:scale-100">{getStatusIcon()}</div>
             <p className="text-sm font-medium text-muted-foreground">
               {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
             </p>
-            <p className="text-xs text-muted-foreground">Haz clic para asignar</p>
+            <p className="text-xs text-muted-foreground">Lista para nueva sesion</p>
           </CardContent>
           <CardFooter className="p-3 pt-0">
             <Button 
               variant="default" 
-              className="w-full font-semibold" 
+              className="h-10 w-full font-semibold text-sm" 
               size="sm" 
               onClick={(event) => {
                 event.stopPropagation();
-                onAction(machine);
+                onAction(station);
               }}
             >
-              <PlusCircle className="w-4 h-4 mr-2" /> 
+              <PlusCircle className="mr-2 h-4 w-4" /> 
               Asignar
             </Button>
           </CardFooter>
         </>
       ) : status === 'maintenance' ? (
         <>
-          <CardContent className="flex-1 flex flex-col items-center justify-center text-center gap-3 py-6">
-            {getStatusIcon()}
+          <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 py-3 text-center">
+            <div className="scale-90">{getStatusIcon()}</div>
             <p className="text-sm font-semibold text-muted-foreground">En Mantenimiento</p>
           </CardContent>
           <CardFooter className="p-3 pt-0">
             <Button 
               variant="outline" 
-              className="w-full" 
+              className="h-10 w-full text-sm" 
               size="sm" 
               disabled
             >
@@ -132,37 +146,37 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
         </>
       ) : (
         <>
-          <CardContent className="flex-1 flex flex-col justify-between gap-3 py-4 px-4">
+          <CardContent className="flex flex-1 flex-col justify-between gap-3 px-3 py-3">
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="text-accent w-4 h-4"/>
-                <span className="font-semibold truncate text-foreground">{sanitizeString(session?.client) || 'Cliente Ocasional'}</span>
+                <User className="h-4 w-4 text-accent"/>
+                <span className="truncate font-semibold text-foreground">{sanitizeString(session?.client) || 'Cliente Ocasional'}</span>
               </div>
               
               <div className="flex items-center gap-2 text-sm">
-                <Clock className="text-primary w-4 h-4"/>
-                <span className="text-xs text-muted-foreground flex-1">
+                <Clock className="h-4 w-4 text-primary"/>
+                <span className="flex-1 text-xs text-muted-foreground">
                   {isPrepaid ? (timeIsUp ? "Tiempo Extra" : "Tiempo Restante") : "Tiempo Transcurrido"}
                 </span>
               </div>
             </div>
 
             <div className={cn(
-              "bg-secondary/60 rounded-lg p-3 text-center",
+              "rounded-lg bg-secondary/60 p-3 text-center",
               isWarning && "bg-status-warning/20 border border-status-warning/50"
             )}>
-              <div className="text-2xl font-mono font-bold text-primary">
+              <div className="text-2xl font-mono font-bold leading-none text-primary">
                 {formatTime(Math.floor(timeToShow))}
               </div>
-              <div className="text-xs text-muted-foreground mt-1">
+              <div className="mt-1.5 text-xs text-muted-foreground">
                 {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
               </div>
             </div>
 
             {isWarning && (
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-status-warning/15 border border-status-warning/40">
-                <AlertTriangle className="w-4 h-4 text-status-warning flex-shrink-0" />
-                <span className="text-xs font-semibold text-status-warning">{isPrepaid ? "Tiempo prepagado por terminar" : "Tiempo por terminar"}</span>
+              <div className="flex items-center gap-2 rounded-lg border border-status-warning/40 bg-status-warning/15 px-2.5 py-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-status-warning" />
+                <span className="text-xs font-semibold text-status-warning">{isPrepaid ? "Prepagado por terminar" : "Tiempo por terminar"}</span>
               </div>
             )}
           </CardContent>
@@ -170,14 +184,14 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
           <CardFooter className="p-3 pt-0">
             <Button 
               variant={isWarning ? "destructive" : "secondary"}
-              className="w-full font-semibold" 
+              className="h-10 w-full font-semibold text-sm" 
               size="sm" 
               onClick={(event) => {
                 event.stopPropagation();
-                onAction(machine);
+                onAction(station);
               }}
             >
-              {isWarning ? "Abrir TPV" : "Abrir TPV"}
+              Abrir TPV
             </Button>
           </CardFooter>
         </>
@@ -185,4 +199,3 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
     </Card>
   );
 }
-        

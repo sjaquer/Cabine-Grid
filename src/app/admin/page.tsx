@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+export const dynamic = 'force-dynamic';
+
+import { useMemo, useRef, useState } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Database, Package, BarChart3 } from "lucide-react";
+import { ArrowLeft, BarChart3, Cpu, FileText, Home, MapPin, Package, ShoppingCart, Users, UserRound } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MachineManager from "@/components/admin/MachineManager";
@@ -12,68 +14,68 @@ import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
 import UserManager from "@/components/admin/UserManager";
 import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
-import type { Machine, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
+import FinanceReportsManager from "@/components/admin/FinanceReportsManager";
+import AuditLogsManager from "@/components/admin/AuditLogsManager";
+import CustomerManager from "@/components/admin/CustomerManager";
+import type { Customer, Station, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { initialMachines, products as defaultProducts, rates } from "@/lib/data";
 import {
-  Timestamp,
   addDoc,
   collection,
   deleteDoc,
   doc,
-  getDocs,
-  limit,
   query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  writeBatch,
 } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
-import {
-  createUserWithEmailAndPassword,
-  deleteUser,
-  getAuth,
-  signOut,
-} from "firebase/auth";
+import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
-import { logAuditAction } from "@/lib/audit-log";
+import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Settings } from "lucide-react";
 
 export default function AdminPage() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [isSeeding, setIsSeeding] = useState(false);
-  const canAccessAdmin = userProfile?.role === "admin" || userProfile?.role === "manager";
+  const [activeTab, setActiveTab] = useState("machines");
+  const tabsSectionRef = useRef<HTMLDivElement | null>(null);
 
-  const machinesQuery = useMemoFirebase(
-    () => (canAccessAdmin ? query(collection(firestore, "machines")) : null),
-    [firestore, canAccessAdmin]
-  );
-  const locationsQuery = useMemoFirebase(
-    () => (canAccessAdmin ? query(collection(firestore, "locations")) : null),
-    [firestore, canAccessAdmin]
-  );
-  const productsQuery = useMemoFirebase(
-    () => (canAccessAdmin ? query(collection(firestore, "products")) : null),
-    [firestore, canAccessAdmin]
-  );
-  const usersQuery = useMemoFirebase(
-    () => (canAccessAdmin ? query(collection(firestore, "users")) : null),
-    [firestore, canAccessAdmin]
-  );
-  const closuresQuery = useMemoFirebase(
-    () => (canAccessAdmin ? query(collection(firestore, "shiftClosures")) : null),
-    [firestore, canAccessAdmin]
-  );
+  const shouldLoadSales = activeTab === "finance";
+  const shouldLoadAuditLogs = activeTab === "finance" || activeTab === "logs";
+  const shouldLoadClosures = activeTab === "finance" || activeTab === "closures";
 
-  const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
+  const machinesQuery = useMemoFirebase(() => query(collection(firestore, "stations")), [firestore]);
+  const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
+  const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
+  const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
+  const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
+  const closuresQuery = useMemoFirebase(() => {
+    if (!firestore || !shouldLoadClosures) return null;
+    return query(collection(firestore, "shiftClosures"));
+  }, [firestore, shouldLoadClosures]);
+  const salesQuery = useMemoFirebase(() => {
+    if (!firestore || !shouldLoadSales) return null;
+    return query(collection(firestore, "sales"));
+  }, [firestore, shouldLoadSales]);
+  const auditLogsQuery = useMemoFirebase(() => {
+    if (!firestore || !shouldLoadAuditLogs) return null;
+    return query(collection(firestore, "auditLogs"));
+  }, [firestore, shouldLoadAuditLogs]);
+
+  const { data: machinesData } = useCollection<Omit<Station, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
+  const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
   const { data: closuresData } = useCollection<any>(closuresQuery);
+  const { data: salesData } = useCollection<Omit<Sale, "id">>(salesQuery);
+  const { data: auditLogsData } = useCollection<any>(auditLogsQuery);
 
-  const machines = useMemo(() => (machinesData ?? []) as Machine[], [machinesData]);
+  const machines = useMemo(() => (machinesData ?? []) as Station[], [machinesData]);
   const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
   const products = useMemo(() => (productsData ?? []) as Product[], [productsData]);
   const users = useMemo(
@@ -88,6 +90,9 @@ export default function AdminPage() {
     () => (closuresData ?? []).sort((a, b) => (b.shiftEnd?.toMillis?.() || 0) - (a.shiftEnd?.toMillis?.() || 0)),
     [closuresData]
   );
+  const sales = useMemo(() => (salesData ?? []) as Sale[], [salesData]);
+  const customers = useMemo(() => (customersData ?? []) as Customer[], [customersData]);
+  const auditLogs = useMemo(() => (auditLogsData ?? []), [auditLogsData]);
 
   const auditActor = {
     id: user?.uid,
@@ -95,8 +100,8 @@ export default function AdminPage() {
     role: userProfile?.role,
   };
 
-  const handleAddMachine = async (machine: Omit<Machine, 'id'>) => {
-    await addDoc(collection(firestore, "machines"), machine);
+  const handleAddMachine = async (machine: Omit<Station, 'id'>) => {
+    await addDoc(collection(firestore, "stations"), machine);
     await logAuditAction(firestore, {
       action: 'machine.create',
       target: 'machines',
@@ -108,8 +113,8 @@ export default function AdminPage() {
     toast({ title: "Máquina creada" });
   };
 
-  const handleEditMachine = async (id: string, updates: Partial<Machine>) => {
-    await updateDoc(doc(firestore, "machines", id), updates);
+  const handleEditMachine = async (id: string, updates: Partial<Station>) => {
+    await updateDoc(doc(firestore, "stations", id), updates);
     await logAuditAction(firestore, {
       action: 'machine.update',
       target: 'machines',
@@ -122,15 +127,30 @@ export default function AdminPage() {
   };
 
   const handleDeleteMachine = async (id: string) => {
-    await deleteDoc(doc(firestore, "machines", id));
+    await deleteDoc(doc(firestore, "stations", id));
+    await logAuditAction(firestore, {
+      action: 'machine.delete',
+      target: 'machines',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
     toast({ title: "Máquina eliminada" });
   };
 
   const handleToggleMachineStatus = async (
     id: string,
-    status: Machine["status"]
+    status: Station["status"]
   ) => {
-    await updateDoc(doc(firestore, "machines", id), { status });
+    await updateDoc(doc(firestore, "stations", id), { status });
+    await logAuditAction(firestore, {
+      action: 'machine.status.update',
+      target: 'machines',
+      targetId: id,
+      actor: auditActor,
+      details: { status },
+    });
     toast({ title: "Estado de máquina actualizado" });
   };
 
@@ -167,6 +187,14 @@ export default function AdminPage() {
 
   const handleDeleteLocation = async (id: string) => {
     await deleteDoc(doc(firestore, "locations", id));
+    await logAuditAction(firestore, {
+      action: 'location.delete',
+      target: 'locations',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
     toast({ title: "Local eliminado" });
   };
 
@@ -199,14 +227,108 @@ export default function AdminPage() {
 
   const handleDeleteProduct = async (id: string) => {
     await deleteDoc(doc(firestore, "products", id));
+    await logAuditAction(firestore, {
+      action: 'product.delete',
+      target: 'products',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
     toast({ title: "Producto eliminado" });
   };
 
-  const handleChangeUserRole = async (userId: string, role: UserRole) => {
-    const currentUser = users.find((u) => u.uid === userId);
+  const handleAddCustomer = async (customer: Omit<Customer, 'id'>) => {
+    const code = customer.customerCode.trim().toUpperCase();
+    const name = customer.fullName.trim();
+    const duplicated = customers.some((item) => item.customerCode.trim().toUpperCase() === code);
+
+    if (duplicated) {
+      throw new Error("Ya existe un cliente con ese codigo");
+    }
+
+    const docRef = await addDoc(collection(firestore, "customers"), {
+      customerCode: code,
+      fullName: name,
+      ...(typeof customer.age === "number" ? { age: customer.age } : {}),
+      ...(customer.phone ? { phone: customer.phone } : {}),
+      ...(customer.email ? { email: customer.email } : {}),
+      favoriteGames: customer.favoriteGames ?? [],
+      isActive: customer.isActive ?? true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: {
+        id: user?.uid,
+        email: user?.email,
+      },
+      metrics: {
+        totalSessions: 0,
+        totalMinutesRented: 0,
+        totalProductsBought: 0,
+        totalSpent: 0,
+        machineUsage: {},
+        visitsByWeekday: {},
+        visitHours: {},
+      },
+    });
+
+    await logAuditAction(firestore, {
+      action: 'customer.create',
+      target: 'customers',
+      targetId: docRef.id,
+      actor: auditActor,
+      details: {
+        customerCode: code,
+        fullName: name,
+      },
+    });
+    toast({ title: "Cliente creado" });
+  };
+
+  const handleEditCustomer = async (id: string, updates: Partial<Customer>) => {
+    const nextCode = updates.customerCode?.trim().toUpperCase();
+    if (nextCode) {
+      const duplicated = customers.some(
+        (item) => item.id !== id && item.customerCode.trim().toUpperCase() === nextCode
+      );
+      if (duplicated) {
+        throw new Error("Ya existe un cliente con ese codigo");
+      }
+    }
+
+    await updateDoc(doc(firestore, "customers", id), {
+      ...updates,
+      ...(nextCode ? { customerCode: nextCode } : {}),
+      ...(updates.fullName ? { fullName: updates.fullName.trim() } : {}),
+      updatedAt: serverTimestamp(),
+    });
+    await logAuditAction(firestore, {
+      action: 'customer.update',
+      target: 'customers',
+      targetId: id,
+      actor: auditActor,
+      details: { updates: { ...updates, ...(nextCode ? { customerCode: nextCode } : {}) } },
+    });
+    toast({ title: "Cliente actualizado" });
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    await deleteDoc(doc(firestore, "customers", id));
+    await logAuditAction(firestore, {
+      action: 'customer.delete',
+      target: 'customers',
+      targetId: id,
+      actor: auditActor,
+      severity: 'high',
+      riskTags: ['destructive-action'],
+    });
+    toast({ title: "Cliente eliminado" });
+  };
+
+  const handleChangeUserRole = async (userId: string, role: UserRole, locationIds: string[]) => {
     await updateDoc(doc(firestore, "users", userId), {
       role,
-      locationIds: currentUser?.locationIds ?? [],
+      locationIds,
       updateAt: serverTimestamp(),
     });
     await logAuditAction(firestore, {
@@ -214,31 +336,9 @@ export default function AdminPage() {
       target: 'users',
       targetId: userId,
       actor: auditActor,
-      details: { role },
+      details: { role, locationIds },
     });
     toast({ title: "Rol actualizado" });
-  };
-
-  const handleUpdateUserAccess = async (
-    userId: string,
-    payload: { role: UserRole; locationIds: string[] }
-  ) => {
-    await updateDoc(doc(firestore, "users", userId), {
-      role: payload.role,
-      locationIds: payload.locationIds,
-      updateAt: serverTimestamp(),
-    });
-    await logAuditAction(firestore, {
-      action: 'user.access.update',
-      target: 'users',
-      targetId: userId,
-      actor: auditActor,
-      details: {
-        role: payload.role,
-        locationIds: payload.locationIds,
-      },
-    });
-    toast({ title: "Acceso de usuario actualizado" });
   };
 
   const handleDeactivateUser = async (userId: string) => {
@@ -261,13 +361,11 @@ export default function AdminPage() {
     email,
     password,
     role,
-    locationIds,
   }: {
     name: string;
     email: string;
     password: string;
     role: UserRole;
-    locationIds?: string[];
   }) => {
     if (userProfile?.role !== "admin") {
       throw new Error("Solo un administrador puede crear cuentas.");
@@ -285,7 +383,6 @@ export default function AdminPage() {
           name: name.trim(),
           email: email.trim().toLowerCase(),
           role,
-          locationIds: locationIds ?? [],
           isActive: true,
           createdAt: serverTimestamp(),
           updateAt: serverTimestamp(),
@@ -304,12 +401,7 @@ export default function AdminPage() {
         target: 'users',
         targetId: credential.user.uid,
         actor: auditActor,
-        details: {
-          email: email.trim().toLowerCase(),
-          name: name.trim(),
-          role,
-          locationIds: locationIds ?? [],
-        },
+        details: { email: email.trim().toLowerCase(), name: name.trim(), role },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo crear el usuario.";
@@ -342,252 +434,298 @@ export default function AdminPage() {
     toast({ title: "Cierre reabierto" });
   };
 
-  const handleSeedMockData = async () => {
-    setIsSeeding(true);
-    try {
-      const [machinesSnap, locationsSnap, productsSnap, usersSnap, salesSnap] = await Promise.all([
-        getDocs(query(collection(firestore, "machines"), limit(1))),
-        getDocs(query(collection(firestore, "locations"), limit(1))),
-        getDocs(query(collection(firestore, "products"), limit(1))),
-        getDocs(query(collection(firestore, "users"), limit(1))),
-        getDocs(query(collection(firestore, "sales"), limit(1))),
-      ]);
-
-      const batch = writeBatch(firestore);
-
-      if (locationsSnap.empty) {
-        const centroRef = doc(collection(firestore, "locations"));
-        const norteRef = doc(collection(firestore, "locations"));
-
-        batch.set(centroRef, {
-          name: "Cabine Grid Centro",
-          address: "Av. Principal 120 - Centro",
-          phone: "(01) 555-1200",
-          fractionMinutes: 5,
-          isActive: true,
-          createdAt: serverTimestamp(),
-          updateAt: serverTimestamp(),
-        });
-
-        batch.set(norteRef, {
-          name: "Cabine Grid Norte",
-          address: "Jr. Los Pinos 450 - Norte",
-          phone: "(01) 555-4500",
-          fractionMinutes: 5,
-          isActive: true,
-          createdAt: serverTimestamp(),
-          updateAt: serverTimestamp(),
-        });
-
-        if (machinesSnap.empty) {
-          initialMachines.forEach((machine, index) => {
-            const machineRef = doc(collection(firestore, "machines"));
-            batch.set(machineRef, {
-              ...machine,
-              locationId: index < 6 ? centroRef.id : norteRef.id,
-              specs: {
-                processor: index % 3 === 0 ? "Ryzen 5 5600G" : "Core i5 10400",
-                ram: index % 2 === 0 ? "16GB" : "8GB",
-                storage: index % 4 === 0 ? "1TB SSD" : "512GB SSD",
-              },
-            });
-          });
-        }
-      } else if (machinesSnap.empty) {
-        const locationIds = locationsSnap.docs.map((locationDoc) => locationDoc.id);
-        initialMachines.forEach((machine, index) => {
-          const machineRef = doc(collection(firestore, "machines"));
-          batch.set(machineRef, {
-            ...machine,
-            ...(locationIds.length > 0 ? { locationId: locationIds[index % locationIds.length] } : {}),
-            specs: {
-              processor: index % 3 === 0 ? "Ryzen 5 5600G" : "Core i5 10400",
-              ram: index % 2 === 0 ? "16GB" : "8GB",
-              storage: index % 4 === 0 ? "1TB SSD" : "512GB SSD",
-            },
-          });
-        });
-      }
-
-      if (productsSnap.empty) {
-        defaultProducts.forEach((product) => {
-          const productRef = doc(collection(firestore, "products"));
-          batch.set(productRef, {
-            name: product.name,
-            price: product.price,
-            category: product.category,
-            stock: product.stock ?? 0,
-            isActive: true,
-            createdAt: serverTimestamp(),
-          });
-        });
-      }
-
-      if (usersSnap.empty) {
-        batch.set(doc(firestore, "users", "demo-admin"), {
-          uid: "demo-admin",
-          email: "admin@cabinegrid.com",
-          name: "Administrador Demo",
-          role: "admin",
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
-        batch.set(doc(firestore, "users", "demo-operator"), {
-          uid: "demo-operator",
-          email: "operador@cabinegrid.com",
-          name: "Operador Demo",
-          role: "operator",
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      if (salesSnap.empty) {
-        const now = new Date();
-        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-        const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-        const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-
-        const sampleSales: Omit<Sale, "id">[] = [
-          {
-            machineName: "PC 01",
-            clientName: "PlayerOne",
-            startTime: Timestamp.fromDate(twoHoursAgo),
-            endTime: Timestamp.fromDate(oneHourAgo),
-            totalMinutes: 60,
-            amount: 3,
-            hourlyRate: 3,
-            paymentMethod: "efectivo",
-            soldProducts: [
-              { productId: "demo-p1", productName: "Inka Kola 500ml", quantity: 1, unitPrice: 2.5 },
-            ],
-          },
-          {
-            machineName: "PC 03",
-            clientName: "Nexus",
-            startTime: Timestamp.fromDate(threeHoursAgo),
-            endTime: Timestamp.fromDate(twoHoursAgo),
-            totalMinutes: 60,
-            amount: 5,
-            hourlyRate: 5,
-            paymentMethod: "yape",
-          },
-        ];
-
-        sampleSales.forEach((sale) => {
-          const saleRef = doc(collection(firestore, "sales"));
-          batch.set(saleRef, sale);
-        });
-      }
-
-      await batch.commit();
-      toast({ title: "Datos mock cargados", description: "Ya puedes probar flujos completos en el sistema." });
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "Error al crear datos mock",
-        description: "Verifica permisos de Firestore y vuelve a intentar.",
-      });
-    } finally {
-      setIsSeeding(false);
-    }
+  const handleQuickActionSelect = (tab: string) => {
+    setActiveTab(tab);
+    requestAnimationFrame(() => {
+      tabsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   return (
     <RoleGuard requiredRoles={["admin", "manager"]}>
-      <div className="min-h-screen bg-secondary">
-        <div className="border-b border-border/50 bg-card/80 backdrop-blur-lg sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h1 className="text-2xl font-headline font-bold">Panel de Administración</h1>
-              <div className="flex items-center gap-2">
-                <Link href="/reportes">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <BarChart3 className="w-4 h-4" />
-                    Reportes
+      <div className="app-shell app-enter">
+        {/* Header Profesional Mejorado */}
+        <header className="app-sticky-header">
+          <div className="app-container">
+            {/* Navegación Principal */}
+            <div className="app-header-row">
+              <div className="flex items-center gap-3">
+                <div className="brand-chip">
+                  <div className="brand-chip-icon">
+                    <Cpu className="w-5 h-5 text-primary-foreground" />
+                  </div>
+                  <span className="font-headline font-bold text-lg">Cabine Grid</span>
+                </div>
+                <div className="hidden lg:block h-6 w-px bg-border/50"></div>
+                <div className="flex flex-col gap-0.5">
+                  <h1 className="text-xl font-headline font-bold">Panel Administrativo</h1>
+                  <p className="text-xs text-muted-foreground">Gestión integral del sistema</p>
+                </div>
+              </div>
+
+              {/* Botones de Navegación Secundaria - Reorganizados */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <Link href="/">
+                  <Button variant="outline" size="sm" className="gap-2 h-9 whitespace-nowrap">
+                    <Home className="w-4 h-4" />
+                    <span className="hidden sm:inline">Dashboard</span>
                   </Button>
                 </Link>
                 <Link href="/inventario">
-                  <Button variant="outline" size="sm" className="gap-2">
+                  <Button variant="outline" size="sm" className="gap-2 h-9 whitespace-nowrap">
                     <Package className="w-4 h-4" />
-                    Inventario por Local
-                  </Button>
-                </Link>
-                <Link href="/">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <ArrowLeft className="w-4 h-4" />
-                    Volver al Dashboard
+                    <span className="hidden sm:inline">Inventario</span>
                   </Button>
                 </Link>
               </div>
             </div>
+
+            {/* Estadísticas Rápidas */}
+            <div className="kpi-strip grid-cols-2 md:grid-cols-5">
+              <StatQuick label="Cabinas" value={machines.length} icon={<Cpu className="w-4 h-4" />} />
+              <StatQuick label="Locales" value={locations.length} icon={<MapPin className="w-4 h-4" />} />
+              <StatQuick label="Productos" value={products.length} icon={<ShoppingCart className="w-4 h-4" />} />
+              <StatQuick label="Usuarios" value={users.length} icon={<Users className="w-4 h-4" />} />
+              <StatQuick label="Clientes" value={customers.length} icon={<UserRound className="w-4 h-4" />} />
+            </div>
           </div>
-        </div>
+        </header>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Tabs defaultValue="machines" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 mb-8">
-              <TabsTrigger value="machines">Cabinas</TabsTrigger>
-              <TabsTrigger value="locations">Locales</TabsTrigger>
-              <TabsTrigger value="products">Productos</TabsTrigger>
-              <TabsTrigger value="closures">Cierres</TabsTrigger>
-              {userProfile?.role === "admin" && (
-                <TabsTrigger value="users">Usuarios</TabsTrigger>
-              )}
-            </TabsList>
+        {/* Contenido Principal */}
+        <main className="app-container py-8">
+          <div className="mb-8">
+            <div className="app-stagger grid grid-cols-1 md:grid-cols-4 gap-4">
+                <QuickActionCard
+                  title="Cabinas"
+                  description="Gestiona máquinas y especificaciones"
+                  icon={<Cpu className="w-5 h-5" />}
+                  count={machines.length}
+                  tabValue="machines"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Locales"
+                  description="Administra locales de negocio"
+                  icon={<MapPin className="w-5 h-5" />}
+                  count={locations.length}
+                  tabValue="locations"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Productos"
+                  description="Inventario y precios"
+                  icon={<ShoppingCart className="w-5 h-5" />}
+                  count={products.length}
+                  tabValue="products"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Clientes"
+                  description="CRM y fidelizacion"
+                  icon={<UserRound className="w-5 h-5" />}
+                  count={customers.length}
+                  tabValue="customers"
+                  onSelectTab={handleQuickActionSelect}
+                />
+                <QuickActionCard
+                  title="Usuarios"
+                  description="Roles y permisos"
+                  icon={<Users className="w-5 h-5" />}
+                  count={users.length}
+                  tabValue={userProfile?.role === "admin" ? "users" : null}
+                  onSelectTab={handleQuickActionSelect}
+                />
+            </div>
+          </div>
 
-            <TabsContent value="machines" className="space-y-6">
-              <MachineManager
-                machines={machines}
-                locations={locations}
-                onAdd={handleAddMachine}
-                onEdit={handleEditMachine}
-                onDelete={handleDeleteMachine}
-                onToggleStatus={handleToggleMachineStatus}
-              />
-            </TabsContent>
+          <div ref={tabsSectionRef}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="bg-card/80 rounded-lg border border-border/50 p-4 mb-6">
+              <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 bg-transparent h-auto">
+                <TabTriggerWithIcon value="machines" icon={<Cpu className="w-4 h-4" />} label="Cabinas" />
+                <TabTriggerWithIcon value="locations" icon={<MapPin className="w-4 h-4" />} label="Locales" />
+                <TabTriggerWithIcon value="products" icon={<ShoppingCart className="w-4 h-4" />} label="Productos" />
+                <TabTriggerWithIcon value="customers" icon={<UserRound className="w-4 h-4" />} label="Clientes" />
+                <TabTriggerWithIcon value="finance" icon={<BarChart3 className="w-4 h-4" />} label="Finanzas" />
+                <TabTriggerWithIcon value="logs" icon={<FileText className="w-4 h-4" />} label="Auditoría" />
+                <TabTriggerWithIcon value="closures" icon={<Settings className="w-4 h-4" />} label="Cierres" />
+                {userProfile?.role === "admin" && (
+                  <TabTriggerWithIcon value="users" icon={<Users className="w-4 h-4" />} label="Usuarios" />
+                )}
+              </TabsList>
+            </div>
 
-            <TabsContent value="locations" className="space-y-6">
-              <LocationManager
-                locations={locations}
-                onAdd={handleAddLocation}
-                onEdit={handleEditLocation}
-                onDelete={handleDeleteLocation}
-              />
-            </TabsContent>
-
-            <TabsContent value="products" className="space-y-6">
-              <ProductManager
-                products={products}
-                onAdd={handleAddProduct}
-                onEdit={handleEditProduct}
-                onDelete={handleDeleteProduct}
-              />
-            </TabsContent>
-
-            <TabsContent value="closures" className="space-y-6">
-              <ShiftClosureManager
-                closures={closures}
-                userProfile={userProfile}
-                onReopenShift={handleReopenShift}
-              />
-            </TabsContent>
-
-            {userProfile?.role === "admin" && (
-              <TabsContent value="users" className="space-y-6">
-                <UserManager
-                  users={users}
+            {/* Contenido de Tabs */}
+            <div className="space-y-6">
+              <TabsContent value="machines">
+                <MachineManager
+                  machines={machines}
                   locations={locations}
-                  onCreateUser={handleCreateUser}
-                  onUpdateUserAccess={handleUpdateUserAccess}
-                  onDeactivate={handleDeactivateUser}
+                  onAdd={handleAddMachine}
+                  onEdit={handleEditMachine}
+                  onDelete={handleDeleteMachine}
+                  onToggleStatus={handleToggleMachineStatus}
                 />
               </TabsContent>
-            )}
+
+              <TabsContent value="locations">
+                <LocationManager
+                  locations={locations}
+                  onAdd={handleAddLocation}
+                  onEdit={handleEditLocation}
+                  onDelete={handleDeleteLocation}
+                />
+              </TabsContent>
+
+              <TabsContent value="products">
+                <ProductManager
+                  products={products}
+                  onAdd={handleAddProduct}
+                  onEdit={handleEditProduct}
+                  onDelete={handleDeleteProduct}
+                />
+              </TabsContent>
+
+              <TabsContent value="customers">
+                <CustomerManager
+                  customers={customers}
+                  onAdd={handleAddCustomer}
+                  onEdit={handleEditCustomer}
+                  onDelete={handleDeleteCustomer}
+                />
+              </TabsContent>
+
+              <TabsContent value="finance">
+                <FinanceReportsManager
+                  sales={sales}
+                  machines={machines}
+                  locations={locations}
+                  users={users}
+                  auditLogs={auditLogs}
+                  closures={closures}
+                />
+              </TabsContent>
+
+              <TabsContent value="logs">
+                <AuditLogsManager
+                  logs={auditLogs}
+                  locations={locations}
+                  users={users}
+                />
+              </TabsContent>
+
+              <TabsContent value="closures">
+                <ShiftClosureManager
+                  closures={closures}
+                  userProfile={userProfile}
+                  onReopenShift={handleReopenShift}
+                />
+              </TabsContent>
+
+              {userProfile?.role === "admin" && (
+                <TabsContent value="users">
+                  <UserManager
+                    users={users}
+                    locations={locations}
+                    onCreateUser={handleCreateUser}
+                    onChangeRole={handleChangeUserRole}
+                    onDeactivate={handleDeactivateUser}
+                  />
+                </TabsContent>
+              )}
+            </div>
           </Tabs>
-        </div>
+          </div>
+        </main>
       </div>
     </RoleGuard>
+  );
+}
+
+// Componentes Auxiliares para mejor diseño
+function StatQuick({ label, value, icon }: { label: string; value: number; icon?: React.ReactNode }) {
+  return (
+    <div className="surface-stat">
+      {icon && <span className="text-primary flex-shrink-0">{icon}</span>}
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground truncate">{label}</p>
+        <p className="text-sm font-bold">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function QuickActionCard({ 
+  title, 
+  description, 
+  icon, 
+  count,
+  tabValue,
+  onSelectTab,
+}: { 
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  count: number;
+  tabValue: string | null;
+  onSelectTab: (tab: string) => void;
+}) {
+  const isDisabled = !tabValue;
+
+  const handleOpenTab = () => {
+    if (!tabValue) return;
+    onSelectTab(tabValue);
+  };
+
+  return (
+    <Card
+      className={`group overflow-hidden transition-all ${isDisabled ? "opacity-70" : "cursor-pointer hover:shadow-lg hover:border-primary/50"}`}
+      onClick={handleOpenTab}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleOpenTab();
+        }
+      }}
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      aria-disabled={isDisabled}
+    >
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="rounded-lg bg-primary/10 p-3 text-primary group-hover:bg-primary/20 transition-colors">
+            {icon}
+          </div>
+          <Badge variant="secondary" className="text-xs">{count} items</Badge>
+        </div>
+        <h3 className="font-bold text-lg mb-1">{title}</h3>
+        <p className="text-sm text-muted-foreground mb-4">{description}</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full gap-2 opacity-75 group-hover:opacity-100 transition-opacity justify-start"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleOpenTab();
+          }}
+          disabled={isDisabled}
+        >
+          <span>Ir a {title.toLowerCase()}</span>
+          <ArrowLeft className="w-4 h-4 rotate-180" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TabTriggerWithIcon({ value, icon, label }: { value: string; icon: React.ReactNode; label: string }) {
+  return (
+    <TabsTrigger 
+      value={value}
+      className="flex items-center gap-2 px-3 py-2 text-xs md:text-sm data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-md transition-all"
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </TabsTrigger>
   );
 }

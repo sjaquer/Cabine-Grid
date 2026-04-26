@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -11,19 +12,32 @@ import type { User } from 'firebase/auth';
 import { addDoc, collection, doc, getDocs, query, Timestamp, where, serverTimestamp } from 'firebase/firestore';
 
 import { useFirebaseAuthInstance, useFirestore } from '../provider';
-import type { Machine, Sale, UserProfile } from '@/lib/types';
+import type { Station, Sale, UserProfile } from '@/lib/types';
 import { useMemoFirebase } from '../provider';
 import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
 import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftId, getShiftLocation, getShiftStart } from '@/lib/shift-session';
-import { logAuditAction } from '@/lib/audit-log';
+import { logAuditAction, logAuditFailure } from '@/lib/audit-log';
 
 export interface AuthContextValue {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  getShiftClosurePreview: () => Promise<{
+    shiftId: string;
+    shiftStartMs: number;
+    shiftLocationId?: string;
+    salesCount: number;
+    expectedCash: number;
+    expectedYape: number;
+    expectedOther: number;
+    totalExpected: number;
+    openMachinesCount: number;
+  } | null>;
   logout: (payload?: {
     countedCash?: number;
+    countedYape?: number;
+    countedOther?: number;
     inventoryChecked?: boolean;
     discrepancyReason?: string;
   }) => Promise<void>;
@@ -37,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const loginAuditSentRef = useRef<string | null>(null);
 
   // Subscribe to auth state changes
   useEffect(() => {
@@ -64,30 +79,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, userProfile]);
 
+  useEffect(() => {
+    if (!user || !userProfile || !firestore) return;
+    if (loginAuditSentRef.current === user.uid) return;
+
+    loginAuditSentRef.current = user.uid;
+    void logAuditAction(firestore, {
+      action: 'auth.login',
+      target: 'users',
+      targetId: user.uid,
+      actor: { id: user.uid, email: user.email, role: userProfile.role },
+      details: {
+        role: userProfile.role,
+      },
+    });
+  }, [user, userProfile, firestore]);
+
   const logout = async (payload?: {
     countedCash?: number;
+    countedYape?: number;
+    countedOther?: number;
     inventoryChecked?: boolean;
     discrepancyReason?: string;
   }) => {
-    if (user && userProfile && (userProfile.role === 'operator' || userProfile.role === 'manager')) {
-      const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
-      const shiftEndMs = Date.now();
-      const shiftLocationId = getShiftLocation(user.uid);
-      const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
+    if (!user || !userProfile || !firestore) {
+      await signOut(auth);
+      return;
+    }
 
+    // Only require shift closure validation for operators and managers
+    if (userProfile.role === 'operator' || userProfile.role === 'manager') {
       if (!payload || typeof payload.countedCash !== 'number' || payload.countedCash < 0) {
         throw new Error('Debes registrar el conteo de caja antes de cerrar turno.');
+      }
+      if (typeof payload.countedYape !== 'number' || payload.countedYape < 0) {
+        throw new Error('Debes registrar el conteo de Yape antes de cerrar turno.');
+      }
+      if (typeof payload.countedOther !== 'number' || payload.countedOther < 0) {
+        throw new Error('Debes registrar el conteo de otros medios antes de cerrar turno.');
       }
       if (!payload.inventoryChecked) {
         throw new Error('Debes confirmar el conteo de inventario antes de cerrar turno.');
       }
 
       try {
+        // Get shift info from localStorage (for now, until we fully migrate)
+        const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
+        const shiftLocationId = getShiftLocation(user.uid);
+        const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
+
+        // Get sales for this shift
         const salesRef = collection(firestore, 'sales');
         const salesQuery = query(
           salesRef,
           where('endTime', '>=', Timestamp.fromMillis(shiftStartMs)),
-          where('endTime', '<=', Timestamp.fromMillis(shiftEndMs))
+          where('endTime', '<=', Timestamp.fromMillis(Date.now()))
         );
         const salesSnap = await getDocs(salesQuery);
         const allShiftSales: Sale[] = salesSnap.docs.map((snapshot) => ({
@@ -95,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...(snapshot.data() as Omit<Sale, 'id'>),
         }));
 
-        // Evita mezclar ventas entre operadores en el mismo lapso.
+        // Filter sales by operator and location
         const operatorShiftSales = allShiftSales.filter((sale) => {
           if (sale.operator?.id !== user.uid) return false;
           if (!shiftLocationId) return true;
@@ -105,25 +151,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const expectedCash = operatorShiftSales
           .filter((sale) => sale.paymentMethod === 'efectivo')
           .reduce((sum, sale) => sum + sale.amount, 0);
-        const countedCash = Math.round(payload.countedCash * 100) / 100;
-        const cashDifference = Math.round((countedCash - expectedCash) * 100) / 100;
+        const expectedYape = operatorShiftSales
+          .filter((sale) => sale.paymentMethod === 'yape')
+          .reduce((sum, sale) => sum + sale.amount, 0);
+        const expectedOther = operatorShiftSales
+          .filter((sale) => sale.paymentMethod === 'otro')
+          .reduce((sum, sale) => sum + sale.amount, 0);
 
-        if (cashDifference !== 0 && !payload.discrepancyReason?.trim()) {
+        const countedCash = Math.round(payload.countedCash * 100) / 100;
+        const countedYape = Math.round(payload.countedYape * 100) / 100;
+        const countedOther = Math.round(payload.countedOther * 100) / 100;
+
+        const cashDifference = Math.round((countedCash - expectedCash) * 100) / 100;
+        const yapeDifference = Math.round((countedYape - expectedYape) * 100) / 100;
+        const otherDifference = Math.round((countedOther - expectedOther) * 100) / 100;
+        const totalDifference = Math.round((cashDifference + yapeDifference + otherDifference) * 100) / 100;
+
+        // Validate cash difference
+        if ((cashDifference !== 0 || yapeDifference !== 0 || otherDifference !== 0) && !payload.discrepancyReason?.trim()) {
           throw new Error('Existe diferencia en caja. Debes ingresar un motivo para cerrar turno.');
         }
 
-        const machinesRef = collection(firestore, 'machines');
+        // Get open machines
+        const machinesRef = collection(firestore, 'stations');
         const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
         const machinesSnap = await getDocs(machinesQuery);
-        const allOpenMachines: Machine[] = machinesSnap.docs.map((snapshot) => ({
+        const allOpenMachines: Station[] = machinesSnap.docs.map((snapshot) => ({
           id: snapshot.id,
-          ...(snapshot.data() as Omit<Machine, 'id'>),
+          ...(snapshot.data() as Omit<Station, 'id'>),
         }));
 
         const openMachines = shiftLocationId
           ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
           : allOpenMachines;
 
+        // Create shift closure record
         await addDoc(collection(firestore, 'shiftClosures'), {
           shiftId,
           locationId: shiftLocationId || null,
@@ -133,10 +195,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: userProfile.role,
           },
           shiftStart: Timestamp.fromMillis(shiftStartMs),
-          shiftEnd: Timestamp.fromMillis(shiftEndMs),
+          shiftEnd: Timestamp.now(),
           expectedCash,
           countedCash,
           cashDifference,
+          expectedYape,
+          countedYape,
+          yapeDifference,
+          expectedOther,
+          countedOther,
+          otherDifference,
+          totalDifference,
           discrepancyReason: payload.discrepancyReason?.trim() || null,
           inventoryChecked: true,
           salesCount: operatorShiftSales.length,
@@ -145,42 +214,139 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           createdAt: serverTimestamp(),
         });
 
+        // Log shift closure
         await logAuditAction(firestore, {
           action: 'shift.close',
           target: 'shiftClosures',
           targetId: shiftId,
           locationId: shiftLocationId || undefined,
+          severity: Math.abs(totalDifference) >= 20 ? 'critical' : totalDifference !== 0 ? 'high' : 'medium',
+          anomalyScore: Math.abs(totalDifference) >= 50 ? 90 : Math.abs(totalDifference) >= 20 ? 75 : totalDifference !== 0 ? 55 : 10,
+          riskTags: totalDifference !== 0 ? ['cash-difference'] : [],
           actor: { id: user.uid, email: user.email, role: userProfile.role },
           details: {
             expectedCash,
             countedCash,
             cashDifference,
+            expectedYape,
+            countedYape,
+            yapeDifference,
+            expectedOther,
+            countedOther,
+            otherDifference,
+            totalDifference,
             salesCount: operatorShiftSales.length,
           },
         });
 
+        // Log logout
+        await logAuditAction(firestore, {
+          action: 'auth.logout',
+          target: 'users',
+          targetId: user.uid,
+          actor: { id: user.uid, email: user.email, role: userProfile.role },
+          details: {
+            shiftId,
+            locationId: shiftLocationId || null,
+          },
+        });
+
+        // Generate PDF report
         buildShiftReportPdf({
           userProfile,
           sales: operatorShiftSales,
           shiftStartMs,
-          shiftEndMs,
+          shiftEndMs: Date.now(),
           openMachines,
         });
+
+        // Clear localStorage shift data
+        clearShiftLocation(user.uid);
+        clearShiftStart(user.uid);
       } catch (error) {
         console.error('Error generando cierre de turno:', error);
+        await logAuditFailure(firestore, {
+          action: 'shift.close.error',
+          target: 'shifts',
+          targetId: user.uid,
+          locationId: getShiftLocation(user.uid) || undefined,
+          actor: { id: user.uid, email: user.email, role: userProfile.role },
+          error,
+        });
+        throw error; // Re-throw so user sees the error
       }
-
-      clearShiftLocation(user.uid);
-      clearShiftStart(user.uid);
     }
 
+    // Sign out
     await signOut(auth);
+  };
+
+  const getShiftClosurePreview = async () => {
+    if (!user || !userProfile || !firestore) return null;
+    if (!(userProfile.role === 'operator' || userProfile.role === 'manager')) return null;
+
+    const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
+    const shiftLocationId = getShiftLocation(user.uid) || undefined;
+    const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
+
+    const salesRef = collection(firestore, 'sales');
+    const salesQuery = query(
+      salesRef,
+      where('endTime', '>=', Timestamp.fromMillis(shiftStartMs)),
+      where('endTime', '<=', Timestamp.fromMillis(Date.now())),
+    );
+    const salesSnap = await getDocs(salesQuery);
+    const allShiftSales: Sale[] = salesSnap.docs.map((snapshot) => ({
+      id: snapshot.id,
+      ...(snapshot.data() as Omit<Sale, 'id'>),
+    }));
+
+    const operatorShiftSales = allShiftSales.filter((sale) => {
+      if (sale.operator?.id !== user.uid) return false;
+      if (!shiftLocationId) return true;
+      return sale.locationId === shiftLocationId;
+    });
+
+    const expectedCash = operatorShiftSales
+      .filter((sale) => sale.paymentMethod === 'efectivo')
+      .reduce((sum, sale) => sum + sale.amount, 0);
+    const expectedYape = operatorShiftSales
+      .filter((sale) => sale.paymentMethod === 'yape')
+      .reduce((sum, sale) => sum + sale.amount, 0);
+    const expectedOther = operatorShiftSales
+      .filter((sale) => sale.paymentMethod === 'otro')
+      .reduce((sum, sale) => sum + sale.amount, 0);
+    const totalExpected = Math.round((expectedCash + expectedYape + expectedOther) * 100) / 100;
+
+    const machinesRef = collection(firestore, 'stations');
+    const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
+    const machinesSnap = await getDocs(machinesQuery);
+    const allOpenMachines: Station[] = machinesSnap.docs.map((snapshot) => ({
+      id: snapshot.id,
+      ...(snapshot.data() as Omit<Station, 'id'>),
+    }));
+    const openMachines = shiftLocationId
+      ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
+      : allOpenMachines;
+
+    return {
+      shiftId,
+      shiftStartMs,
+      shiftLocationId,
+      salesCount: operatorShiftSales.length,
+      expectedCash: Math.round(expectedCash * 100) / 100,
+      expectedYape: Math.round(expectedYape * 100) / 100,
+      expectedOther: Math.round(expectedOther * 100) / 100,
+      totalExpected,
+      openMachinesCount: openMachines.length,
+    };
   };
 
   const value = { 
     user, 
     userProfile: userProfile as UserProfile | null, 
     loading: loading || isProfileLoading, 
+    getShiftClosurePreview,
     logout 
   };
 

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import AuthGuard from '@/components/auth/AuthGuard';
 import Dashboard from '@/components/dashboard/Dashboard';
 

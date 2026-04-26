@@ -1,4 +1,4 @@
-import type { Machine, Product, Rate } from './types';
+import type { Station, Product, Rate } from './types';
 
 export const rates: Rate[] = [
   { id: 'rate-normal', name: 'Tarifa Normal', pricePerHour: 3.00, description: 'Tarifa estándar' },
@@ -8,8 +8,9 @@ export const rates: Rate[] = [
 
 // This is now only used for seeding the database if it's empty.
 // The main source of truth is Firestore.
-export const initialMachines: Omit<Machine, 'id'>[] = Array.from({ length: 12 }, (_, i) => ({
+export const initialMachines: Omit<Station, 'id'>[] = Array.from({ length: 12 }, (_, i) => ({
   name: `PC ${String(i + 1).padStart(2, '0')}`,
+  type: 'PC',
   status: 'available',
   rateId: i < 6 ? 'rate-normal' : i < 10 ? 'rate-economica' : 'rate-premium',
   hourlyRate: i < 6 ? 3.00 : i < 10 ? 2.50 : 5.00,
@@ -45,3 +46,38 @@ export const products: Product[] = [
   { id: 'prod_9', name: 'Papas Lays 45g', price: 1.50, category: 'snack', stock: 18, isActive: true },
   { id: 'prod_10', name: 'Jugo Natural 500ml', price: 3.00, category: 'drink', stock: 12, isActive: true },
 ];
+
+import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import type { Customer } from './types';
+
+export async function createCustomer(firestore: any, payload: Omit<Customer, 'id'>) {
+  const docRef = await addDoc(collection(firestore, "customers"), {
+    ...payload,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    metrics: {
+      totalSessions: 0,
+      totalMinutesRented: 0,
+      totalProductsBought: 0,
+      totalSpent: 0,
+      machineUsage: {},
+      visitsByWeekday: {},
+      visitHours: {},
+    }
+  });
+  return docRef.id;
+}
+
+export async function getCustomers(firestore: any) {
+  const querySnapshot = await getDocs(collection(firestore, "customers"));
+  return querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Customer));
+}
+
+export async function updateCustomer(firestore: any, id: string, payload: Partial<Customer>) {
+  const customerRef = doc(firestore, "customers", id);
+  await updateDoc(customerRef, {
+    ...payload,
+    updatedAt: serverTimestamp()
+  });
+}
+

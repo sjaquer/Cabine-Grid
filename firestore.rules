@@ -30,6 +30,10 @@ service cloud.firestore {
       return getRole() == 'operator';
     }
 
+    function isViewOnly() {
+      return getRole() == 'view-only';
+    }
+
     function isAdminOrManager() {
       return isAdmin() || isManager();
     }
@@ -38,125 +42,137 @@ service cloud.firestore {
       return isAdminOrManager() || isOperator();
     }
 
-    function hasPrivilegedClearance() {
-      return true;
-    }
-
-    function saleLooksValid() {
-      return request.resource.data.amount is number &&
-        request.resource.data.amount >= 0 &&
-        request.resource.data.amount <= 5000 &&
-        request.resource.data.totalMinutes is number &&
-        request.resource.data.totalMinutes >= 0 &&
-        request.resource.data.totalMinutes <= 1440;
+    function hasNonNegativeCurrentStock() {
+      return request.resource.data.currentStock is number && request.resource.data.currentStock >= 0;
     }
 
     function hasNonNegativeStock() {
       return request.resource.data.stock is number && request.resource.data.stock >= 0;
     }
 
+    function hasValidCustomerBaseData() {
+      return request.resource.data.customerCode is string &&
+        request.resource.data.customerCode.size() > 0 &&
+        request.resource.data.fullName is string &&
+        request.resource.data.fullName.size() > 1;
+    }
+
+    function userCanAccessLocation(locationId) {
+      return isAdminOrManager() || (
+        isOperator() && (
+          locationId != null &&
+          get(userDocPath()).data.locationIds is list &&
+          get(userDocPath()).data.locationIds.hasAny([locationId])
+        )
+      );
+    }
+
+    function machineLocationId() {
+      return get(/databases/$(database)/documents/stations/$(resource.data.machineId)).data.locationId;
+    }
+
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdminOrManager());
       allow list: if isAdminOrManager();
 
-      // Permite bootstrap del perfil propio al iniciar sesión por primera vez.
+      // Bootstrap del perfil propio con restricciones para evitar escalamiento.
       allow create: if isSignedIn() && (
-        request.auth.uid == userId || (isAdminOrManager() && hasPrivilegedClearance())
+        isAdminOrManager() ||
+        (
+          request.auth.uid == userId &&
+          request.resource.data.uid == request.auth.uid &&
+          request.resource.data.role in ['operator', 'view-only'] &&
+          request.resource.data.isActive == true &&
+          request.resource.data.email is string
+        )
       );
 
-      // El propio usuario puede actualizar datos básicos (no rol).
+      // El propio usuario solo puede cambiar datos no privilegiados.
       allow update: if isSignedIn() && (
         isAdminOrManager() ||
         (
           request.auth.uid == userId &&
-          request.resource.data.role == resource.data.role
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.locationIds == resource.data.locationIds &&
+          request.resource.data.isActive == resource.data.isActive &&
+          request.resource.data.email == resource.data.email &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['balance']) || request.resource.data.balance >= 0)
         )
       );
 
-      allow delete: if isAdmin() && hasPrivilegedClearance();
+      allow delete: if isAdmin();
     }
 
-    match /machines/{machineId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if canOperate() && hasPrivilegedClearance();
+    match /stations/{machineId} {
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /products/{productId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdminOrManager() && hasPrivilegedClearance();
+      allow create, update, delete: if isAdminOrManager();
     }
 
     match /locations/{locationId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdminOrManager() && hasPrivilegedClearance();
+      allow create, update, delete: if isAdminOrManager();
     }
 
-    match /sales/{saleId} {
+    match /customers/{customerId} {
       allow read: if isSignedIn();
-      allow create: if canOperate() && saleLooksValid();
-      allow update: if canOperate() && saleLooksValid();
+      allow create: if canOperate() && hasValidCustomerBaseData();
+      allow update: if canOperate() && hasValidCustomerBaseData();
       allow delete: if isAdminOrManager();
     }
 
+    match /sales/{saleId} {
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
+    }
+
     match /inventory/{inventoryId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate() && hasNonNegativeStock();
-      allow update: if canOperate() && hasNonNegativeStock();
-      allow delete: if canOperate() && hasPrivilegedClearance();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && hasNonNegativeCurrentStock() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
+    }
+
+    match /stockMovements/{movementId} {
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow update, delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
+    }
+
+    match /shifts/{shiftId} {
+      allow read: if isSignedIn() && (isAdminOrManager() || request.auth.uid == resource.data.operatorId);
+      allow create: if canOperate();
+      allow update: if canOperate() && (request.auth.uid == resource.data.operatorId || isAdminOrManager());
+      allow delete: if isAdminOrManager();
     }
 
     match /inventoryMovements/{movementId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate() && (
-        request.resource.data.quantity is number &&
-        request.resource.data.quantity > 0 &&
-        request.resource.data.quantity <= 200
-      );
-      allow update, delete: if isAdminOrManager() && hasPrivilegedClearance();
-    }
-
-    match /inventoryDiscrepancies/{discrepancyId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate() && request.resource.data.locationId is string;
-      allow update, delete: if isAdminOrManager() && hasPrivilegedClearance();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if canOperate() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /shiftClosures/{closureId} {
-      allow read: if isSignedIn();
-      allow create: if canOperate() && (
-        request.resource.data.locationId == null ||
-        request.resource.data.locationId is string
-      );
-      allow update, delete: if isAdmin() && hasPrivilegedClearance();
+      allow read: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
+      allow create: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow update, delete: if isAdmin() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /receiptCounters/{counterId} {
-      allow read: if isSignedIn();
-      allow create, update: if canOperate();
-      allow delete: if isAdmin() && hasPrivilegedClearance();
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdmin();
     }
 
     match /auditLogs/{logId} {
-      allow read: if isSignedIn();
+      allow read: if isAdminOrManager();
       allow create: if canOperate();
-      allow update, delete: if isAdmin() && hasPrivilegedClearance();
-    }
-
-    match /sensitiveApprovals/{approvalId} {
-      allow read, write: if false;
-    }
-
-    match /fraudAlerts/{alertId} {
-      allow read, write: if false;
-    }
-
-    match /dailySnapshots/{snapshotId} {
-      allow read, write: if false;
-    }
-
-    match /appSettings/{settingId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin() && hasPrivilegedClearance();
+      allow update, delete: if isAdmin();
     }
 
     // Bloquea cualquier colección no prevista.

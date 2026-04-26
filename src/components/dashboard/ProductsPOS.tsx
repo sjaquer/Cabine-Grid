@@ -1,21 +1,26 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useCartStore } from "@/store/useCartStore";
 import type { Product, SoldProduct } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, MinusCircle, ShoppingCart } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlusCircle, MinusCircle, ShoppingCart, AlertCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ProductsPOSProps {
     availableProducts: Product[];
     initialProducts?: SoldProduct[];
     onSave: (products: SoldProduct[]) => Promise<void>;
     onClose?: () => void;
-    onGoToCharge?: () => void;
+    onGoToCharge?: (products: SoldProduct[]) => void;
+    inventoryByProduct?: Record<string, number>; // productId -> stock
 }
 
 const categoryLabels = {
@@ -32,35 +37,60 @@ const categoryIcons = {
   other: "📦",
 };
 
-export default function ProductsPOS({ availableProducts, initialProducts, onSave, onClose, onGoToCharge }: ProductsPOSProps) {
-    const [quantities, setQuantities] = useState<Record<string, number>>(() => {
-        if (!initialProducts || initialProducts.length === 0) return {};
-        return initialProducts.reduce((acc, item) => {
+export default function ProductsPOS({ 
+  availableProducts, 
+  initialProducts, 
+  onSave, 
+  onClose, 
+  onGoToCharge,
+  inventoryByProduct = {}
+}: ProductsPOSProps) {
+    const { quantities, updateQuantity, setQuantities, clearCart } = useCartStore();
+
+    useEffect(() => {
+        if (!initialProducts || initialProducts.length === 0) {
+            clearCart();
+            return;
+        }
+        const initialQuantities = initialProducts.reduce((acc, item) => {
             acc[item.productId] = item.quantity;
             return acc;
         }, {} as Record<string, number>);
-    });
+        setQuantities(initialQuantities);
+    }, [initialProducts, setQuantities, clearCart]);
     const [searchTerm, setSearchTerm] = useState("");
+    const [onlyInStock, setOnlyInStock] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     const filteredProducts = useMemo(() => {
-        return availableProducts.filter(p =>
-            p.name.toLowerCase().includes(searchTerm.toLowerCase()) && p.isActive !== false
-        );
-    }, [searchTerm]);
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+        return availableProducts.filter((p) => {
+            if (p.isActive === false) return false;
+            if (normalizedSearch && !p.name.toLowerCase().includes(normalizedSearch)) return false;
+            if (onlyInStock) {
+                const stock = inventoryByProduct[p.id] !== undefined
+                    ? Math.max(0, inventoryByProduct[p.id])
+                    : Math.max(0, p.stock ?? 0);
+                if (stock <= 0) return false;
+            }
+            return true;
+        });
+    }, [availableProducts, searchTerm, onlyInStock, inventoryByProduct]);
+
+    const getAvailableStock = (productId: string, product: Product): number => {
+        // First check inventory system, then fallback to product stock field
+        if (inventoryByProduct && inventoryByProduct[productId] !== undefined) {
+            return Math.max(0, inventoryByProduct[productId]);
+        }
+        return Math.max(0, product.stock ?? 0);
+    };
 
     const handleQuantityChange = (productId: string, delta: number) => {
-        const newQuantities = { ...quantities };
-        const currentQuantity = newQuantities[productId] || 0;
-        const newQuantity = Math.max(0, currentQuantity + delta);
+        const product = availableProducts.find(p => p.id === productId);
+        if (!product) return;
 
-        if (newQuantity > 0) {
-            newQuantities[productId] = newQuantity;
-        } else {
-            delete newQuantities[productId];
-        }
-
-        setQuantities(newQuantities);
+        const availableStock = getAvailableStock(productId, product);
+        updateQuantity(productId, delta, availableStock);
     };
 
     const buildSoldProducts = (currentQuantities: Record<string, number>) => {
@@ -91,9 +121,72 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
     const itemCount = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
     const soldProducts = buildSoldProducts(quantities);
 
+    // Check if any products are out of stock
+    const outOfStockProducts = availableProducts.filter(p => {
+        const stock = getAvailableStock(p.id, p);
+        return stock === 0 && p.isActive !== false;
+    });
+
+    const renderProductRow = (product: Product) => {
+        const availableStock = getAvailableStock(product.id, product);
+        const isOutOfStock = availableStock === 0;
+        const currentQty = quantities[product.id] || 0;
+
+        return (
+            <div
+                key={product.id}
+                className={`flex items-center justify-between p-3 rounded-xl border border-border/80 bg-background transition shadow-sm ${
+                    isOutOfStock
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'hover:bg-secondary/40'
+                }`}
+            >
+                <div className="flex-1 min-w-0 pr-3">
+                    <div className="flex items-center gap-2">
+                        <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
+                        {availableStock > 0 && (
+                            <Badge variant="outline" className="text-xs bg-secondary/60 text-foreground/70 font-semibold">
+                                Stock: {availableStock}
+                            </Badge>
+                        )}
+                        {isOutOfStock && (
+                            <Badge variant="destructive" className="text-xs font-semibold">
+                                Sin stock
+                            </Badge>
+                        )}
+                    </div>
+                    <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
+                </div>
+                <div className="flex items-center gap-2 bg-secondary/30 rounded-lg p-1.5 border border-border/50">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => handleQuantityChange(product.id, -1)}
+                        disabled={isOutOfStock || currentQty === 0}
+                    >
+                        <MinusCircle className="w-5 h-5" />
+                    </Button>
+                    <div className="w-10 md:w-12 text-center flex items-center justify-center">
+                        <span className="font-bold text-lg md:text-xl tabular-nums">{currentQty}</span>
+                    </div>
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => handleQuantityChange(product.id, 1)}
+                        disabled={isOutOfStock || currentQty >= availableStock}
+                    >
+                        <PlusCircle className="w-5 h-5" />
+                    </Button>
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <Card className="border-0 shadow-none flex flex-col h-full min-h-0">
-            <CardHeader className="pb-3">
+        <Card className="border-0 shadow-none min-h-full flex flex-col lg:h-full lg:min-h-0 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-0">
+            <CardHeader className="pb-3 lg:col-start-1 lg:row-start-1">
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
                         <div>
@@ -101,9 +194,6 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                                 <ShoppingCart className="w-5 h-5 text-accent" />
                                 Punto de Venta (TPV)
                             </CardTitle>
-                            <CardDescription className="text-sm mt-1">
-                                Selecciona los productos que consumirá el cliente para agregarlos a su cuenta.
-                            </CardDescription>
                         </div>
                         {itemCount > 0 && (
                             <Badge className="bg-accent text-accent-foreground text-base px-3 py-2">
@@ -115,16 +205,51 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                         placeholder="Buscar producto..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-9"
+                        className="h-11 text-base"
                     />
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                            {filteredProducts.length} resultado{filteredProducts.length === 1 ? "" : "s"}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="only-in-stock" className="text-xs text-muted-foreground cursor-pointer">
+                                Solo con stock
+                            </Label>
+                            <Switch
+                                id="only-in-stock"
+                                checked={onlyInStock}
+                                onCheckedChange={setOnlyInStock}
+                            />
+                        </div>
+                    </div>
                 </div>
             </CardHeader>
 
-            <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
-                <Tabs defaultValue="drink" className="flex-1 min-h-0 flex flex-col">
-                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60">
+            <CardContent className="flex-1 min-h-0 flex flex-col gap-3 overflow-visible lg:overflow-hidden lg:col-start-1 lg:row-start-2 lg:pb-4">
+                {outOfStockProducts.length > 0 && (
+                    <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                            {outOfStockProducts.length} {outOfStockProducts.length === 1 ? "producto está" : "productos están"} sin stock disponible.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                <div className="lg:hidden flex-1 min-h-0 overflow-y-auto">
+                    <div className="pr-2 space-y-2 pb-2 h-max">
+                        {filteredProducts.length === 0 ? (
+                            <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
+                                <p>Sin productos</p>
+                            </div>
+                        ) : (
+                            filteredProducts.map(renderProductRow)
+                        )}
+                    </div>
+                </div>
+
+                <Tabs defaultValue="drink" className="hidden lg:flex flex-1 min-h-0 flex-col">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60 p-1">
                         {Object.entries(categoryLabels).map(([cat, label]) => (
-                            <TabsTrigger key={cat} value={cat} className="text-xs sm:text-sm flex gap-1">
+                            <TabsTrigger key={cat} value={cat} className="text-sm flex gap-1 h-11">
                                 <span>{categoryIcons[cat as keyof typeof categoryIcons]}</span>
                                 <span className="hidden sm:inline">{label}</span>
                             </TabsTrigger>
@@ -132,45 +257,14 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                     </TabsList>
 
                     {Array.from(products.entries()).map(([category, categoryProducts]) => (
-                        <TabsContent key={category} value={category} className="flex-1 min-h-0 overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
-                            <div className="pr-2 space-y-3 pb-4 h-max">
+                        <TabsContent key={category} value={category} className="flex-1 min-h-0 overflow-visible lg:overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
+                            <div className="pr-2 space-y-2 pb-2 h-max">
                                 {categoryProducts.length === 0 ? (
                                     <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
-                                        <p>No hay productos en esta categoría</p>
+                                        <p>Sin productos</p>
                                     </div>
                                 ) : (
-                                    categoryProducts.map(product => (
-                                        <div
-                                            key={product.id}
-                                            className="flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-background hover:bg-secondary/40 transition shadow-sm"
-                                        >
-                                            <div className="flex-1 min-w-0 pr-3">
-                                                <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
-                                                <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 bg-secondary/30 rounded-lg p-1 border border-border/50">
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                                                    onClick={() => handleQuantityChange(product.id, -1)}
-                                                >
-                                                    <MinusCircle className="w-5 h-5" />
-                                                </Button>
-                                                <div className="w-8 md:w-10 text-center flex items-center justify-center">
-                                                    <span className="font-bold text-base md:text-lg tabular-nums">{quantities[product.id] || 0}</span>
-                                                </div>
-                                                <Button
-                                                    variant="secondary"
-                                                    size="icon"
-                                                    className="h-9 w-9 md:h-10 md:w-10 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors"
-                                                    onClick={() => handleQuantityChange(product.id, 1)}
-                                                >
-                                                    <PlusCircle className="w-5 h-5" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))
+                                    categoryProducts.map(renderProductRow)
                                 )}
                             </div>
                         </TabsContent>
@@ -178,9 +272,10 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                 </Tabs>
             </CardContent>
 
-            <div className="border-t border-border/50 bg-secondary/10 p-5 mt-auto shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.5)] z-10">
+            <aside className="border-t lg:border-t-0 lg:border-l border-border/50 bg-secondary/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-5 lg:pb-5 lg:col-start-2 lg:row-span-2 flex flex-col min-h-0">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumen</h3>
                 {Object.entries(quantities).length > 0 && (
-                    <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40">
+                    <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40 overflow-y-auto max-h-48 lg:max-h-[45vh] pr-1">
                         {Object.entries(quantities).map(([productId, qty]) => {
                             const product = availableProducts.find(p => p.id === productId);
                             if (!product) return null;
@@ -199,13 +294,13 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                         {formatCurrency(total)}
                     </span>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="mt-auto flex flex-col gap-3 sticky bottom-0 bg-secondary/10 pt-3">
                     {onClose && (
                         <Button 
                             variant="outline" 
                             onClick={onClose} 
                             disabled={isSaving}
-                            className="w-full sm:w-1/4 h-12 sm:h-auto font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
+                            className="w-full h-12 font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
                         >
                             Cancelar
                         </Button>
@@ -221,10 +316,10 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                             }
                         }} 
                         disabled={isSaving}
-                        className="w-full sm:flex-1 h-14 sm:h-auto bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
+                        className="w-full h-14 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
                     >
                         <ShoppingCart className="w-5 h-5 mr-2" />
-                        {isSaving ? "Guardando..." : "Añadir y seguir jugando"}
+                        {isSaving ? "Guardando..." : "Agregar Deuda a Estación"}
                     </Button>
                     {onGoToCharge && (
                         <Button 
@@ -232,19 +327,19 @@ export default function ProductsPOS({ availableProducts, initialProducts, onSave
                                 try {
                                     setIsSaving(true);
                                     await onSave(soldProducts);
-                                    onGoToCharge();
+                                    onGoToCharge(soldProducts);
                                 } finally {
                                     setIsSaving(false);
                                 }
                             }} 
                             disabled={isSaving}
-                            className="w-full sm:flex-1 h-14 sm:h-auto bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
+                            className="w-full h-14 bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
                         >
-                            {isSaving ? "Guardando..." : "💰 Ir a Cobrar Boleta"}
+                            {isSaving ? "Guardando..." : "💰 Guardar y cobrar"}
                         </Button>
                     )}
                 </div>
-            </div>
+            </aside>
         </Card>
     );
 }
