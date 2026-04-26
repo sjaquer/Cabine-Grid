@@ -186,36 +186,36 @@ export default function ProductsPOS({
 
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     {currentQty > 0 ? (
-                        <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-850 p-1 rounded-lg shadow-inner">
+                        <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-850 p-1.5 rounded-xl shadow-inner">
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-30 rounded-md"
+                                className="h-11 w-11 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-30 rounded-lg"
                                 onClick={() => handleQuantityChange(product.id, -1)}
                             >
-                                <MinusCircle className="w-3.5 h-3.5" />
+                                <MinusCircle className="w-5 h-5" />
                             </Button>
-                            <span className="text-emerald-400 font-mono font-bold text-xs min-w-[18px] text-center">
+                            <span className="text-emerald-400 font-mono font-bold text-sm min-w-[24px] text-center">
                                 {currentQty}
                             </span>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-30 rounded-md"
+                                className="h-11 w-11 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-30 rounded-lg"
                                 onClick={() => handleQuantityChange(product.id, 1)}
                                 disabled={currentQty >= availableStock}
                             >
-                                <PlusCircle className="w-3.5 h-3.5" />
+                                <PlusCircle className="w-5 h-5" />
                             </Button>
                         </div>
                     ) : (
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg border border-zinc-800 hover:border-emerald-500/30 transition-all"
+                            className="h-11 w-11 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl border border-zinc-800 hover:border-emerald-500/30 transition-all flex items-center justify-center"
                             onClick={() => handleQuantityChange(product.id, 1)}
                         >
-                            <PlusCircle className="w-4 h-4" />
+                            <PlusCircle className="w-5 h-5" />
                         </Button>
                     )}
                 </div>
@@ -224,7 +224,7 @@ export default function ProductsPOS({
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-950 text-slate-50 font-body overflow-hidden">
+        <div className="flex flex-col h-[100dvh] bg-slate-950 text-slate-50 font-body overflow-hidden">
             {/* Header Búsqueda */}
             <div className="p-4 border-b border-slate-900 space-y-3 shrink-0 bg-slate-950">
                 <Input

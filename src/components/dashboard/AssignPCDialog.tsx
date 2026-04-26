@@ -271,7 +271,7 @@ export default function AssignPCDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden max-h-[92vh] flex flex-col">
+      <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden max-h-[100dvh] flex flex-col">
         <div className="bg-gradient-to-r from-primary/20 via-transparent to-accent/20 p-5 sm:p-6 border-b shrink-0">
           <DialogHeader className="space-y-1">
             <DialogTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2">
@@ -322,18 +322,20 @@ export default function AssignPCDialog({
                       )}
                       
                       {customerSearch && filteredCustomers.length > 0 && (
-                        <div className="absolute z-50 w-full bg-background border rounded-md shadow-lg mt-1 max-h-[160px] overflow-y-auto">
+                        <div className="absolute z-50 w-full bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl mt-1.5 max-h-[300px] overflow-y-auto divide-y divide-zinc-800/50">
                           {filteredCustomers.map((customer) => (
                             <div
                               key={customer.id}
-                              className="p-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm flex justify-between items-center"
+                              className="p-4 hover:bg-zinc-800 cursor-pointer text-base flex justify-between items-center transition-all active:bg-zinc-800/50"
                               onClick={() => {
                                 field.onChange(customer.id);
                                 setCustomerSearch(customer.fullName);
                               }}
                             >
-                              <span className="font-medium">{customer.fullName}</span>
-                              <span className="text-xs text-muted-foreground font-mono">{customer.customerCode}</span>
+                              <span className="font-semibold text-zinc-100 tracking-tight">{customer.fullName}</span>
+                              <span className="text-xs font-bold font-mono bg-zinc-950 text-emerald-400 py-1 px-2 rounded-md border border-zinc-800">
+                                {customer.customerCode}
+                              </span>
                             </div>
                           ))}
                         </div>

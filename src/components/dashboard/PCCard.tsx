@@ -61,7 +61,7 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
       <div className="flex items-center justify-between w-full">
         <div className="flex items-center gap-1.5">
           {isPC ? <Monitor size={14} /> : <Gamepad2 size={14} />}
-          <span className="text-xs font-bold tracking-wide text-zinc-200">{name}</span>
+          <span className="text-xs md:text-sm font-bold tracking-wide text-zinc-200">{name}</span>
         </div>
         <div className={cn("w-2 h-2 rounded-full", ledColor)} />
       </div>
@@ -69,20 +69,20 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
       {/* Centro (Middle) */}
       <div className="flex flex-1 flex-col items-center justify-center">
         {status === 'occupied' || status === 'warning' ? (
-          <span className="text-xl font-black font-mono tracking-tighter leading-none text-slate-100">
+          <span className="text-xl md:text-2xl font-black font-mono tracking-tighter leading-none text-slate-100">
             {formatTime(Math.floor(timeToShow))}
           </span>
         ) : status === 'maintenance' ? (
-          <span className="text-[10px] font-bold tracking-wider uppercase text-zinc-600">OFF</span>
+          <span className="text-[10px] md:text-xs font-bold tracking-wider uppercase text-zinc-600">OFF</span>
         ) : (
-          <span className="text-[11px] font-black tracking-wider text-zinc-600">LIBRE</span>
+          <span className="text-[11px] md:text-xs font-black tracking-wider text-zinc-600">LIBRE</span>
         )}
       </div>
 
       {/* Pie (Bottom) */}
       <div className="w-full bg-zinc-900/60 border border-zinc-800/40 rounded-lg px-2 py-1 flex items-center gap-1.5 mt-1">
         <User size={12} className="text-zinc-500 flex-shrink-0" />
-        <span className="text-[10px] text-zinc-400 truncate font-medium">
+        <span className="text-[10px] md:text-xs text-zinc-400 truncate font-medium">
           {status === 'occupied' || status === 'warning' 
             ? (sanitizeString(session?.client) || 'Invitado') 
             : '---'}

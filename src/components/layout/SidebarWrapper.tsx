@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/firebase";
 import Link from "next/link";
-import { Cpu, Home, UserRound, Package, BarChart3, Settings, LogOut, Loader2 } from "lucide-react";
+import { Cpu, Home, UserRound, Package, BarChart3, Settings, LogOut, Loader2, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -29,6 +29,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
   const { toast } = useToast();
 
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
   const [countedCash, setCountedCash] = useState<string>("");
@@ -142,7 +143,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
       {/* Sidebar colapsable dinámico */}
       <aside 
         className={cn(
-          "bg-zinc-950 border-r border-zinc-900 flex flex-col items-center py-4 justify-between z-30 shrink-0 transition-all duration-300 ease-in-out group/sidebar",
+          "hidden lg:flex bg-zinc-950 border-r border-zinc-900 flex-col items-center py-4 justify-between z-30 shrink-0 transition-all duration-300 ease-in-out group/sidebar",
           isCollapsed ? "w-16 sm:w-20 hover:w-60" : "w-60"
         )}
       >
@@ -200,6 +201,55 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
           </Button>
         </div>
       </aside>
+
+      {/* Menú Hamburguesa flotante para tablets y móviles (<1024px) */}
+      <div className="lg:hidden fixed top-4 right-4 z-50">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setIsMobileOpen(!isMobileOpen)}
+          className="h-11 w-11 rounded-xl bg-zinc-950/90 border-zinc-800 text-zinc-200 shadow-[0_4px_15px_rgba(0,0,0,0.4)] backdrop-blur-md flex items-center justify-center"
+        >
+          {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </Button>
+      </div>
+
+      {/* Superposición del Menú Móvil */}
+      {isMobileOpen && (
+        <div className="lg:hidden fixed inset-0 bg-zinc-950/95 z-40 flex flex-col items-center justify-center animate-in fade-in duration-200">
+          <nav className="flex flex-col gap-5 items-center">
+            {menuItems.map((item) => {
+              if (item.roles && !item.roles.includes(userProfile?.role || "")) return null;
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link key={item.href} href={item.href} onClick={() => setIsMobileOpen(false)}>
+                  <span className={cn(
+                    "text-xl font-headline tracking-wide flex items-center gap-3 py-3 px-6 rounded-xl transition-all",
+                    isActive 
+                      ? "text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30" 
+                      : "text-zinc-300 hover:text-emerald-400"
+                  )}>
+                    <Icon className="w-6 h-6" />
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setIsMobileOpen(false);
+                handleLogoutClick();
+              }}
+              className="mt-8 text-zinc-400 hover:text-destructive flex items-center gap-3 text-lg hover:bg-destructive/10 py-6 px-8 rounded-xl"
+            >
+              <LogOut className="w-6 h-6" />
+              Cerrar Turno
+            </Button>
+          </nav>
+        </div>
+      )}
 
       {/* Contenido principal expandido */}
       <main className="flex-1 h-full overflow-y-auto bg-slate-950 relative">

@@ -29,6 +29,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  limit,
 } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
@@ -56,15 +57,15 @@ export default function AdminPage() {
   const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
   const closuresQuery = useMemoFirebase(() => {
     if (!firestore || !shouldLoadClosures) return null;
-    return query(collection(firestore, "shiftClosures"));
+    return query(collection(firestore, "shiftClosures"), limit(50));
   }, [firestore, shouldLoadClosures]);
   const salesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, "sales"));
+    return query(collection(firestore, "sales"), limit(50));
   }, [firestore]);
   const auditLogsQuery = useMemoFirebase(() => {
     if (!firestore || !shouldLoadAuditLogs) return null;
-    return query(collection(firestore, "auditLogs"));
+    return query(collection(firestore, "auditLogs"), limit(50));
   }, [firestore, shouldLoadAuditLogs]);
 
   const { data: machinesData } = useCollection<Omit<Station, "id">>(machinesQuery);
