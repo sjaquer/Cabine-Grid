@@ -19,6 +19,7 @@ import AuditLogsManager from "@/components/admin/AuditLogsManager";
 import CustomerManager from "@/components/admin/CustomerManager";
 import type { Customer, Station, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/lib/utils";
 import {
   addDoc,
   collection,
@@ -58,9 +59,9 @@ export default function AdminPage() {
     return query(collection(firestore, "shiftClosures"));
   }, [firestore, shouldLoadClosures]);
   const salesQuery = useMemoFirebase(() => {
-    if (!firestore || !shouldLoadSales) return null;
+    if (!firestore) return null;
     return query(collection(firestore, "sales"));
-  }, [firestore, shouldLoadSales]);
+  }, [firestore]);
   const auditLogsQuery = useMemoFirebase(() => {
     if (!firestore || !shouldLoadAuditLogs) return null;
     return query(collection(firestore, "auditLogs"));
@@ -93,6 +94,20 @@ export default function AdminPage() {
   const sales = useMemo(() => (salesData ?? []) as Sale[], [salesData]);
   const customers = useMemo(() => (customersData ?? []) as Customer[], [customersData]);
   const auditLogs = useMemo(() => (auditLogsData ?? []), [auditLogsData]);
+
+  const todaySales = useMemo(() => {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return sales.filter(s => {
+      const saleTime = s.endTime?.toMillis ? s.endTime.toMillis() : (s.endTime ? new Date(s.endTime as any).getTime() : 0);
+      if (!saleTime) return false;
+      return saleTime >= startOfDay.getTime();
+    });
+  }, [sales]);
+
+  const todayRevenue = useMemo(() => {
+    return todaySales.reduce((acc, s) => acc + (s.amount || 0), 0);
+  }, [todaySales]);
 
   const auditActor = {
     id: user?.uid,
@@ -480,13 +495,41 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Estadísticas Rápidas */}
-            <div className="kpi-strip grid-cols-2 md:grid-cols-5">
-              <StatQuick label="Cabinas" value={machines.length} icon={<Cpu className="w-4 h-4" />} />
-              <StatQuick label="Locales" value={locations.length} icon={<MapPin className="w-4 h-4" />} />
-              <StatQuick label="Productos" value={products.length} icon={<ShoppingCart className="w-4 h-4" />} />
-              <StatQuick label="Usuarios" value={users.length} icon={<Users className="w-4 h-4" />} />
-              <StatQuick label="Clientes" value={customers.length} icon={<UserRound className="w-4 h-4" />} />
+            {/* Estadísticas Gerenciales (Dueño) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t border-slate-900">
+              <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                  <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Ingresos del Día</span>
+                  <h3 className="text-2xl font-black font-mono text-emerald-400 tracking-tight mt-1">{formatCurrency(todayRevenue)}</h3>
+                </div>
+                <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl">
+                  <ShoppingCart className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                  <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Ventas Hoy</span>
+                  <h3 className="text-2xl font-black font-mono text-primary tracking-tight mt-1">{todaySales.length}</h3>
+                </div>
+                <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                  <FileText className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                  <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Módulos Activos</span>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">{machines.length} Cabinas</Badge>
+                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">{products.length} Items</Badge>
+                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">{customers.length} Clientes</Badge>
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl">
+                  <Cpu className="w-6 h-6" />
+                </div>
+              </div>
             </div>
           </div>
         </header>

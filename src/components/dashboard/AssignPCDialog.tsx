@@ -1,7 +1,7 @@
 "use client";
 
 import { z } from "zod";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Customer, Station } from "@/lib/types";
@@ -119,6 +119,8 @@ export default function AssignPCDialog({
   const [customerSearch, setCustomerSearch] = useState("");
   const weekdayLabels = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const form = useForm<AssignPCFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -178,6 +180,10 @@ export default function AssignPCDialog({
         favoriteGamesText: "",
       });
       setCustomerSearch("");
+      
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
     }
   }, [isOpen, form, quickCustomerForm]);
   
@@ -294,6 +300,7 @@ export default function AssignPCDialog({
                     <div className="relative flex-1">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                       <Input
+                        ref={searchInputRef}
                         value={customerSearch}
                         onChange={(event) => setCustomerSearch(event.target.value)}
                         onKeyDown={handleSearchEnter}

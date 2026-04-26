@@ -27,24 +27,32 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
   const timeToShow = isPrepaid ? (timeIsUp ? elapsedSeconds - prepaidSeconds! : remainingSeconds!) : elapsedSeconds;
   const isWarning = remainingSeconds !== undefined && remainingSeconds > 0 && remainingSeconds <= 300;
 
-  // 1. Color de acento según tipo de estación
+  // 1. Color de acento según tipo de estación (Cyber Premium)
   const typeStyle = {
-    PC: "border-blue-500/30 hover:border-blue-400 text-blue-400 bg-blue-950/10",
-    PS5: "border-slate-400/30 hover:border-slate-200 text-slate-200 bg-slate-900/30",
-    PS4: "border-slate-400/30 hover:border-slate-200 text-slate-200 bg-slate-900/30",
-    PS3: "border-slate-400/30 hover:border-slate-200 text-slate-200 bg-slate-900/30",
-    XBOX: "border-emerald-500/30 hover:border-emerald-400 text-emerald-400 bg-emerald-950/10",
-    NINTENDO: "border-rose-500/30 hover:border-rose-400 text-rose-400 bg-rose-950/10",
-    VR: "border-violet-500/30 hover:border-violet-400 text-violet-400 bg-violet-950/10",
-    SIMULADOR: "border-cyan-500/30 hover:border-cyan-400 text-cyan-400 bg-cyan-950/10",
-  }[type || 'PC'] || "border-slate-500/30 text-slate-400 bg-slate-900/10";
+    PC: "border-blue-500/30 hover:border-blue-400 text-blue-400 bg-blue-950/20 shadow-blue-500/5",
+    PS5: "border-cyan-500/30 hover:border-cyan-400 text-cyan-400 bg-cyan-950/20 shadow-cyan-500/5",
+    PS4: "border-indigo-500/30 hover:border-indigo-400 text-indigo-400 bg-indigo-950/20 shadow-indigo-500/5",
+    PS3: "border-indigo-500/30 hover:border-indigo-400 text-indigo-400 bg-indigo-950/20 shadow-indigo-500/5",
+    XBOX: "border-emerald-500/30 hover:border-emerald-400 text-emerald-400 bg-emerald-950/20 shadow-emerald-500/5",
+    NINTENDO: "border-rose-500/30 hover:border-rose-400 text-rose-400 bg-rose-950/20 shadow-rose-500/5",
+    VR: "border-violet-500/30 hover:border-violet-400 text-violet-400 bg-violet-950/20 shadow-violet-500/5",
+    SIMULADOR: "border-amber-500/30 hover:border-amber-400 text-amber-400 bg-amber-950/20 shadow-amber-500/5",
+  }[type || 'PC'] || "border-slate-800 text-slate-400 bg-slate-950";
 
-  // 2. Modificador de estado
+  // 2. Modificador de estado (Efectos Neón)
   const stateStyle = {
-    available: "opacity-60 border-dashed hover:opacity-100",
-    occupied: "border-solid border-2 shadow-[0_0_15px_rgba(59,130,246,0.15)] opacity-100",
-    warning: "border-amber-500/60 border-2 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.2)]",
-    maintenance: "border-yellow-600 bg-[repeating-linear-gradient(45deg,#ca8a04_0,#ca8a04_10px,#0f172a_10px,#0f172a_20px)] text-yellow-600 opacity-50",
+    available: "border-dashed opacity-50 hover:opacity-100 hover:border-solid",
+    occupied: cn(
+      "border-solid border-2 opacity-100",
+      type === "PC" && "shadow-[0_0_20px_rgba(59,130,246,0.3)] border-blue-500",
+      type === "XBOX" && "shadow-[0_0_20px_rgba(16,185,129,0.3)] border-emerald-500",
+      type === "NINTENDO" && "shadow-[0_0_20px_rgba(244,63,94,0.3)] border-rose-500",
+      (type === "PS5" || type === "PS4" || type === "PS3") && "shadow-[0_0_20px_rgba(6,182,212,0.3)] border-cyan-500",
+      type === "VR" && "shadow-[0_0_20px_rgba(139,92,246,0.3)] border-violet-500",
+      type === "SIMULADOR" && "shadow-[0_0_20px_rgba(245,158,11,0.3)] border-amber-500"
+    ),
+    warning: "border-amber-500 border-2 animate-pulse shadow-[0_0_25px_rgba(245,158,11,0.4)]",
+    maintenance: "border-yellow-600 bg-[repeating-linear-gradient(45deg,#ca8a04_0,#ca8a04_10px,#0f172a_10px,#0f172a_20px)] opacity-30 cursor-not-allowed",
   }[isWarning ? 'warning' : status];
 
   const getStationIcon = () => {

@@ -202,7 +202,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
       </aside>
 
       {/* Contenido principal expandido */}
-      <main className="flex-1 h-full overflow-hidden bg-slate-950 relative">
+      <main className="flex-1 h-full overflow-y-auto bg-slate-950 relative">
         {children}
       </main>
 

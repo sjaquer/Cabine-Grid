@@ -18,6 +18,7 @@ import { getShiftStart } from "@/lib/shift-session";
 import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
 import { closeSession } from "@/lib/close-session";
 import { canAccessMachine } from "@/hooks/useMachineAccess";
+import { useHotkeys } from "@/hooks/useHotkeys";
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +73,16 @@ export default function Dashboard() {
 
 
 
+
+  useHotkeys([
+    {
+      key: "f2",
+      callback: () => {
+        setMachineToPos(null);
+        setPosDialogOpen(true);
+      }
+    }
+  ]);
 
   const handleCardAction = useCallback((machine: Station) => {
     if (machine.status === 'available') {

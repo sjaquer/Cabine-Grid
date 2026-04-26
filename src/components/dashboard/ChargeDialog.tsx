@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Station, PaymentMethod } from "@/lib/types";
 import { formatCurrency, formatDuration, formatTime } from "@/lib/utils";
 import { calculateSessionCost } from "@/lib/session-cost";
@@ -38,11 +38,16 @@ export default function ChargeDialog({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo');
   const [amountPaid, setAmountPaid] = useState<string>("");
 
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!isOpen) {
-      // Reset state on close
       setPaymentMethod('efectivo');
       setAmountPaid("");
+    } else {
+      setTimeout(() => {
+        confirmButtonRef.current?.focus();
+      }, 100);
     }
   }, [isOpen]);
 
@@ -220,6 +225,7 @@ export default function ChargeDialog({
                 Cancelar
               </Button>
               <Button
+                ref={confirmButtonRef}
                 onClick={handleConfirm}
                 disabled={isProcessing}
                 className="w-full h-12 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-white font-bold"
