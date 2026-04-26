@@ -4,12 +4,12 @@ import type { Station, Product, SoldProduct } from "@/lib/types";
 import { sanitizeString } from "@/lib/sanitize";
 import { formatTime } from "@/lib/utils";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import ProductsPOS from "./ProductsPOS";
 
  type ProductsPOSDialogProps = {
@@ -41,23 +41,23 @@ export default function ProductsPOSDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] p-0 overflow-hidden h-[calc(100dvh-0.75rem)] max-h-[calc(100dvh-0.75rem)] sm:max-w-4xl sm:max-h-[92vh] lg:max-w-6xl lg:h-[88vh] flex flex-col shadow-2xl rounded-2xl border-accent/20">
+    <Sheet open={isOpen} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[100vw] sm:max-w-xl p-0 overflow-hidden h-full flex flex-col border-slate-800 bg-slate-950 text-slate-50">
         <div className="bg-gradient-to-r from-background via-accent/5 to-secondary p-4 sm:p-6 border-b relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-          <DialogHeader className="space-y-1 relative z-10">
-            <DialogTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2 font-black">
-              TPV - <span className="text-accent">{machine.name}</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs font-medium text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
-              <span className="bg-secondary/40 px-2.5 py-1 rounded-md text-foreground/80 font-semibold shadow-sm">
+          <SheetHeader className="space-y-1 relative z-10">
+            <SheetTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2 font-black text-slate-50">
+              TPV - <span className="text-primary">{machine.name}</span>
+            </SheetTitle>
+            <SheetDescription className="text-xs font-medium text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
+              <span className="bg-slate-900 px-2.5 py-1 rounded-md text-slate-300 font-semibold shadow-sm">
                 {sanitizeString(session.client) || "Cliente Ocasional"}
               </span>
-              <span className="bg-accent/10 text-accent px-2.5 py-1 rounded-md font-mono font-bold tracking-tight shadow-sm">
+              <span className="bg-primary/20 text-primary px-2.5 py-1 rounded-md font-mono font-bold tracking-tight shadow-sm">
                 {formatTime(elapsedSeconds)}
               </span>
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto bg-background/50">
@@ -70,7 +70,7 @@ export default function ProductsPOSDialog({
             inventoryByProduct={inventoryByProduct}
           />
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -6,39 +6,16 @@ import { sanitizeString } from "@/lib/sanitize";
 import { useTimer } from "@/hooks/useTimer";
 import { formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Computer, Clock, User, PlusCircle, Zap, AlertTriangle, Wrench, Gamepad } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Computer, User, AlertTriangle, Wrench, Gamepad } from "lucide-react";
 
 type PCCardProps = {
-  machine: Station; // renamed to machine for component compatibility
+  machine: Station;
   onAction: (station: Station) => void;
 };
 
-const statusColors = {
-  available: "border-status-available/45 hover:border-status-available/80 bg-gradient-to-b from-status-available/5 to-transparent",
-  occupied: "border-status-occupied/45 hover:border-status-occupied/80 bg-gradient-to-b from-status-occupied/5 to-transparent",
-  warning: "border-status-warning/70 hover:border-status-warning bg-gradient-to-b from-status-warning/15 to-transparent",
-  maintenance: "border-muted/45 hover:border-muted/70 bg-gradient-to-b from-muted/5 to-transparent",
-};
-
-const statusBg = {
-  available: "bg-status-available",
-  occupied: "bg-status-occupied",
-  warning: "bg-status-warning",
-  maintenance: "bg-muted",
-};
-
-const statusBadge = {
-  available: { label: "Disponible", color: "bg-status-available text-black" },
-  occupied: { label: "En Uso", color: "bg-status-occupied text-white" },
-  warning: { label: "Alertas", color: "bg-status-warning text-black" },
-  maintenance: { label: "Mantenimiento", color: "bg-muted text-foreground" },
-};
-
 export default function PCCard({ machine: station, onAction }: PCCardProps) {
-  const { session, status } = station;
+  const { session, status, type } = station;
   const rate = rates.find(r => r.id === (session?.rateId || station.rateId));
   const hourlyRate = session?.hourlyRate || station.hourlyRate || rate?.pricePerHour || 3.00;
   const prepaidSeconds = session?.usageMode === 'prepaid' ? (session.prepaidHours || 0) * 3600 : undefined;
@@ -47,155 +24,91 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
 
   const isPrepaid = session?.usageMode === 'prepaid';
   const timeIsUp = isPrepaid && remainingSeconds !== undefined && remainingSeconds <= 0;
-  
   const timeToShow = isPrepaid ? (timeIsUp ? elapsedSeconds - prepaidSeconds! : remainingSeconds!) : elapsedSeconds;
   const isWarning = remainingSeconds !== undefined && remainingSeconds > 0 && remainingSeconds <= 300;
 
-  const getStatusIcon = () => {
-    if (status === 'maintenance') return <Wrench className="w-12 h-12 text-muted-foreground/80" />;
-    if (status === 'warning') return <AlertTriangle className="w-12 h-12 text-status-warning/80 animate-bounce" />;
+  // 1. Color de acento según tipo de estación
+  const typeStyle = {
+    PC: "border-blue-500/30 hover:border-blue-400 text-blue-400 bg-blue-950/10",
+    PS5: "border-slate-400/30 hover:border-slate-200 text-slate-200 bg-slate-900/30",
+    PS4: "border-slate-400/30 hover:border-slate-200 text-slate-200 bg-slate-900/30",
+    PS3: "border-slate-400/30 hover:border-slate-200 text-slate-200 bg-slate-900/30",
+    XBOX: "border-emerald-500/30 hover:border-emerald-400 text-emerald-400 bg-emerald-950/10",
+    NINTENDO: "border-rose-500/30 hover:border-rose-400 text-rose-400 bg-rose-950/10",
+    VR: "border-violet-500/30 hover:border-violet-400 text-violet-400 bg-violet-950/10",
+    SIMULADOR: "border-cyan-500/30 hover:border-cyan-400 text-cyan-400 bg-cyan-950/10",
+  }[type || 'PC'] || "border-slate-500/30 text-slate-400 bg-slate-900/10";
+
+  // 2. Modificador de estado
+  const stateStyle = {
+    available: "opacity-60 border-dashed hover:opacity-100",
+    occupied: "border-solid border-2 shadow-[0_0_15px_rgba(59,130,246,0.15)] opacity-100",
+    warning: "border-amber-500/60 border-2 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.2)]",
+    maintenance: "border-yellow-600 bg-[repeating-linear-gradient(45deg,#ca8a04_0,#ca8a04_10px,#0f172a_10px,#0f172a_20px)] text-yellow-600 opacity-50",
+  }[isWarning ? 'warning' : status];
+
+  const getStationIcon = () => {
+    if (status === 'maintenance') return <Wrench className="w-12 h-12" />;
+    if (status === 'warning' || isWarning) return <AlertTriangle className="w-12 h-12 text-amber-500 animate-bounce" />;
     
-    const isOccupied = status === 'occupied';
-    const iconClass = cn("w-12 h-12", isOccupied ? "text-status-occupied/80 animate-pulse" : "text-status-available/80");
-    
-    switch (station.type) {
-      case 'PS5':
-      case 'PS4':
-      case 'PS3':
-      case 'XBOX':
-      case 'NINTENDO':
-      case 'VR':
-      case 'SIMULADOR':
-        return <Gamepad className={iconClass} />;
-      case 'PC':
-      default:
-        return <Computer className={iconClass} />;
-    }
+    if (type === 'PC') return <Computer className="w-14 h-14 text-current" />;
+    return <Gamepad className="w-14 h-14 text-current" />;
   };
 
   return (
     <Card
       className={cn(
-        "group flex min-h-[230px] flex-col overflow-hidden border-2 transition-all duration-300 hover:shadow-xl cursor-pointer",
-        statusColors[status]
+        "relative flex aspect-square flex-col items-center justify-between p-4 rounded-2xl border transition-all duration-300 select-none cursor-pointer overflow-hidden font-body",
+        typeStyle,
+        stateStyle
       )}
       onClick={() => status !== "maintenance" && onAction(station)}
     >
-      <CardHeader className="flex-row items-start justify-between space-y-0 px-3 pb-2.5 pt-3.5">
-        <div className="flex flex-col gap-2 flex-1">
-          <CardTitle className="text-xl font-headline font-bold tracking-tight">{station.name}</CardTitle>
-          <div className="flex gap-2 items-center">
-            <Badge className={`w-fit px-2.5 py-0.5 text-xs font-semibold ${statusBadge[status].color}`}>
-              {statusBadge[status].label}
-            </Badge>
-            <Badge variant="outline" className="w-fit text-xs font-medium border-primary/20 text-primary">
-              {station.type || 'PC'}
-            </Badge>
-          </div>
-        </div>
-        <div className="relative flex h-4 w-4">
-          {status !== 'available' && (
-            <>
-              <span className={cn("absolute inline-flex h-full w-full rounded-full opacity-75", statusBg[status], status === 'warning' && 'animate-ping')}></span>
-              <span className={cn("relative inline-flex rounded-full h-4 w-4", statusBg[status])}></span>
-            </>
-          )}
-        </div>
-      </CardHeader>
-      
-      {status === 'available' ? (
-        <>
-          <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 px-3 py-3 text-center">
-            <div className="scale-90 transition-transform duration-300 group-hover:scale-100">{getStatusIcon()}</div>
-            <p className="text-sm font-medium text-muted-foreground">
-              {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
-            </p>
-            <p className="text-xs text-muted-foreground">Lista para nueva sesion</p>
-          </CardContent>
-          <CardFooter className="p-3 pt-0">
-            <Button 
-              variant="default" 
-              className="h-10 w-full font-semibold text-sm" 
-              size="sm" 
-              onClick={(event) => {
-                event.stopPropagation();
-                onAction(station);
-              }}
-            >
-              <PlusCircle className="mr-2 h-4 w-4" /> 
-              Asignar
-            </Button>
-          </CardFooter>
-        </>
-      ) : status === 'maintenance' ? (
-        <>
-          <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 py-3 text-center">
-            <div className="scale-90">{getStatusIcon()}</div>
-            <p className="text-sm font-semibold text-muted-foreground">En Mantenimiento</p>
-          </CardContent>
-          <CardFooter className="p-3 pt-0">
-            <Button 
-              variant="outline" 
-              className="h-10 w-full text-sm" 
-              size="sm" 
-              disabled
-            >
-              No disponible
-            </Button>
-          </CardFooter>
-        </>
-      ) : (
-        <>
-          <CardContent className="flex flex-1 flex-col justify-between gap-3 px-3 py-3">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="h-4 w-4 text-accent"/>
-                <span className="truncate font-semibold text-foreground">{sanitizeString(session?.client) || 'Cliente Ocasional'}</span>
-              </div>
-              
-              <div className="flex items-center gap-2 text-sm">
-                <Clock className="h-4 w-4 text-primary"/>
-                <span className="flex-1 text-xs text-muted-foreground">
-                  {isPrepaid ? (timeIsUp ? "Tiempo Extra" : "Tiempo Restante") : "Tiempo Transcurrido"}
-                </span>
-              </div>
-            </div>
+      {/* Alias del jugador arriba */}
+      <div className="w-full text-center text-xs font-bold tracking-wide truncate pt-1 flex items-center justify-center gap-1 text-slate-200">
+        {status === 'occupied' ? (
+          <>
+            <User className="w-3 h-3 opacity-70 text-primary" />
+            <span className="truncate font-semibold">{sanitizeString(session?.client) || 'Invitado'}</span>
+          </>
+        ) : status === 'maintenance' ? (
+          <span className="text-yellow-500 font-headline">Fuera de Servicio</span>
+        ) : (
+          <span className="text-slate-400 opacity-80">{station.name}</span>
+        )}
+      </div>
 
-            <div className={cn(
-              "rounded-lg bg-secondary/60 p-3 text-center",
-              isWarning && "bg-status-warning/20 border border-status-warning/50"
-            )}>
-              <div className="text-2xl font-mono font-bold leading-none text-primary">
-                {formatTime(Math.floor(timeToShow))}
-              </div>
-              <div className="mt-1.5 text-xs text-muted-foreground">
-                {rate?.name || `S/. ${hourlyRate.toFixed(2)}/hr`}
-              </div>
-            </div>
+      {/* Ícono Central Grande */}
+      <div className="flex flex-1 items-center justify-center scale-100 group-hover:scale-110 transition-transform duration-300 py-2">
+        {getStationIcon()}
+      </div>
 
-            {isWarning && (
-              <div className="flex items-center gap-2 rounded-lg border border-status-warning/40 bg-status-warning/15 px-2.5 py-2">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-status-warning" />
-                <span className="text-xs font-semibold text-status-warning">{isPrepaid ? "Prepagado por terminar" : "Tiempo por terminar"}</span>
-              </div>
-            )}
-          </CardContent>
-          
-          <CardFooter className="p-3 pt-0">
-            <Button 
-              variant={isWarning ? "destructive" : "secondary"}
-              className="h-10 w-full font-semibold text-sm" 
-              size="sm" 
-              onClick={(event) => {
-                event.stopPropagation();
-                onAction(station);
-              }}
-            >
-              Abrir TPV
-            </Button>
-          </CardFooter>
-        </>
-      )}
+      {/* Tiempo abajo */}
+      <div className="w-full flex flex-col items-center gap-0.5 pb-1">
+        {status === 'occupied' ? (
+          <>
+            <span className="text-lg font-black font-mono text-slate-50 tracking-tight leading-none">
+              {formatTime(Math.floor(timeToShow))}
+            </span>
+            <span className="text-[9px] font-bold tracking-wider uppercase text-slate-400">
+              {isPrepaid ? (timeIsUp ? "TIEMPO EXTRA" : "RESTANTE") : "TIEMPO"}
+            </span>
+          </>
+        ) : status === 'available' ? (
+          <span className="text-xs font-headline text-slate-400 font-bold uppercase tracking-wider">
+            {station.name}
+          </span>
+        ) : (
+          <span className="text-[10px] font-semibold text-yellow-500 uppercase tracking-wide">
+            Mantenimiento
+          </span>
+        )}
+      </div>
+
+      {/* Badge de tipo absoluto */}
+      <div className="absolute top-2 right-2 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-950/50 border border-slate-800 text-muted-foreground">
+        {station.type || 'PC'}
+      </div>
     </Card>
   );
 }
