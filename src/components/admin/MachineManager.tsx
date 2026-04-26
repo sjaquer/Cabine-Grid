@@ -1,5 +1,16 @@
 "use client";
 
+function cleanPayload<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(cleanPayload) as unknown as T;
+  const result: any = {};
+  for (const key in obj) {
+    if (obj[key] !== undefined) result[key] = cleanPayload(obj[key]);
+  }
+  return result;
+}
+
+
 import { useState } from "react";
 import type { Station, StationType } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -93,19 +104,19 @@ export default function MachineManager({
   const handleSubmit = async (values: StationFormValues) => {
     try {
       if (editingId) {
-        await onEdit(editingId, {
+        await onEdit(editingId, cleanPayload({
           ...values,
           specs: values.specs,
-        });
+        }));
       } else {
-        await onAdd({
+        await onAdd(cleanPayload({
           name: values.name,
           type: values.type,
           status: "available",
           hourlyRate: values.hourlyRate,
           locationId: values.locationId,
           specs: values.specs,
-        });
+        }));
       }
       form.reset();
       setIsOpen(false);
