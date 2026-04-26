@@ -61,9 +61,12 @@ export type Product = {
   id: string;
   name: string;
   price: number;
-  category: 'drink' | 'snack' | 'food' | 'other';
+  costPrice?: number;
+  category: string;
   description?: string;
   stock?: number;
+  minStock?: number;
+  supplierInfo?: string;
   isActive?: boolean;
   createdAt?: Timestamp;
 }

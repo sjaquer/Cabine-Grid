@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/firebase";
 import type { Product } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,9 +49,12 @@ import { formatCurrency } from "@/lib/utils";
 const productSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
   price: z.coerce.number().positive("El precio debe ser mayor a 0").max(10000, "Precio máximo es 10,000 soles"),
-  category: z.enum(["drink", "snack", "food", "other"]),
+  costPrice: z.coerce.number().min(0, "El costo no puede ser negativo").optional(),
+  category: z.string().min(1, "La categoría es requerida"),
   description: z.string().optional(),
   stock: z.coerce.number().min(0, "El stock no puede ser negativo").max(99999, "Stock máximo es 99,999").optional(),
+  minStock: z.coerce.number().min(0, "El stock mínimo no puede ser negativo").optional(),
+  supplierInfo: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -62,18 +66,26 @@ type ProductManagerProps = {
   onDelete: (id: string) => Promise<void>;
 };
 
-const categoryLabels = {
+const categoryLabels: Record<string, string> = {
   drink: "Bebidas",
   snack: "Snacks",
   food: "Comidas",
-  other: "Servicios y Otros",
+  other: "Servicios",
+  hardware: "Hardware",
+  bebidas: "Bebidas",
+  snacks: "Snacks",
+  servicios: "Servicios",
 };
 
-const categoryColors = {
-  drink: "bg-blue-500/20 text-blue-600",
-  snack: "bg-amber-500/20 text-amber-600",
-  food: "bg-green-500/20 text-green-600",
-  other: "bg-gray-500/20 text-gray-600",
+const categoryColors: Record<string, string> = {
+  drink: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  snack: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  food: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  other: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+  hardware: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  bebidas: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  snacks: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  servicios: "bg-slate-500/20 text-slate-400 border-slate-500/30",
 };
 
 export default function ProductManager({
@@ -82,6 +94,7 @@ export default function ProductManager({
   onEdit,
   onDelete,
 }: ProductManagerProps) {
+  const { userProfile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -90,9 +103,12 @@ export default function ProductManager({
     defaultValues: {
       name: "",
       price: 0,
-      category: "other",
+      costPrice: 0,
+      category: "snack",
       description: "",
       stock: 0,
+      minStock: 5,
+      supplierInfo: "",
     },
   });
 
@@ -102,17 +118,23 @@ export default function ProductManager({
         await onEdit(editingId, {
           name: values.name,
           price: values.price,
+          costPrice: values.costPrice,
           category: values.category,
           description: values.description,
           stock: values.stock,
+          minStock: values.minStock,
+          supplierInfo: values.supplierInfo,
         });
       } else {
         await onAdd({
           name: values.name,
           price: values.price,
+          costPrice: values.costPrice,
           category: values.category,
           description: values.description,
           stock: values.stock,
+          minStock: values.minStock,
+          supplierInfo: values.supplierInfo,
           isActive: true,
         });
       }
@@ -128,9 +150,12 @@ export default function ProductManager({
     setEditingId(product.id);
     form.setValue("name", product.name);
     form.setValue("price", product.price);
+    form.setValue("costPrice", product.costPrice || 0);
     form.setValue("category", product.category);
     form.setValue("description", product.description || "");
     form.setValue("stock", product.stock || 0);
+    form.setValue("minStock", product.minStock || 5);
+    form.setValue("supplierInfo", product.supplierInfo || "");
     setIsOpen(true);
   };
 
@@ -197,9 +222,22 @@ export default function ProductManager({
                     name="price"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Precio (PEN)</FormLabel>
+                        <FormLabel>Precio de Venta (PEN)</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.1" placeholder="2.50" {...field} />
+                          <Input type="number" step="0.01" placeholder="2.50" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="costPrice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Precio de Costo (PEN)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="1.80" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -210,7 +248,7 @@ export default function ProductManager({
                     name="stock"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Stock (opcional)</FormLabel>
+                        <FormLabel>Stock Actual</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="25" {...field} />
                         </FormControl>
@@ -218,7 +256,35 @@ export default function ProductManager({
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="minStock"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Stock Mínimo</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="5" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="supplierInfo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Información de Proveedor (Opcional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Makro / Distribuidora X" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="category"
@@ -232,10 +298,11 @@ export default function ProductManager({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="drink">Bebida</SelectItem>
-                          <SelectItem value="snack">Snack</SelectItem>
-                          <SelectItem value="food">Comida</SelectItem>
-                          <SelectItem value="other">Otro</SelectItem>
+                          <SelectItem value="snack">Snacks</SelectItem>
+                          <SelectItem value="drink">Bebidas</SelectItem>
+                          <SelectItem value="hardware">Hardware</SelectItem>
+                          <SelectItem value="other">Servicios</SelectItem>
+                          <SelectItem value="food">Comidas</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -260,6 +327,8 @@ export default function ProductManager({
               <TableHead>Nombre</TableHead>
               <TableHead>Categoría</TableHead>
               <TableHead>Precio</TableHead>
+              {userProfile?.role === "admin" && <TableHead>Costo</TableHead>}
+              {userProfile?.role === "admin" && <TableHead>Margen</TableHead>}
               <TableHead>Stock</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -271,10 +340,18 @@ export default function ProductManager({
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell>
                   <Badge className={categoryColors[product.category]}>
-                    {categoryLabels[product.category]}
+                    {categoryLabels[product.category] || product.category}
                   </Badge>
                 </TableCell>
                 <TableCell>{formatCurrency(product.price)}</TableCell>
+                {userProfile?.role === "admin" && (
+                  <TableCell className="text-muted-foreground">{formatCurrency(product.costPrice || 0)}</TableCell>
+                )}
+                {userProfile?.role === "admin" && (
+                  <TableCell className="font-bold text-emerald-400">
+                    {formatCurrency(product.price - (product.costPrice || 0))}
+                  </TableCell>
+                )}
                 <TableCell>{product.stock ?? "-"}</TableCell>
                 <TableCell>
                   <Badge variant={product.isActive !== false ? "default" : "secondary"}>

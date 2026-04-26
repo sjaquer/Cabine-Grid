@@ -2,7 +2,8 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
@@ -50,6 +51,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { logAuditAction } from "@/lib/audit-log";
+import { logInventoryMovement } from "@/lib/services/inventory-log";
 
 type InventoryDoc = {
   id: string;
@@ -91,6 +93,7 @@ export default function InventoryPage() {
 
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [adjustingRow, setAdjustingRow] = useState<{
@@ -109,6 +112,19 @@ export default function InventoryPage() {
   const [countedStock, setCountedStock] = useState<string>("0");
   const [discrepancyNote, setDiscrepancyNote] = useState<string>("");
   const [isSavingDiscrepancy, setIsSavingDiscrepancy] = useState(false);
+
+  const [isNewProductOpen, setIsNewProductOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPrice, setNewPrice] = useState<string>("");
+  const [newCostPrice, setNewCostPrice] = useState<string>("");
+  const [newStock, setNewStock] = useState<string>("0");
+  const [newMinStock, setNewMinStock] = useState<string>("5");
+  const [newCategory, setNewCategory] = useState<string>("snack");
+  const [newSupplierInfo, setNewSupplierInfo] = useState("");
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number>(-1);
+  const [isScannerMode, setIsScannerMode] = useState(false);
+  const scannerInputRef = useRef<HTMLInputElement>(null);
 
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
@@ -153,52 +169,124 @@ export default function InventoryPage() {
   const allRows = useMemo(() => {
     if (!selectedLocationId) return [];
 
-    return products.map((product) => {
+    const mapped = products.map((product) => {
       const key = `${selectedLocationId}_${product.id}`;
       const inv = inventoryMap.get(key);
       const stock = typeof inv?.currentStock === "number" ? inv.currentStock : Math.max(0, product.stock ?? 0);
-      const minStock = typeof inv?.minStock === "number" ? inv.minStock : 5;
+      const minStock = typeof inv?.minStock === "number" ? inv.minStock : (product.minStock || 5);
 
       return {
         productId: product.id,
         productName: product.name,
+        price: product.price || 0,
+        costPrice: product.costPrice || 0,
         category: product.category,
-        categoryLabel: categoryLabels[product.category],
+        categoryLabel: categoryLabels[product.category] || product.category,
         stock,
         minStock,
       };
     });
+
+    return mapped.sort((a, b) => {
+      const aLow = a.stock <= a.minStock ? 0 : 1;
+      const bLow = b.stock <= b.minStock ? 0 : 1;
+      if (aLow !== bLow) return aLow - bLow;
+      return a.productName.localeCompare(b.productName);
+    });
   }, [products, inventoryMap, selectedLocationId]);
 
   const rows = useMemo(() => {
-    if (!searchTerm.trim()) return allRows;
+    let base = allRows;
+
+    if (selectedCategory !== "all") {
+      base = base.filter((row) => row.category === selectedCategory);
+    }
+
+    if (!searchTerm.trim()) return base;
     const q = searchTerm.toLowerCase();
-    return allRows.filter(
+    return base.filter(
       (row) =>
         row.productName.toLowerCase().includes(q) ||
         row.categoryLabel.toLowerCase().includes(q)
     );
-  }, [allRows, searchTerm]);
+  }, [allRows, searchTerm, selectedCategory]);
 
   const canManage =
     userProfile?.role === "admin" ||
     userProfile?.role === "manager" ||
     userProfile?.role === "operator";
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!canManage || !selectedLocationId) return;
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA" ||
+        isAdjustOpen ||
+        isDiscrepancyOpen ||
+        isNewProductOpen
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedRowIndex((prev) => (prev < rows.length - 1 ? prev + 1 : prev));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedRowIndex((prev) => (prev > 0 ? prev - 1 : 0));
+      } else if (e.key === "+") {
+        if (selectedRowIndex >= 0 && selectedRowIndex < rows.length) {
+          e.preventDefault();
+          const row = rows[selectedRowIndex];
+          applyInventoryAdjustment(row, "entry", 1, "Ajuste rápido +1");
+        }
+      } else if (e.key === "-") {
+        if (selectedRowIndex >= 0 && selectedRowIndex < rows.length) {
+          e.preventDefault();
+          const row = rows[selectedRowIndex];
+          if (row.stock > 0) {
+            applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1");
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedRowIndex, rows, canManage, selectedLocationId, isAdjustOpen, isDiscrepancyOpen, isNewProductOpen]);
+
+  useEffect(() => {
+    if (!isScannerMode) return;
+
+    const interval = setInterval(() => {
+      if (
+        document.activeElement !== scannerInputRef.current &&
+        !isAdjustOpen &&
+        !isDiscrepancyOpen &&
+        !isNewProductOpen
+      ) {
+        scannerInputRef.current?.focus();
+      }
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, [isScannerMode, isAdjustOpen, isDiscrepancyOpen, isNewProductOpen]);
+
   const indicator = (stock: number, minStock: number) => {
-    if (stock <= 0)
+    if (stock <= 3)
       return {
-        label: "Agotado",
-        className: "bg-red-500/20 text-red-700 border-red-300",
+        label: "Crítico",
+        className: "bg-rose-500/10 text-rose-500 border-rose-500/50 animate-pulse",
       };
-    if (stock <= minStock)
+    if (stock <= 10)
       return {
         label: "Stock Bajo",
-        className: "bg-amber-500/20 text-amber-700 border-amber-300",
+        className: "bg-amber-500/10 text-amber-500 border-amber-500/50",
       };
     return {
       label: "Estable",
-      className: "bg-green-500/20 text-green-700 border-green-300",
+      className: "text-zinc-400 border-transparent",
     };
   };
 
@@ -218,7 +306,6 @@ export default function InventoryPage() {
 
     try {
       const inventoryRef = doc(firestore, "inventory", `${selectedLocationId}_${row.productId}`);
-      const movementRef = doc(collection(firestore, "inventoryMovements"));
 
       const result = await runTransaction(firestore, async (transaction) => {
         const snapshot = await transaction.get(inventoryRef);
@@ -247,23 +334,26 @@ export default function InventoryPage() {
           { merge: true }
         );
 
-        transaction.set(movementRef, {
-          locationId: selectedLocationId,
-          locationName: selectedLocation?.name ?? "",
-          productId: row.productId,
-          productName: row.productName,
-          type,
-          quantity: safeQty,
-          note: note.trim(),
-          source: "manual",
-          createdAt: serverTimestamp(),
-          operator: {
-            id: user?.uid ?? null,
-            email: user?.email ?? null,
-          },
-        });
-
         return { currentStock, nextStock };
+      });
+
+      // Fase 4: Registro de Kardex de Movimientos
+      await logInventoryMovement(firestore, {
+        locationId: selectedLocationId,
+        locationName: selectedLocation?.name ?? "",
+        productId: row.productId,
+        productName: row.productName,
+        type,
+        quantity: safeQty,
+        previousStock: result.currentStock,
+        currentStock: result.nextStock,
+        note: note.trim(),
+        operator: {
+          id: user?.uid ?? null,
+          email: user?.email ?? null,
+          role: userProfile?.role ?? null,
+        },
+        source: "manual",
       });
 
       await logAuditAction(firestore, {
@@ -358,6 +448,26 @@ export default function InventoryPage() {
           note: discrepancyNote.trim(),
         },
       });
+
+      // Fase 4: Registro de Kardex de Movimientos para Incongruencias
+      await logInventoryMovement(firestore, {
+        locationId: discrepancyData.locationId,
+        locationName: selectedLocation?.name ?? "",
+        productId: discrepancyData.productId,
+        productName: discrepancyData.productName,
+        type: "discrepancy",
+        quantity: Math.abs(difference),
+        previousStock: discrepancyData.systemStock,
+        currentStock: counted,
+        note: `Auditoría: Diferencia de ${difference}. ${discrepancyNote.trim()}`,
+        operator: {
+          id: user?.uid ?? null,
+          email: user?.email ?? null,
+          role: userProfile?.role ?? null,
+        },
+        source: "audit",
+      });
+
       setIsDiscrepancyOpen(false);
       toast({ title: "Incongruencia registrada" });
     } catch (error) {
@@ -365,6 +475,97 @@ export default function InventoryPage() {
       toast({ variant: "destructive", title: "No se pudo registrar la incongruencia" });
     } finally {
       setIsSavingDiscrepancy(false);
+    }
+  };
+
+  const handleCreateProduct = async () => {
+    if (!canManage) return;
+    if (!newName.trim()) {
+      toast({ variant: "destructive", title: "El nombre es requerido" });
+      return;
+    }
+    const priceNum = Math.max(0, Number(newPrice) || 0);
+    const costPriceNum = Math.max(0, Number(newCostPrice) || 0);
+    const stockNum = Math.max(0, Math.floor(Number(newStock) || 0));
+    const minStockNum = Math.max(0, Math.floor(Number(newMinStock) || 0));
+
+    try {
+      setIsCreatingProduct(true);
+      const productRef = await addDoc(collection(firestore, "products"), {
+        name: newName.trim(),
+        price: priceNum,
+        costPrice: costPriceNum,
+        stock: stockNum,
+        minStock: minStockNum,
+        category: newCategory,
+        supplierInfo: newSupplierInfo.trim(),
+        isActive: true,
+        createdAt: serverTimestamp(),
+      });
+
+      if (selectedLocationId) {
+        const invRef = doc(firestore, "inventory", `${selectedLocationId}_${productRef.id}`);
+        await runTransaction(firestore, async (transaction) => {
+          transaction.set(invRef, {
+            locationId: selectedLocationId,
+            productId: productRef.id,
+            productName: newName.trim(),
+            minStock: minStockNum,
+            currentStock: stockNum,
+            updatedAt: serverTimestamp(),
+          });
+        });
+
+        // Fase 4: Registro de Kardex de Movimientos para Stock Inicial
+        if (stockNum > 0) {
+          await logInventoryMovement(firestore, {
+            locationId: selectedLocationId,
+            locationName: selectedLocation?.name ?? "",
+            productId: productRef.id,
+            productName: newName.trim(),
+            type: "entry",
+            quantity: stockNum,
+            previousStock: 0,
+            currentStock: stockNum,
+            note: "Stock inicial de creación",
+            operator: {
+              id: user?.uid ?? null,
+              email: user?.email ?? null,
+              role: userProfile?.role ?? null,
+            },
+            source: "manual",
+          });
+        }
+      }
+
+      await logAuditAction(firestore, {
+        action: "inventory.product.create",
+        target: "products",
+        targetId: productRef.id,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: {
+          name: newName.trim(),
+          price: priceNum,
+          costPrice: costPriceNum,
+          stock: stockNum,
+          category: newCategory,
+        },
+      });
+
+      toast({ title: "Producto creado exitosamente" });
+      setNewName("");
+      setNewPrice("");
+      setNewCostPrice("");
+      setNewStock("0");
+      setNewMinStock("5");
+      setNewCategory("snack");
+      setNewSupplierInfo("");
+      setIsNewProductOpen(false);
+    } catch (error) {
+      console.error("Error creating product:", error);
+      toast({ variant: "destructive", title: "No se pudo crear el producto" });
+    } finally {
+      setIsCreatingProduct(false);
     }
   };
 
@@ -455,210 +656,236 @@ export default function InventoryPage() {
         </header>
 
         {/* Contenido Principal */}
-        <main className="app-container py-8 space-y-6">
-          {selectedLocationId && (
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-status-warning" /> Cola de prioridades
+        <main className="w-full px-4 py-6 space-y-6">
+          {/* Barra superior táctica */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
+              <div className="w-full sm:w-[220px]">
+                <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                  <SelectTrigger className="h-10 bg-zinc-950 border-zinc-800 text-zinc-200">
+                    <SelectValue placeholder="Selecciona local" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-zinc-800 text-zinc-200">
+                    {locations.map((location) => (
+                      <SelectItem key={location.id} value={location.id}>
+                        {location.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="relative w-full sm:w-[260px]">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  ref={scannerInputRef}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-10 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  placeholder="Buscar producto o código..."
+                />
+              </div>
+
+              <Button
+                variant={isScannerMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsScannerMode(!isScannerMode)}
+                className={`h-10 text-xs gap-2 ${
+                  isScannerMode
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
+                    : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                }`}
+              >
+                <Boxes className="w-4 h-4" />
+                Escáner: {isScannerMode ? "ON" : "OFF"}
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant={selectedCategory === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory("all")}
+                className={`h-9 text-xs ${selectedCategory === "all" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+              >
+                Todos
+              </Button>
+              <Button
+                variant={selectedCategory === "snack" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory("snack")}
+                className={`h-9 text-xs ${selectedCategory === "snack" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+              >
+                Snacks
+              </Button>
+              <Button
+                variant={selectedCategory === "drink" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory("drink")}
+                className={`h-9 text-xs ${selectedCategory === "drink" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+              >
+                Bebidas
+              </Button>
+              <Button
+                variant={selectedCategory === "hardware" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory("hardware")}
+                className={`h-9 text-xs ${selectedCategory === "hardware" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+              >
+                Hardware
+              </Button>
+              <Button
+                variant={selectedCategory === "other" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory("other")}
+                className={`h-9 text-xs ${selectedCategory === "other" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+              >
+                Servicios
+              </Button>
+
+              {canManage && (
+                <Button
+                  onClick={() => setIsNewProductOpen(true)}
+                  className="h-9 text-xs gap-1 bg-emerald-600 hover:bg-emerald-500 ml-auto lg:ml-0 text-white font-bold px-4"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  + Nuevo Producto
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {selectedLocationId && priorityRows.length > 0 && (
+            <Card className="bg-zinc-950 border-zinc-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-bold text-amber-500">
+                  <AlertTriangle className="w-4 h-4 animate-pulse" /> Alertas de Reposición Crítica
                 </CardTitle>
-                <CardDescription>
-                  Productos con stock critico o bajo para actuar en menos de 1 minuto.
-                </CardDescription>
               </CardHeader>
               <CardContent>
-                {priorityRows.length === 0 ? (
-                  <div className="surface-soft px-4 py-6 text-sm text-muted-foreground text-center">
-                    Todo en rango estable para este local.
-                  </div>
-                ) : (
-                  <div className="app-stagger grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {priorityRows.map((row) => {
-                      const status = indicator(row.stock, row.minStock);
-                      const isCritical = row.stock <= 0;
-                      return (
-                        <div
-                          key={`priority-${row.productId}`}
-                          className={`rounded-lg border p-3 space-y-3 ${
-                            isCritical ? "border-red-300/40 bg-red-500/10" : "border-amber-300/40 bg-amber-500/10"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold">{row.productName}</p>
-                              <p className="text-xs text-muted-foreground">Minimo: {row.minStock}</p>
-                            </div>
-                            <Badge className={`${status.className} border text-xs`}>{status.label}</Badge>
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Stock actual</span>
-                            <span className="font-mono font-bold text-sm">{row.stock}</span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8"
-                              disabled={!canManage || busyActionKey !== null}
-                              onClick={() => applyInventoryAdjustment(row, "entry", 1, "Reposicion prioritaria +1")}
-                            >
-                              <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                              +1
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-8"
-                              disabled={!canManage}
-                              onClick={() => openAdjustDialog(row)}
-                            >
-                              Ajustar
-                            </Button>
-                          </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                  {priorityRows.map((row) => {
+                    const status = indicator(row.stock, row.minStock);
+                    return (
+                      <div
+                        key={`priority-${row.productId}`}
+                        className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 flex flex-col justify-between gap-2"
+                      >
+                        <div>
+                          <p className="text-xs font-bold text-zinc-200 truncate">{row.productName}</p>
+                          <Badge className={`mt-1 text-[10px] ${status.className}`}>{status.label}</Badge>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div className="flex items-center justify-between mt-2 border-t border-zinc-800/50 pt-2">
+                          <span className="text-[10px] text-zinc-500">Stock</span>
+                          <span className="font-mono text-xs font-bold text-zinc-200">{row.stock} / {row.minStock}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Filtros y Búsqueda */}
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Search className="w-5 h-5" /> Filtros y Búsqueda
-              </CardTitle>
-              <CardDescription>
-                Selecciona local y busca productos para gestionar stock
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Local</Label>
-                  <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Selecciona local" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map((location) => (
-                        <SelectItem key={location.id} value={location.id}>
-                          {location.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Buscar Producto</Label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                    <Input
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-9 h-9"
-                      placeholder="Bebidas, snacks, productos..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {!canManage && (
-                <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-300/50">
-                  <AlertCircle className="w-4 h-4 text-amber-700 flex-shrink-0" />
-                  <span className="text-xs text-amber-700">Tu rol permite solo lectura del inventario</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
           {/* Tabla de Inventario */}
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Boxes className="w-5 h-5" /> 
-                Stock Actual {selectedLocation ? <Badge variant="secondary">{selectedLocation.name}</Badge> : null}
+          <Card className="border-zinc-800 bg-zinc-900 overflow-hidden">
+            <CardHeader className="border-b border-zinc-800 pb-4">
+              <CardTitle className="flex items-center gap-2 text-zinc-200 text-base font-headline">
+                <Boxes className="w-4 h-4 text-primary" /> 
+                Control de Stock {selectedLocation ? <Badge variant="secondary" className="bg-zinc-800 text-zinc-300 border-zinc-700">{selectedLocation.name}</Badge> : null}
               </CardTitle>
-              <CardDescription>
-                Gestiona stock con ajustes rápidos, reporta incongruencias
-              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               {!selectedLocationId ? (
-                <div className="py-12 text-center">
-                  <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">Selecciona un local para ver su inventario</p>
+                <div className="py-16 text-center">
+                  <Package className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
+                  <p className="text-sm text-zinc-500">Selecciona un local para auditar existencias</p>
                 </div>
               ) : rows.length === 0 ? (
-                <div className="py-12 text-center">
-                  <AlertCircle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">No hay productos que coincidan con la búsqueda</p>
+                <div className="py-16 text-center">
+                  <AlertCircle className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
+                  <p className="text-sm text-zinc-500">Sin coincidencias para este filtro.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto border border-border/50 rounded-lg">
-                  <Table>
-                    <TableHeader className="bg-background/50">
-                      <TableRow className="border-border/50 hover:bg-background/50">
-                        <TableHead className="font-semibold">Producto</TableHead>
-                        <TableHead className="font-semibold">Categoría</TableHead>
-                        <TableHead className="text-right font-semibold">Stock</TableHead>
-                        <TableHead className="text-right font-semibold">Mín.</TableHead>
-                        <TableHead className="font-semibold">Estado</TableHead>
-                        <TableHead className="font-semibold">Ajuste Rápido</TableHead>
-                        <TableHead className="text-right font-semibold">Acciones</TableHead>
+                <>
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                    <TableHeader className="bg-zinc-950 border-b border-zinc-800">
+                      <TableRow className="border-none hover:bg-zinc-950">
+                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Producto</TableHead>
+                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Categoría</TableHead>
+                        <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Stock</TableHead>
+                        <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Mín.</TableHead>
+                        {userProfile?.role === "admin" && (
+                          <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Margen</TableHead>
+                        )}
+                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Estado</TableHead>
+                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Ajuste Rápido</TableHead>
+                        <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.map((row) => {
+                      {rows.map((row, index) => {
                         const status = indicator(row.stock, row.minStock);
+                        const margin = row.price - (row.costPrice || 0);
+                        const isSelected = index === selectedRowIndex;
                         return (
-                          <TableRow key={row.productId} className="border-border/30 hover:bg-background/30 transition-colors">
-                            <TableCell className="font-medium text-sm">{row.productName}</TableCell>
-                            <TableCell>
-                              <Badge className={`${categoryStyles[row.category]} border text-xs`}>
+                          <TableRow 
+                            key={row.productId} 
+                            className={cn(
+                              "border-zinc-800 transition-colors duration-150 border-b cursor-pointer",
+                              isSelected ? "bg-zinc-800/60 text-zinc-100 ring-1 ring-emerald-500/40 border-emerald-500/50" : "hover:bg-zinc-800/20 text-zinc-300"
+                            )}
+                            onClick={() => setSelectedRowIndex(index)}
+                          >
+                            <TableCell className="font-medium text-zinc-200 px-2 py-1 text-xs max-w-[200px] truncate">{row.productName}</TableCell>
+                            <TableCell className="px-2 py-1 text-xs">
+                              <Badge className={`${categoryStyles[row.category] || "bg-zinc-800 text-zinc-300"} text-[10px] px-1.5 py-0.5 border`}>
                                 {row.categoryLabel}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right font-mono font-semibold text-sm">{row.stock}</TableCell>
-                            <TableCell className="text-right font-mono text-muted-foreground text-sm">{row.minStock}</TableCell>
-                            <TableCell>
-                              <Badge className={`${status.className} border text-xs`}>{status.label}</Badge>
+                            <TableCell className="text-right font-mono font-semibold text-zinc-200 px-2 py-1 text-xs">{row.stock}</TableCell>
+                            <TableCell className="text-right font-mono text-zinc-500 px-2 py-1 text-xs">{row.minStock}</TableCell>
+                            {userProfile?.role === "admin" && (
+                              <TableCell className="text-right font-mono font-bold text-emerald-400 px-2 py-1 text-xs">
+                                S/ {margin.toFixed(2)}
+                              </TableCell>
+                            )}
+                            <TableCell className="px-2 py-1 text-xs">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border text-[10px] ${status.className}`}>
+                                {status.label}
+                              </span>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-2 py-1 text-xs">
                               <div className="flex items-center gap-1">
                                 <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-400"
                                   disabled={!canManage || !selectedLocationId || busyActionKey !== null}
                                   onClick={() => applyInventoryAdjustment(row, "entry", 1, "Ajuste rápido +1")}
-                                  title="Agregar 1 unidad"
                                 >
-                                  <TrendingUp className="w-3 h-3" />
+                                  <TrendingUp className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-rose-500 hover:bg-rose-500/20 hover:text-rose-400"
                                   disabled={!canManage || !selectedLocationId || row.stock <= 0 || busyActionKey !== null}
                                   onClick={() => applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1")}
-                                  title="Restar 1 unidad"
                                 >
-                                  <TrendingDown className="w-3 h-3" />
+                                  <TrendingDown className="w-3.5 h-3.5" />
                                 </Button>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex gap-2 justify-end">
+                            <TableCell className="text-right px-2 py-1">
+                              <div className="flex gap-1 justify-end">
                                 <Button
                                   variant="secondary"
                                   size="sm"
-                                  className="gap-1 h-8 text-xs"
+                                  className="gap-1 h-7 text-xs bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700"
                                   disabled={!canManage || !selectedLocationId}
                                   onClick={() => openAdjustDialog(row)}
                                 >
@@ -668,10 +895,10 @@ export default function InventoryPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="gap-1 h-8 text-xs"
+                                  className="gap-1 h-7 text-xs border-zinc-800 hover:bg-zinc-800 text-zinc-400"
                                   onClick={() => openDiscrepancyDialog(row)}
                                   disabled={!canManage}
-                                  title="Reportar diferencia"
+                                  title="Auditar diferencia"
                                 >
                                   <AlertTriangle className="w-3 h-3" />
                                 </Button>
@@ -681,8 +908,103 @@ export default function InventoryPage() {
                         );
                       })}
                     </TableBody>
-                  </Table>
-                </div>
+                    </Table>
+                  </div>
+
+                  {/* Mobile Cards View */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 md:hidden">
+                    {rows.map((row, index) => {
+                      const status = indicator(row.stock, row.minStock);
+                      const isSelected = index === selectedRowIndex;
+                      return (
+                        <div
+                          key={`card-${row.productId}`}
+                          className={cn(
+                            "p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col justify-between gap-4 shadow-sm transition-all duration-150",
+                            isSelected ? "ring-2 ring-emerald-500 border-emerald-500/50 bg-zinc-800/40" : "hover:bg-zinc-900/60"
+                          )}
+                          onClick={() => setSelectedRowIndex(index)}
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <h4 className="font-headline text-zinc-100 text-sm font-bold tracking-wide">{row.productName}</h4>
+                              <Badge className={`${categoryStyles[row.category] || "bg-zinc-800 text-zinc-300"} text-[10px] mt-1 px-1.5 py-0.5 border`}>
+                                {row.categoryLabel}
+                              </Badge>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-zinc-400 text-xs block">Stock actual</span>
+                              <span className="font-mono font-bold text-base text-zinc-100">{row.stock}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between border-t border-zinc-800/50 pt-3 mt-1">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Precio</span>
+                              <span className="text-zinc-200 font-semibold text-sm font-mono font-bold">S/ {row.price.toFixed(2)}</span>
+                            </div>
+
+                            <Badge className={`${status.className} text-[10px] px-2 py-0.5 border`}>
+                              {status.label}
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <Button
+                              variant="ghost"
+                              className="h-12 text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:border-rose-500/40 font-bold text-lg rounded-xl"
+                              disabled={!canManage || !selectedLocationId || row.stock <= 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1");
+                              }}
+                            >
+                              <MinusCircle className="w-5 h-5 mr-1" /> -1
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="h-12 text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 font-bold text-lg rounded-xl"
+                              disabled={!canManage || !selectedLocationId}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                applyInventoryAdjustment(row, "entry", 1, "Ajuste rápido +1");
+                              }}
+                            >
+                              <PlusCircle className="w-5 h-5 mr-1" /> +1
+                            </Button>
+                          </div>
+                          
+                          <div className="flex gap-2 mt-1 pt-2 border-t border-zinc-850">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="flex-1 h-9 text-xs bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700"
+                              disabled={!canManage || !selectedLocationId}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAdjustDialog(row);
+                              }}
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 mr-1" /> Ajustar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 px-3 border-zinc-800 hover:bg-zinc-800 text-zinc-400"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDiscrepancyDialog(row);
+                              }}
+                              disabled={!canManage}
+                            >
+                              <AlertTriangle className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -785,6 +1107,113 @@ export default function InventoryPage() {
             >
               {adjustType === "entry" ? <PlusCircle className="w-4 h-4" /> : <MinusCircle className="w-4 h-4" />}
               Confirmar ajuste
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isNewProductOpen} onOpenChange={setIsNewProductOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100 font-headline">Crear Nuevo Producto</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-xs">
+              Ingresa los parámetros iniciales para registrar existencias.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-zinc-400">Nombre del Producto</Label>
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                placeholder="Ej: Coca Cola 500ml"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-400">Precio Venta (S/)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={newPrice}
+                  onChange={(e) => setNewPrice(e.target.value)}
+                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-400">Precio Costo (S/)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={newCostPrice}
+                  onChange={(e) => setNewCostPrice(e.target.value)}
+                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-400">Stock Inicial</Label>
+                <Input
+                  type="number"
+                  value={newStock}
+                  onChange={(e) => setNewStock(e.target.value)}
+                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-400">Stock Mínimo</Label>
+                <Input
+                  type="number"
+                  value={newMinStock}
+                  onChange={(e) => setNewMinStock(e.target.value)}
+                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-zinc-400">Categoría</Label>
+              <Select value={newCategory} onValueChange={setNewCategory}>
+                <SelectTrigger className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-950 border-zinc-800 text-zinc-200">
+                  <SelectItem value="snack">Snacks</SelectItem>
+                  <SelectItem value="drink">Bebidas</SelectItem>
+                  <SelectItem value="hardware">Hardware</SelectItem>
+                  <SelectItem value="other">Servicios</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-zinc-400">Proveedor (Opcional)</Label>
+              <Input
+                value={newSupplierInfo}
+                onChange={(e) => setNewSupplierInfo(e.target.value)}
+                className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                placeholder="Ej: Makro"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setIsNewProductOpen(false)} className="border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateProduct}
+              disabled={isCreatingProduct || !canManage}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+            >
+              {isCreatingProduct ? "Creando..." : "Crear"}
             </Button>
           </DialogFooter>
         </DialogContent>
