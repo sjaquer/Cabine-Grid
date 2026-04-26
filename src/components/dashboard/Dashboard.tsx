@@ -507,9 +507,9 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="flex flex-col h-full w-full p-4 lg:p-6 gap-6 bg-zinc-950">
+      <div className="flex flex-col h-full w-full p-4 lg:p-6 gap-6 bg-transparent">
       {/* Barra de Control Omnibar Superior */}
-      <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-3">
+      <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-card/40 border border-border/60 rounded-xl p-3">
         
         {/* Lado Izquierdo: Buscador */}
         <div className="relative w-full sm:w-80">
@@ -521,22 +521,22 @@ export default function Dashboard() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar Estación o Jugador..."
-            className="pl-9 h-9 bg-zinc-950/50 border-zinc-800 focus-visible:ring-primary/80 text-zinc-200 text-xs rounded-lg"
+            className="pl-9 h-9 bg-card/50 border-border focus-visible:ring-primary/80 text-foreground text-xs rounded-lg"
           />
         </div>
 
         {/* Lado Derecho: Hero Metrics */}
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-zinc-950/60 border border-zinc-800/50 rounded-lg px-3 py-1.5">
+          <div className="flex items-center gap-2 bg-card/60 border border-border/50 rounded-lg px-3 py-1.5">
             <Zap className="w-4 h-4 text-emerald-400 animate-pulse" />
-            <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">En Uso:</span>
-            <span className="text-xs font-black font-mono text-slate-100">{activeMachines}/{visibleMachines.length}</span>
+            <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase">En Uso:</span>
+            <span className="text-xs font-black font-mono text-foreground">{activeMachines}/{visibleMachines.length}</span>
           </div>
 
-          <div className="flex items-center gap-2 bg-zinc-950/60 border border-zinc-800/50 rounded-lg px-3 py-1.5">
+          <div className="flex items-center gap-2 bg-card/60 border border-border/50 rounded-lg px-3 py-1.5">
             <AlertTriangle className="w-4 h-4 text-amber-400" />
-            <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">Alertas:</span>
-            <span className="text-xs font-black font-mono text-slate-100">{inventoryAlerts.length}</span>
+            <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase">Alertas:</span>
+            <span className="text-xs font-black font-mono text-foreground">{inventoryAlerts.length}</span>
           </div>
         </div>
       </header>

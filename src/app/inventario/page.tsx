@@ -644,14 +644,14 @@ export default function InventoryPage() {
         {/* Contenido Principal */}
         <main className="w-full px-4 py-6 space-y-6">
           {/* Barra superior táctica */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 p-4 bg-card/40 border border-border/60 rounded-xl">
             <div className="flex flex-wrap items-center gap-3 flex-1">
               <div className="w-full sm:w-[220px]">
                 <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                  <SelectTrigger className="h-10 bg-zinc-950 border-zinc-800 text-zinc-200">
+                  <SelectTrigger className="h-10 bg-card/50 border-border text-foreground">
                     <SelectValue placeholder="Selecciona local" />
                   </SelectTrigger>
-                  <SelectContent className="bg-zinc-950 border-zinc-800 text-zinc-200">
+                  <SelectContent className="bg-card border-border text-foreground">
                     {locations.map((location) => (
                       <SelectItem key={location.id} value={location.id}>
                         {location.name}
@@ -667,7 +667,7 @@ export default function InventoryPage() {
                   ref={scannerInputRef}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 h-10 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  className="pl-9 h-10 bg-card/50 border-border text-foreground"
                   placeholder="Buscar producto o código..."
                 />
               </div>

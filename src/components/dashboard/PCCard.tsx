@@ -27,10 +27,10 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
 
   // 1. Lógica de Colores de Estado (Glow Effect - True Dark Mode)
   const stateStyle = {
-    available: "border-zinc-800 bg-zinc-950 hover:border-zinc-700 text-zinc-500 hover:text-zinc-400",
-    occupied: "border-emerald-500/40 bg-zinc-900/90 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)] hover:border-emerald-500",
-    warning: "border-amber-500 bg-zinc-900/90 text-amber-400 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.2)]",
-    maintenance: "border-zinc-800/80 bg-zinc-950/40 opacity-40 cursor-not-allowed text-zinc-600",
+    available: "border-border bg-card/40 text-muted-foreground hover:border-border/80 hover:text-foreground shadow-sm",
+    occupied: "border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.08)] hover:border-emerald-500",
+    warning: "border-amber-500 bg-amber-500/5 text-amber-600 dark:text-amber-400 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.15)]",
+    maintenance: "border-border/40 bg-muted/20 opacity-40 cursor-not-allowed text-muted-foreground",
   }[status === 'maintenance' ? 'maintenance' : (isWarning ? 'warning' : status)];
 
   // LED indicador de estado
@@ -61,7 +61,7 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
       <div className="flex items-center justify-between w-full">
         <div className="flex items-center gap-1.5">
           {isPC ? <Monitor size={14} /> : <Gamepad2 size={14} />}
-          <span className="text-xs md:text-sm font-bold tracking-wide text-zinc-200">{name}</span>
+          <span className="text-xs md:text-sm font-bold tracking-wide text-foreground">{name}</span>
         </div>
         <div className={cn("w-2 h-2 rounded-full", ledColor)} />
       </div>
@@ -69,20 +69,20 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
       {/* Centro (Middle) */}
       <div className="flex flex-1 flex-col items-center justify-center">
         {status === 'occupied' || status === 'warning' ? (
-          <span className="text-xl md:text-2xl font-black font-mono tracking-tighter leading-none text-slate-100">
+          <span className="text-xl md:text-2xl font-black font-mono tracking-tighter leading-none text-foreground">
             {formatTime(Math.floor(timeToShow))}
           </span>
         ) : status === 'maintenance' ? (
-          <span className="text-[10px] md:text-xs font-bold tracking-wider uppercase text-zinc-600">OFF</span>
+          <span className="text-[10px] md:text-xs font-bold tracking-wider uppercase text-muted-foreground">OFF</span>
         ) : (
-          <span className="text-[11px] md:text-xs font-black tracking-wider text-zinc-600">LIBRE</span>
+          <span className="text-[11px] md:text-xs font-black tracking-wider text-muted-foreground">LIBRE</span>
         )}
       </div>
 
       {/* Pie (Bottom) */}
-      <div className="w-full bg-zinc-900/60 border border-zinc-800/40 rounded-lg px-2 py-1 flex items-center gap-1.5 mt-1">
-        <User size={12} className="text-zinc-500 flex-shrink-0" />
-        <span className="text-[10px] md:text-xs text-zinc-400 truncate font-medium">
+      <div className="w-full bg-card/50 border border-border/40 rounded-lg px-2 py-1 flex items-center gap-1.5 mt-1">
+        <User size={12} className="text-muted-foreground flex-shrink-0" />
+        <span className="text-[10px] md:text-xs text-muted-foreground truncate font-medium">
           {status === 'occupied' || status === 'warning' 
             ? (sanitizeString(session?.client) || 'Invitado') 
             : '---'}
