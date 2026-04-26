@@ -6,7 +6,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { Cpu, FileText, Home, Package, ShoppingCart, Users, UserRound, BarChart3, ShieldAlert, Key, Plus } from "lucide-react";
+import { Cpu, FileText, Home, Package, ShoppingCart, Users, UserRound, BarChart3, ShieldAlert, Key, Plus, MapPin } from "lucide-react";
 import Link from "next/link";
 import MachineManager from "@/components/admin/MachineManager";
 import ProductManager from "@/components/admin/ProductManager";
@@ -15,7 +15,8 @@ import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
 import FinanceReportsManager from "@/components/admin/FinanceReportsManager";
 import AuditLogsManager from "@/components/admin/AuditLogsManager";
 import CustomerManager from "@/components/admin/CustomerManager";
-import type { Customer, Station, Product, UserProfile, Sale } from "@/lib/types";
+import LocationManager from "@/components/admin/LocationManager";
+import type { Customer, Station, Product, UserProfile, Sale, Location } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, cn } from "@/lib/utils";
 import {
@@ -30,7 +31,7 @@ import {
 } from "firebase/firestore";
 import { logAuditAction } from "@/lib/audit-log";
 
-type AdminSection = 'machines' | 'products' | 'staff' | 'customers' | 'finance' | 'logs' | 'closures';
+type AdminSection = 'machines' | 'products' | 'staff' | 'customers' | 'finance' | 'logs' | 'closures' | 'locations';
 
 export default function AdminPage() {
   const { user, userProfile } = useAuth();
@@ -45,6 +46,7 @@ export default function AdminPage() {
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
   const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
+  const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   
   const closuresQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -68,6 +70,7 @@ export default function AdminPage() {
   const { data: closuresData } = useCollection<any>(closuresQuery);
   const { data: salesData } = useCollection<Omit<Sale, "id">>(salesQuery);
   const { data: auditLogsData } = useCollection<any>(auditLogsQuery);
+  const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
 
   const machines = useMemo(() => (machinesData ?? []) as Station[], [machinesData]);
   const products = useMemo(() => (productsData ?? []) as Product[], [productsData]);
@@ -86,6 +89,14 @@ export default function AdminPage() {
   const sales = useMemo(() => (salesData ?? []) as Sale[], [salesData]);
   const customers = useMemo(() => (customersData ?? []) as Customer[], [customersData]);
   const auditLogs = useMemo(() => (auditLogsData ?? []), [auditLogsData]);
+  
+  const locations = useMemo(() => {
+    const list = (locationsData ?? []) as Location[];
+    if (list.length === 0) {
+      return [{ id: 'local-01', name: 'Local Único', address: 'Av. Principal 123', phone: '987654321', fractionMinutes: 5, isActive: true, createdAt: null as any }];
+    }
+    return list;
+  }, [locationsData]);
 
   // Financial calculations
   const todayRevenue = useMemo(() => {
@@ -206,6 +217,7 @@ export default function AdminPage() {
     { id: 'finance' as AdminSection, label: 'Finanzas', icon: BarChart3 },
     { id: 'logs' as AdminSection, label: 'Auditoría', icon: ShieldAlert, adminOnly: true },
     { id: 'closures' as AdminSection, label: 'Turnos', icon: Key },
+    { id: 'locations' as AdminSection, label: 'Locales/Reglas', icon: MapPin, adminOnly: true },
   ];
 
   return (
@@ -348,7 +360,7 @@ export default function AdminPage() {
               <FinanceReportsManager 
                 sales={sales} 
                 machines={machines}
-                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                locations={locations}
                 users={users}
                 auditLogs={auditLogs}
                 closures={closures}
@@ -358,7 +370,7 @@ export default function AdminPage() {
             {activeSection === 'logs' && userProfile?.role === 'admin' && (
               <AuditLogsManager 
                 logs={auditLogs} 
-                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                locations={locations}
                 users={users}
               />
             )}
@@ -370,6 +382,21 @@ export default function AdminPage() {
                 onReopenShift={async (id) => {
                   await updateDoc(doc(firestore, "shiftClosures", id), { status: 'reopened', reopenedAt: serverTimestamp() });
                   toast({ title: "Turno reabierto exitosamente" });
+                }}
+              />
+            )}
+
+            {activeSection === 'locations' && userProfile?.role === 'admin' && (
+              <LocationManager
+                locations={locations}
+                onEdit={async (id, updates) => {
+                  // Si no existe el documento en la coleccion, lo creamos o sobreescribimos.
+                  await updateDoc(doc(firestore, "locations", id), updates).catch(async () => {
+                     const { setDoc } = await import("firebase/firestore");
+                     await setDoc(doc(firestore, "locations", id), { ...updates, id, isActive: true, createdAt: serverTimestamp() });
+                  });
+                  
+                  toast({ title: "Reglas de Cobro / Prórroga actualizadas" });
                 }}
               />
             )}
