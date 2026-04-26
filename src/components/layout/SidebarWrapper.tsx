@@ -20,13 +20,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
+import CommandPalette from "./CommandPalette";
 
 export default function SidebarWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, userProfile, loading, logout, getShiftClosurePreview } = useAuth();
   const { toast } = useToast();
 
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
   const [countedCash, setCountedCash] = useState<string>("");
   const [countedYape, setCountedYape] = useState<string>("0");
@@ -70,6 +73,17 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
     void loadPreview();
     return () => { isMounted = false; };
   }, [isCloseShiftOpen, requiresFormalClose, getShiftClosurePreview, toast]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setIsCollapsed((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleLogoutClick = async () => {
     if (requiresFormalClose) {
@@ -120,10 +134,18 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
     { label: "Admin", icon: Settings, href: "/admin", roles: ["admin", "manager"] },
   ];
 
+
   return (
     <div className="flex h-screen bg-slate-950 text-slate-50 overflow-hidden">
-      {/* Sidebar delgado */}
-      <aside className="w-16 sm:w-20 bg-slate-900/80 border-r border-slate-800/50 flex flex-col items-center py-4 justify-between z-30 shrink-0">
+      <CommandPalette isOpen={isCommandPaletteOpen} onOpenChange={setIsCommandPaletteOpen} />
+
+      {/* Sidebar colapsable dinámico */}
+      <aside 
+        className={cn(
+          "bg-slate-900/95 border-r border-slate-800/50 flex flex-col items-center py-4 justify-between z-30 shrink-0 transition-all duration-300 ease-in-out group/sidebar",
+          isCollapsed ? "w-16 sm:w-20 hover:w-60" : "w-60"
+        )}
+      >
         <div className="flex flex-col items-center gap-6 w-full">
           <div className="p-2 bg-primary/20 rounded-xl text-primary-foreground">
             <Cpu className="w-6 h-6 text-primary" />
@@ -141,12 +163,16 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
                 <Link key={item.href} href={item.href} className="w-full">
                   <Button
                     variant="ghost"
-                    className={`w-full aspect-square p-0 flex flex-col gap-1 rounded-xl transition-all ${
-                      isActive ? "bg-primary/20 text-primary font-bold" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                    }`}
+                    className={cn(
+                      "w-full transition-all rounded-xl flex items-center gap-3",
+                      isActive ? "bg-primary/20 text-primary font-bold" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200",
+                      isCollapsed ? "aspect-square justify-center p-0 group-hover/sidebar:justify-start group-hover/sidebar:px-4 group-hover/sidebar:aspect-auto group-hover/sidebar:py-3" : "justify-start px-4 py-3"
+                    )}
                   >
                     <Icon className="w-5 h-5" />
-                    <span className="text-[10px] hidden sm:inline">{item.label}</span>
+                    <span className={cn("text-xs font-headline tracking-wide", isCollapsed ? "hidden group-hover/sidebar:inline" : "inline")}>
+                      {item.label}
+                    </span>
                   </Button>
                 </Link>
               );
@@ -161,11 +187,16 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
           </Badge>
           <Button
             variant="ghost"
-            size="icon"
             onClick={handleLogoutClick}
-            className="w-full aspect-square p-0 rounded-xl hover:bg-destructive/20 hover:text-destructive text-slate-400"
+            className={cn(
+              "w-full transition-all rounded-xl flex items-center gap-3 hover:bg-destructive/20 hover:text-destructive text-slate-400",
+              isCollapsed ? "aspect-square justify-center p-0 group-hover/sidebar:justify-start group-hover/sidebar:px-4 group-hover/sidebar:aspect-auto group-hover/sidebar:py-3" : "justify-start px-4 py-3"
+            )}
           >
             <LogOut className="w-5 h-5" />
+            <span className={cn("text-xs font-headline tracking-wide", isCollapsed ? "hidden group-hover/sidebar:inline" : "inline")}>
+              Cerrar Turno
+            </span>
           </Button>
         </div>
       </aside>

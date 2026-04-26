@@ -5,11 +5,9 @@ import { useCartStore } from "@/store/useCartStore";
 import type { Product, SoldProduct } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, MinusCircle, ShoppingCart, AlertCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlusCircle, MinusCircle, ShoppingCart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -20,7 +18,7 @@ interface ProductsPOSProps {
     onSave: (products: SoldProduct[]) => Promise<void>;
     onClose?: () => void;
     onGoToCharge?: (products: SoldProduct[]) => void;
-    inventoryByProduct?: Record<string, number>; // productId -> stock
+    inventoryByProduct?: Record<string, number>;
 }
 
 const categoryLabels = {
@@ -46,6 +44,9 @@ export default function ProductsPOS({
   inventoryByProduct = {}
 }: ProductsPOSProps) {
     const { quantities, updateQuantity, setQuantities, clearCart } = useCartStore();
+    const [searchTerm, setSearchTerm] = useState("");
+    const [onlyInStock, setOnlyInStock] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         if (!initialProducts || initialProducts.length === 0) {
@@ -58,9 +59,6 @@ export default function ProductsPOS({
         }, {} as Record<string, number>);
         setQuantities(initialQuantities);
     }, [initialProducts, setQuantities, clearCart]);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [onlyInStock, setOnlyInStock] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
 
     const filteredProducts = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -78,7 +76,6 @@ export default function ProductsPOS({
     }, [availableProducts, searchTerm, onlyInStock, inventoryByProduct]);
 
     const getAvailableStock = (productId: string, product: Product): number => {
-        // First check inventory system, then fallback to product stock field
         if (inventoryByProduct && inventoryByProduct[productId] !== undefined) {
             return Math.max(0, inventoryByProduct[productId]);
         }
@@ -88,44 +85,26 @@ export default function ProductsPOS({
     const handleQuantityChange = (productId: string, delta: number) => {
         const product = availableProducts.find(p => p.id === productId);
         if (!product) return;
-
         const availableStock = getAvailableStock(productId, product);
         updateQuantity(productId, delta, availableStock);
     };
-
-    const buildSoldProducts = (currentQuantities: Record<string, number>) => {
-        return Object.entries(currentQuantities).map(([productId, quantity]) => {
-            const product = availableProducts.find(p => p.id === productId)!;
-            return {
-                productId,
-                productName: product.name,
-                quantity,
-                unitPrice: product.price
-            };
-        });
-    };
-
-    const products = useMemo(() => {
-        const result = new Map<string, Product[]>();
-        Object.entries(categoryLabels).forEach(([category]) => {
-            result.set(category, filteredProducts.filter(p => p.category === category));
-        });
-        return result;
-    }, [filteredProducts]);
 
     const total = Object.entries(quantities).reduce((acc, [productId, quantity]) => {
         const product = availableProducts.find(p => p.id === productId);
         return acc + (product ? product.price * quantity : 0);
     }, 0);
 
-    const itemCount = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
-    const soldProducts = buildSoldProducts(quantities);
-
-    // Check if any products are out of stock
-    const outOfStockProducts = availableProducts.filter(p => {
-        const stock = getAvailableStock(p.id, p);
-        return stock === 0 && p.isActive !== false;
-    });
+    const soldProducts = useMemo(() => {
+        return Object.entries(quantities).map(([productId, quantity]) => {
+            const product = availableProducts.find(p => p.id === productId)!;
+            return {
+                productId,
+                productName: product?.name || "Producto",
+                quantity,
+                unitPrice: product?.price || 0
+            };
+        });
+    }, [quantities, availableProducts]);
 
     const renderProductRow = (product: Product) => {
         const availableStock = getAvailableStock(product.id, product);
@@ -135,49 +114,44 @@ export default function ProductsPOS({
         return (
             <div
                 key={product.id}
-                className={`flex items-center justify-between p-3 rounded-xl border border-border/80 bg-background transition shadow-sm ${
-                    isOutOfStock
-                        ? 'opacity-50 cursor-not-allowed'
-                        : 'hover:bg-secondary/40'
+                className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-slate-900/40 transition-all shadow-sm ${
+                    isOutOfStock ? 'opacity-40 pointer-events-none' : 'hover:bg-slate-800/60'
                 }`}
             >
-                <div className="flex-1 min-w-0 pr-3">
-                    <div className="flex items-center gap-2">
-                        <div className="font-semibold text-sm md:text-base text-foreground/90 truncate">{product.name}</div>
+                <div className="flex-1 min-w-0 pr-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-sm text-slate-100 truncate">{product.name}</span>
                         {availableStock > 0 && (
-                            <Badge variant="outline" className="text-xs bg-secondary/60 text-foreground/70 font-semibold">
-                                Stock: {availableStock}
-                            </Badge>
-                        )}
-                        {isOutOfStock && (
-                            <Badge variant="destructive" className="text-xs font-semibold">
-                                Sin stock
+                            <Badge variant="outline" className="text-[9px] font-bold border-slate-700 text-slate-400 py-0 px-1">
+                                Stk: {availableStock}
                             </Badge>
                         )}
                     </div>
-                    <div className="text-sm md:text-base text-accent font-bold mt-0.5">{formatCurrency(product.price)}</div>
+                    <span className="text-xs font-black text-primary mt-0.5 block">
+                        {formatCurrency(product.price)}
+                    </span>
                 </div>
-                <div className="flex items-center gap-2 bg-secondary/30 rounded-lg p-1.5 border border-border/50">
+                <div className="flex items-center gap-1 bg-slate-950/60 rounded-lg p-1 border border-slate-800/50">
                     <Button
-                        variant="secondary"
+                        variant="ghost"
                         size="icon"
-                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="h-8 w-8 rounded-md text-slate-400 hover:bg-destructive/20 hover:text-destructive disabled:opacity-30"
                         onClick={() => handleQuantityChange(product.id, -1)}
-                        disabled={isOutOfStock || currentQty === 0}
+                        disabled={currentQty === 0}
                     >
-                        <MinusCircle className="w-5 h-5" />
+                        <MinusCircle className="w-4 h-4" />
                     </Button>
-                    <div className="w-10 md:w-12 text-center flex items-center justify-center">
-                        <span className="font-bold text-lg md:text-xl tabular-nums">{currentQty}</span>
-                    </div>
+                    <span className="w-6 text-center text-xs font-black text-slate-50 tabular-nums">
+                        {currentQty}
+                    </span>
                     <Button
-                        variant="secondary"
+                        variant="ghost"
                         size="icon"
-                        className="h-11 w-11 md:h-12 md:w-12 rounded-md hover:bg-status-available hover:text-status-available-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="h-8 w-8 rounded-md text-slate-400 hover:bg-emerald-500/20 hover:text-emerald-400 disabled:opacity-30"
                         onClick={() => handleQuantityChange(product.id, 1)}
-                        disabled={isOutOfStock || currentQty >= availableStock}
+                        disabled={currentQty >= availableStock}
                     >
-                        <PlusCircle className="w-5 h-5" />
+                        <PlusCircle className="w-4 h-4" />
                     </Button>
                 </div>
             </div>
@@ -185,124 +159,95 @@ export default function ProductsPOS({
     };
 
     return (
-        <Card className="border-0 shadow-none min-h-full flex flex-col lg:h-full lg:min-h-0 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-0">
-            <CardHeader className="pb-3 lg:col-start-1 lg:row-start-1">
-                <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2 text-xl font-bold">
-                                <ShoppingCart className="w-5 h-5 text-accent" />
-                                Punto de Venta (TPV)
-                            </CardTitle>
-                        </div>
-                        {itemCount > 0 && (
-                            <Badge className="bg-accent text-accent-foreground text-base px-3 py-2">
-                                {itemCount} {itemCount === 1 ? "item" : "items"}
-                            </Badge>
-                        )}
-                    </div>
-                    <Input
-                        placeholder="Buscar producto..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-11 text-base"
-                    />
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs text-muted-foreground">
-                            {filteredProducts.length} resultado{filteredProducts.length === 1 ? "" : "s"}
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <Label htmlFor="only-in-stock" className="text-xs text-muted-foreground cursor-pointer">
-                                Solo con stock
-                            </Label>
-                            <Switch
-                                id="only-in-stock"
-                                checked={onlyInStock}
-                                onCheckedChange={setOnlyInStock}
-                            />
-                        </div>
+        <div className="flex flex-col h-full bg-slate-950 text-slate-50 font-body overflow-hidden">
+            {/* Header Búsqueda */}
+            <div className="p-4 border-b border-slate-900 space-y-3 shrink-0 bg-slate-950">
+                <Input
+                    placeholder="Buscar producto..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-10 text-sm bg-slate-900 border-slate-800 text-slate-50 focus-visible:ring-primary/50"
+                />
+                <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 tracking-wider uppercase">
+                        {filteredProducts.length} Resultados
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor="only-in-stock" className="text-xs text-slate-400 cursor-pointer select-none">
+                            Solo con stock
+                        </Label>
+                        <Switch
+                            id="only-in-stock"
+                            checked={onlyInStock}
+                            onCheckedChange={setOnlyInStock}
+                            className="data-[state=checked]:bg-primary"
+                        />
                     </div>
                 </div>
-            </CardHeader>
+            </div>
 
-            <CardContent className="flex-1 min-h-0 flex flex-col gap-3 overflow-visible lg:overflow-hidden lg:col-start-1 lg:row-start-2 lg:pb-4">
-                {outOfStockProducts.length > 0 && (
-                    <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-sm">
-                            {outOfStockProducts.length} {outOfStockProducts.length === 1 ? "producto está" : "productos están"} sin stock disponible.
-                        </AlertDescription>
-                    </Alert>
-                )}
-                <div className="lg:hidden flex-1 min-h-0 overflow-y-auto">
-                    <div className="pr-2 space-y-2 pb-2 h-max">
-                        {filteredProducts.length === 0 ? (
-                            <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
-                                <p>Sin productos</p>
-                            </div>
-                        ) : (
-                            filteredProducts.map(renderProductRow)
-                        )}
-                    </div>
-                </div>
-
-                <Tabs defaultValue="drink" className="hidden lg:flex flex-1 min-h-0 flex-col">
-                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto bg-secondary/60 p-1">
+            {/* Listado de Productos */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/20">
+                <Tabs defaultValue="drink" className="w-full flex flex-col h-full">
+                    <TabsList className="grid grid-cols-4 h-auto bg-slate-900/60 p-1 border border-slate-800 rounded-xl shrink-0 mb-3">
                         {Object.entries(categoryLabels).map(([cat, label]) => (
-                            <TabsTrigger key={cat} value={cat} className="text-sm flex gap-1 h-11">
-                                <span>{categoryIcons[cat as keyof typeof categoryIcons]}</span>
-                                <span className="hidden sm:inline">{label}</span>
+                            <TabsTrigger key={cat} value={cat} className="text-xs py-1.5 flex flex-col sm:flex-row items-center justify-center gap-1 rounded-lg data-[state=active]:bg-slate-800 data-[state=active]:text-primary">
+                                <span className="text-sm">{categoryIcons[cat as keyof typeof categoryIcons]}</span>
+                                <span className="text-[10px] tracking-wider hidden sm:inline font-bold uppercase">{label}</span>
                             </TabsTrigger>
                         ))}
                     </TabsList>
 
-                    {Array.from(products.entries()).map(([category, categoryProducts]) => (
-                        <TabsContent key={category} value={category} className="flex-1 min-h-0 overflow-visible lg:overflow-y-auto data-[state=active]:flex data-[state=active]:flex-col">
-                            <div className="pr-2 space-y-2 pb-2 h-max">
-                                {categoryProducts.length === 0 ? (
-                                    <div className="py-8 text-center text-muted-foreground bg-secondary/20 rounded-lg">
-                                        <p>Sin productos</p>
-                                    </div>
-                                ) : (
-                                    categoryProducts.map(renderProductRow)
-                                )}
-                            </div>
-                        </TabsContent>
-                    ))}
-                </Tabs>
-            </CardContent>
-
-            <aside className="border-t lg:border-t-0 lg:border-l border-border/50 bg-secondary/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-5 lg:pb-5 lg:col-start-2 lg:row-span-2 flex flex-col min-h-0">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumen</h3>
-                {Object.entries(quantities).length > 0 && (
-                    <div className="space-y-1 text-sm mb-4 pb-4 border-b border-border/40 overflow-y-auto max-h-48 lg:max-h-[45vh] pr-1">
-                        {Object.entries(quantities).map(([productId, qty]) => {
-                            const product = availableProducts.find(p => p.id === productId);
-                            if (!product) return null;
-                            return (
-                                <div key={productId} className="flex justify-between items-center text-muted-foreground bg-background/50 px-3 py-1.5 rounded-md text-xs font-medium">
-                                    <span className="flex items-center gap-2 text-foreground/80"><span className="text-accent font-bold bg-accent/10 px-1.5 rounded">{qty}x</span> {product.name}</span>
-                                    <span className="font-mono text-foreground/90">{formatCurrency(qty * product.price)}</span>
+                    {Object.keys(categoryLabels).map((cat) => {
+                        const categoryProducts = filteredProducts.filter(p => p.category === cat);
+                        return (
+                            <TabsContent key={cat} value={cat} className="flex-1 min-h-0 mt-0 focus-visible:ring-0">
+                                <div className="grid grid-cols-1 gap-2">
+                                    {categoryProducts.length === 0 ? (
+                                        <div className="py-8 text-center text-xs text-slate-500 bg-slate-900/20 border border-slate-900 rounded-xl">
+                                            Sin productos en esta categoría
+                                        </div>
+                                    ) : (
+                                        categoryProducts.map(renderProductRow)
+                                    )}
                                 </div>
-                            );
-                        })}
+                            </TabsContent>
+                        );
+                    })}
+                </Tabs>
+            </div>
+
+            {/* Summary / Footer */}
+            <div className="p-4 border-t border-slate-900 bg-slate-900/30 shrink-0 space-y-3">
+                {soldProducts.length > 0 && (
+                    <div className="max-h-24 overflow-y-auto space-y-1 pr-1 text-[11px]">
+                        {soldProducts.map((sp) => (
+                            <div key={sp.productId} className="flex items-center justify-between text-slate-400">
+                                <span>{sp.quantity}x {sp.productName}</span>
+                                <span className="font-mono font-bold text-slate-200">{formatCurrency(sp.quantity * sp.unitPrice)}</span>
+                            </div>
+                        ))}
                     </div>
                 )}
-                <div className="flex justify-between items-center mb-5 px-1">
-                    <span className="font-semibold text-muted-foreground uppercase tracking-wider text-xs md:text-sm">Total Productos:</span>
-                    <span className="text-2xl md:text-3xl font-black tracking-tight text-accent drop-shadow-sm">
+
+                <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold tracking-wider uppercase text-slate-400">
+                        Total Compra:
+                    </span>
+                    <span className="text-xl font-black text-primary tracking-tight font-mono">
                         {formatCurrency(total)}
                     </span>
                 </div>
-                <div className="mt-auto flex flex-col gap-3 sticky bottom-0 bg-secondary/10 pt-3">
+
+                <div className="flex gap-2 pt-1">
                     {onClose && (
                         <Button 
-                            variant="outline" 
+                            variant="ghost" 
                             onClick={onClose} 
                             disabled={isSaving}
-                            className="w-full h-12 font-semibold hover:bg-destructive hover:text-white transition-all shadow-sm"
+                            className="flex-1 h-11 text-xs font-bold text-slate-400 hover:bg-slate-800/50 border border-slate-800"
                         >
-                            Cancelar
+                            Cerrar
                         </Button>
                     )}
                     <Button 
@@ -315,31 +260,32 @@ export default function ProductsPOS({
                                 setIsSaving(false);
                             }
                         }} 
-                        disabled={isSaving}
-                        className="w-full h-14 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
+                        disabled={isSaving || soldProducts.length === 0}
+                        className="flex-[2] h-11 bg-primary text-primary-foreground font-bold text-xs shadow-md shadow-primary/10 hover:bg-primary/90"
                     >
-                        <ShoppingCart className="w-5 h-5 mr-2" />
-                        {isSaving ? "Guardando..." : "Agregar Deuda a Estación"}
+                        <ShoppingCart className="w-4 h-4 mr-1.5" />
+                        {isSaving ? "Guardando..." : "Añadir Deuda"}
                     </Button>
-                    {onGoToCharge && (
-                        <Button 
-                            onClick={async () => {
-                                try {
-                                    setIsSaving(true);
-                                    await onSave(soldProducts);
-                                    onGoToCharge(soldProducts);
-                                } finally {
-                                    setIsSaving(false);
-                                }
-                            }} 
-                            disabled={isSaving}
-                            className="w-full h-14 bg-gradient-to-r from-status-available to-status-available/80 hover:from-status-available/90 hover:to-status-available text-white font-bold text-base shadow-lg shadow-status-available/20 transition-all active:scale-[0.98]"
-                        >
-                            {isSaving ? "Guardando..." : "💰 Guardar y cobrar"}
-                        </Button>
-                    )}
                 </div>
-            </aside>
-        </Card>
+
+                {onGoToCharge && (
+                    <Button 
+                        onClick={async () => {
+                            try {
+                                setIsSaving(true);
+                                await onSave(soldProducts);
+                                if (onGoToCharge) onGoToCharge(soldProducts);
+                            } finally {
+                                setIsSaving(false);
+                            }
+                        }} 
+                        disabled={isSaving || soldProducts.length === 0}
+                        className="w-full h-12 bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-bold text-sm shadow-md shadow-emerald-500/10"
+                    >
+                        💰 Guardar y Cobrar Ahora
+                    </Button>
+                )}
+            </div>
+        </div>
     );
 }
