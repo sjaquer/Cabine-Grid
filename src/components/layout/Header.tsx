@@ -244,7 +244,7 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
               </div>
             ) : (
               <>
-                {closurePreview && (
+                {closurePreview && userProfile?.role !== 'operator' && (
                   <div className="rounded-md border bg-secondary/20 p-3 space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Ventas del turno</span>
@@ -270,6 +270,7 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
                     onChange={setCountedCash}
                     expected={expectedCash}
                     difference={cashDifference}
+                    hideExpected={userProfile?.role === 'operator'}
                   />
                   <MoneyInput
                     label="Yape contado"
@@ -277,6 +278,7 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
                     onChange={setCountedYape}
                     expected={expectedYape}
                     difference={yapeDifference}
+                    hideExpected={userProfile?.role === 'operator'}
                   />
                   <MoneyInput
                     label="Otros medios"
@@ -284,27 +286,30 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
                     onChange={setCountedOther}
                     expected={expectedOther}
                     difference={otherDifference}
+                    hideExpected={userProfile?.role === 'operator'}
                   />
                 </div>
 
-                <div className="rounded-md border p-3 space-y-1.5 bg-background/70">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Total contado</span>
-                    <span className="font-semibold">{formatCurrency(totalCounted)}</span>
+                {userProfile?.role !== 'operator' && (
+                  <div className="rounded-md border p-3 space-y-1.5 bg-background/70">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Total contado</span>
+                      <span className="font-semibold">{formatCurrency(totalCounted)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Total esperado</span>
+                      <span className="font-semibold">{formatCurrency(totalExpected)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm border-t pt-1.5">
+                      <span className="text-muted-foreground">Diferencia total</span>
+                      <span className={`font-semibold ${totalDifference === 0 ? "text-status-available" : "text-destructive"}`}>
+                        {formatCurrency(totalDifference)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Total esperado</span>
-                    <span className="font-semibold">{formatCurrency(totalExpected)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm border-t pt-1.5">
-                    <span className="text-muted-foreground">Diferencia total</span>
-                    <span className={`font-semibold ${totalDifference === 0 ? "text-status-available" : "text-destructive"}`}>
-                      {formatCurrency(totalDifference)}
-                    </span>
-                  </div>
-                </div>
+                )}
 
-                {totalDifference !== 0 && (
+                {userProfile?.role !== 'operator' && totalDifference !== 0 && (
                   <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
                     <AlertTriangle className="h-4 w-4 mt-0.5" />
                     <p>Hay diferencia en el cierre. Debes detallar el motivo para continuar.</p>
@@ -354,12 +359,14 @@ function MoneyInput({
   onChange,
   expected,
   difference,
+  hideExpected = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   expected: number;
   difference: number;
+  hideExpected?: boolean;
 }) {
   return (
     <div className="space-y-2 rounded-md border p-3 bg-background/60">
@@ -371,10 +378,14 @@ function MoneyInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      <div className="text-xs text-muted-foreground">Esperado: {formatCurrency(expected)}</div>
-      <div className={`text-xs font-medium ${difference === 0 ? "text-status-available" : "text-destructive"}`}>
-        Diferencia: {formatCurrency(difference)}
-      </div>
+      {!hideExpected && (
+        <>
+          <div className="text-xs text-muted-foreground">Esperado: {formatCurrency(expected)}</div>
+          <div className={`text-xs font-medium ${difference === 0 ? "text-status-available" : "text-destructive"}`}>
+            Diferencia: {formatCurrency(difference)}
+          </div>
+        </>
+      )}
     </div>
   );
 }

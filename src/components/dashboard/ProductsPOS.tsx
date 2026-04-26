@@ -319,7 +319,7 @@ export default function ProductsPOS({
                         className="w-full h-14 bg-secondary text-foreground hover:bg-secondary/80 font-bold text-base shadow-sm transition-all active:scale-[0.98]"
                     >
                         <ShoppingCart className="w-5 h-5 mr-2" />
-                        {isSaving ? "Guardando..." : "Guardar productos"}
+                        {isSaving ? "Guardando..." : "Agregar Deuda a Estación"}
                     </Button>
                     {onGoToCharge && (
                         <Button 
