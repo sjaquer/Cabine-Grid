@@ -56,50 +56,47 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
   }[isWarning ? 'warning' : status];
 
   const getStationIcon = () => {
-    if (status === 'maintenance') return <Wrench className="w-12 h-12" />;
-    if (status === 'warning' || isWarning) return <AlertTriangle className="w-12 h-12 text-amber-500 animate-bounce" />;
+    if (status === 'maintenance') return <Wrench className="w-6 h-6" />;
+    if (status === 'warning' || isWarning) return <AlertTriangle className="w-6 h-6 text-amber-500 animate-pulse" />;
     
-    if (type === 'PC') return <Computer className="w-14 h-14 text-current" />;
-    return <Gamepad className="w-14 h-14 text-current" />;
+    if (type === 'PC') return <Computer className="w-8 h-8 text-current" />;
+    return <Gamepad className="w-8 h-8 text-current" />;
   };
 
   return (
     <Card
       className={cn(
-        "relative flex aspect-square flex-col items-center justify-between p-4 rounded-2xl border transition-all duration-300 select-none cursor-pointer overflow-hidden font-body",
+        "relative flex h-24 flex-col items-center justify-between p-2 rounded-xl border transition-all duration-200 select-none cursor-pointer overflow-hidden font-body shadow-sm",
         typeStyle,
         stateStyle
       )}
       onClick={() => status !== "maintenance" && onAction(station)}
     >
       {/* Alias del jugador arriba */}
-      <div className="w-full text-center text-xs font-bold tracking-wide truncate pt-1 flex items-center justify-center gap-1 text-slate-200">
+      <div className="w-full text-center text-[10px] font-bold tracking-wide truncate flex items-center justify-center gap-1 text-slate-200">
         {status === 'occupied' ? (
           <>
-            <User className="w-3 h-3 opacity-70 text-primary" />
+            <User className="w-2.5 h-2.5 opacity-70 text-primary flex-shrink-0" />
             <span className="truncate font-semibold">{sanitizeString(session?.client) || 'Invitado'}</span>
           </>
         ) : status === 'maintenance' ? (
-          <span className="text-yellow-500 font-headline">Fuera de Servicio</span>
+          <span className="text-yellow-500 text-[9px]">Fuera Serv.</span>
         ) : (
-          <span className="text-slate-400 opacity-80">{station.name}</span>
+          <span className="text-slate-400 opacity-70">{station.name}</span>
         )}
       </div>
 
-      {/* Ícono Central Grande */}
-      <div className="flex flex-1 items-center justify-center scale-100 group-hover:scale-110 transition-transform duration-300 py-2">
+      {/* Ícono Central */}
+      <div className="flex flex-1 items-center justify-center py-0.5 opacity-80">
         {getStationIcon()}
       </div>
 
       {/* Tiempo abajo */}
-      <div className="w-full flex flex-col items-center gap-0.5 pb-1">
+      <div className="w-full flex flex-col items-center gap-0">
         {status === 'occupied' ? (
           <>
-            <span className="text-lg font-black font-mono text-slate-50 tracking-tight leading-none">
+            <span className="text-sm font-black font-mono text-slate-50 tracking-tight leading-none">
               {formatTime(Math.floor(timeToShow))}
-            </span>
-            <span className="text-[9px] font-bold tracking-wider uppercase text-slate-400">
-              {isPrepaid ? (timeIsUp ? "TIEMPO EXTRA" : "RESTANTE") : "TIEMPO"}
             </span>
           </>
         ) : status === 'available' ? (
