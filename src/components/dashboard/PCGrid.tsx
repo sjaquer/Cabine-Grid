@@ -39,20 +39,24 @@ export default function PCGrid({ machines: stations, onCardAction, isLoading }: 
     );
   }
 
-  return (
-    <div className="flex-1 p-3 sm:p-4 lg:p-6">
-      <div className="space-y-4">
-        {/* Encabezado con contador */}
-        <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
-          <div>
-            <h2 className="text-sm font-semibold md:text-base">Disponibles en pantalla</h2>
-            <p className="text-xs text-muted-foreground">{stations.length} {stations.length === 1 ? 'estación' : 'estaciones'} en esta vista</p>
-          </div>
+  const pcStations = stations.filter((s) => s.type === 'PC' || !s.type);
+  const consoleStations = stations.filter((s) => ['PS5', 'PS4', 'PS3', 'XBOX', 'NINTENDO'].includes(s.type));
+  const experienceStations = stations.filter((s) => ['VR', 'SIMULADOR'].includes(s.type));
+
+  const renderSection = (title: string, icon: string, list: Station[]) => {
+    if (list.length === 0) return null;
+    
+    return (
+      <div className="space-y-3 border-b border-border/30 pb-6 last:border-b-0">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xl">{icon}</span>
+          <h3 className="text-base font-bold tracking-tight font-headline text-foreground">{title}</h3>
+          <span className="text-xs font-mono bg-secondary/70 text-muted-foreground px-1.5 py-0.5 rounded">
+            {list.length}
+          </span>
         </div>
-        
-        {/* Grid de estaciones */}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
-          {stations.map((station) => (
+          {list.map((station) => (
             <PCCard
               key={station.id}
               machine={station}
@@ -60,6 +64,16 @@ export default function PCGrid({ machines: stations, onCardAction, isLoading }: 
             />
           ))}
         </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex-1 p-3 sm:p-4 lg:p-6">
+      <div className="space-y-6">
+        {renderSection("Zona PC Gamer", "🖥️", pcStations)}
+        {renderSection("Zona de Consolas", "🎮", consoleStations)}
+        {renderSection("Experiencia VR / Simuladores", "🥽", experienceStations)}
       </div>
     </div>
   );

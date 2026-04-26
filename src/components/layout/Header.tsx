@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Cpu, History, CircleUser, LogOut, Settings, Package, Loader2, AlertTriangle, UserRound } from "lucide-react";
+import { Cpu, History, CircleUser, LogOut, Settings, Package, Loader2, AlertTriangle, UserRound, BarChart3 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
@@ -204,12 +204,20 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
                 </Link>
               </DropdownMenuItem>
               {(userProfile?.role === 'admin' || userProfile?.role === 'manager') && (
-                <DropdownMenuItem asChild>
-                  <Link href="/admin" className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Administración</span>
-                  </Link>
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link href="/reportes" className="cursor-pointer">
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      <span>Reportes</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin" className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Administración</span>
+                    </Link>
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuItem onClick={handleLogoutClick} className="focus:bg-destructive/10 focus:text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
