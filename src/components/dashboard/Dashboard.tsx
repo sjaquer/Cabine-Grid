@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Customer, Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
-import type { Inventory } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
 import Header from "@/components/layout/Header";
@@ -12,149 +11,52 @@ import AssignPCDialog, { type AssignPCFormValues } from "./AssignPCDialog";
 import ChargeDialog from "./ChargeDialog";
 import ProductsPOSDialog from "./ProductsPOSDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
-import { useAuth, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, query, where, Timestamp, doc, writeBatch, updateDoc, serverTimestamp, runTransaction, getDoc } from "firebase/firestore";
+import { doc, Timestamp, addDoc, collection, serverTimestamp, runTransaction } from "firebase/firestore";
 import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getShiftStart, setShiftLocation } from "@/lib/shift-session";
+import { getShiftStart } from "@/lib/shift-session";
 import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
 import { closeSession } from "@/lib/close-session";
-import { canAccessMachine, useAccessibleMachines } from "@/hooks/useMachineAccess";
+import { canAccessMachine } from "@/hooks/useMachineAccess";
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Building2, Settings, SlidersHorizontal } from "lucide-react";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useDashboardData } from "@/hooks/useDashboardData";
+import { updateSessionProducts, startMachineSession } from "@/lib/services/sales";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 export default function Dashboard() {
   const router = useRouter();
-  const { user, userProfile } = useAuth();
-  const firestore = useFirestore();
-
-  const machinesQuery = useMemoFirebase(() => {
-    if (!firestore) {
-      return null;
-    }
-    return query(collection(firestore, "machines"));
-  }, [firestore]);
+  const { toast } = useToast();
   
-  const { data: machinesData, isLoading: machinesLoading } = useCollection<Omit<Machine, 'id'>>(machinesQuery);
+  const {
+    machines,
+    accessibleMachines,
+    visibleMachines,
+    filteredMachines,
+    locations,
+    availableLocations,
+    selectedLocationId,
+    setSelectedLocationId,
+    products,
+    customers,
+    inventoryData,
+    inventoryByProduct,
+    visibleSales,
+    dailySales,
+    isLoading,
+    machineViewFilter,
+    setMachineViewFilter,
+    firestore,
+    user,
+    userProfile,
+  } = useDashboardData();
 
-  const locationsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "locations"));
-  }, [firestore]);
-
-  const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
-
-  const productsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "products"));
-  }, [firestore]);
-
-  const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
-  const customersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "customers"));
-  }, [firestore]);
-  const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
-  
-  const inventoryQuery = useMemoFirebase(() => {
-    if (!firestore || !selectedLocationId) return null;
-    return query(
-      collection(firestore, "inventory"),
-      where("locationId", "==", selectedLocationId)
-    );
-  }, [firestore, selectedLocationId]);
-
-  const { data: inventoryData } = useCollection<Omit<Inventory, "id">>(inventoryQuery);
-
-  const inventoryByProduct = useMemo(() => {
-    const result: Record<string, number> = {};
-    if (inventoryData) {
-      inventoryData.forEach((item) => {
-        result[item.productId] = item.currentStock ?? 0;
-      });
-    }
-    return result;
-  }, [inventoryData]);
-
-  const machines = useMemo(() => {
-    if (!machinesData) return [];
-    
-    // Sort by name, assuming format "PC XX"
-    return machinesData.sort((a, b) => {
-      const numA = parseInt(a.name.split(' ')[1] || '0', 10);
-      const numB = parseInt(b.name.split(' ')[1] || '0', 10);
-      return numA - numB;
-    });
-
-  }, [machinesData]);
-
-  // Filter machines by user access
-  const { accessible: accessibleMachines } = useAccessibleMachines(machines, userProfile);
-
-  const locations = useMemo(() => {
-    return (locationsData ?? [])
-      .filter((location) => location.isActive !== false)
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [locationsData]);
-
-  const products = useMemo(() => {
-    return (productsData ?? [])
-      .filter((product) => product.isActive !== false)
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [productsData]);
-
-  const customers = useMemo(
-    () => (customersData ?? []) as Customer[],
-    [customersData]
-  );
-
-  const availableLocations = useMemo(() => {
-    const profileLocationIds = userProfile?.locationIds;
-    const canViewAll = !profileLocationIds || profileLocationIds.length === 0 || userProfile?.role === "admin" || userProfile?.role === "manager";
-
-    if (canViewAll) {
-      return locations;
-    }
-
-    return locations.filter((location) => profileLocationIds.includes(location.id));
-  }, [locations, userProfile?.locationIds, userProfile?.role]);
-
-  const hasMachinesWithLocation = useMemo(() => accessibleMachines.some((machine) => Boolean(machine.locationId)), [accessibleMachines]);
-
-  useEffect(() => {
-    if (availableLocations.length === 0) {
-      setSelectedLocationId("");
-      return;
-    }
-
-    setSelectedLocationId((current) => {
-      if (availableLocations.some((location) => location.id === current)) {
-        return current;
-      }
-      return availableLocations[0].id;
-    });
-  }, [availableLocations]);
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    if (!selectedLocationId) return;
-    setShiftLocation(user.uid, selectedLocationId);
-  }, [user?.uid, selectedLocationId]);
-
-  const visibleMachines = useMemo(() => {
-    if (!selectedLocationId || !hasMachinesWithLocation) {
-      return accessibleMachines;
-    }
-
-    return accessibleMachines.filter((machine) => machine.locationId === selectedLocationId);
-  }, [accessibleMachines, selectedLocationId, hasMachinesWithLocation]);
-
+  // Local UI States
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
   const [machineToAssign, setMachineToAssign] = useState<Machine | null>(null);
 
@@ -166,65 +68,16 @@ export default function Dashboard() {
   const [machineToPos, setMachineToPos] = useState<Machine | null>(null);
 
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
-  const [machineViewFilter, setMachineViewFilter] = useState<"active" | "all" | "available">("active");
   const [showMobileControls, setShowMobileControls] = useState(false);
-  
-  const { toast } = useToast();
 
-  const salesQuery = useMemoFirebase(() => {
-    if (!user) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startOfToday = Timestamp.fromDate(today);
-
-    return query(collection(firestore, "sales"), where("endTime", ">=", startOfToday));
-  }, [firestore, user]);
-
-  const { data: sales } = useCollection<Sale>(salesQuery);
-  const sortedSales = useMemo(() => sales ? [...sales].sort((a, b) => (b.endTime as Timestamp).toMillis() - (a.endTime as Timestamp).toMillis()) : [], [sales]);
-
-  const visibleSales = useMemo(() => {
-    if (!selectedLocationId) {
-      return sortedSales;
-    }
-
-    const hasSalesWithLocation = sortedSales.some((sale) => Boolean(sale.locationId));
-    if (!hasSalesWithLocation) {
-      return sortedSales;
-    }
-
-    return sortedSales.filter((sale) => sale.locationId === selectedLocationId);
-  }, [sortedSales, selectedLocationId]);
-
-
-  useEffect(() => {
-    if (machinesLoading || !firestore) return;
-    
-    const interval = setInterval(() => {
-      machines.forEach(m => {
-        if (m.session?.usageMode === 'prepaid' && (m.status === 'occupied' || m.status === 'warning')) {
-            const { startTime, prepaidHours } = m.session;
-            const prepaidSeconds = (prepaidHours || 0) * 3600;
-            const elapsedSeconds = (Date.now() - startTime) / 1000;
-            const remainingSeconds = prepaidSeconds - elapsedSeconds;
-
-            if (remainingSeconds <= 300 && remainingSeconds > 0 && m.status !== 'warning') {
-              const machineRef = doc(firestore, 'machines', m.id);
-              const batch = writeBatch(firestore);
-              batch.update(machineRef, { status: 'warning' });
-              batch.commit().catch(e => console.error("Error updating machine status:", e));
-            } else if (remainingSeconds > 300 && m.status === 'warning') {
-              const machineRef = doc(firestore, 'machines', m.id);
-              const batch = writeBatch(firestore);
-              batch.update(machineRef, { status: 'occupied' });
-              batch.commit().catch(e => console.error("Error updating machine status:", e));
-            }
-        }
-      });
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, [machines, firestore, machinesLoading]);
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-8 animate-pulse">
+        <Skeleton className="h-10 w-[250px]" />
+        <Skeleton className="h-[400px] w-full" />
+      </div>
+    );
+  }
 
 
   const handleCardAction = useCallback((machine: Machine) => {
@@ -291,17 +144,14 @@ export default function Dashboard() {
       ...(user?.uid ? { userId: user.uid } : {}),
     };
 
-    const machineRef = doc(firestore, "machines", machineToAssign.id);
-
     try {
-        const batch = writeBatch(firestore);
-        batch.update(machineRef, {
-            status: "occupied",
-            session: session,
-            rateId: effectiveRate.id,
-          ...(!machineToAssign.locationId && selectedLocationId ? { locationId: selectedLocationId } : {}),
-        });
-        await batch.commit();
+        await startMachineSession(
+          firestore,
+          machineToAssign.id,
+          session,
+          effectiveRate.id,
+          selectedLocationId
+        );
 
         await logAuditAction(firestore, {
           action: 'session.start',
@@ -522,12 +372,7 @@ export default function Dashboard() {
     }
 
     try {
-      const machineRef = doc(firestore, "machines", machineId);
-      const updatedSession = {
-        ...machine.session,
-        soldProducts: products,
-      };
-      await updateDoc(machineRef, { session: updatedSession });
+      await updateSessionProducts(firestore!, machineId, products);
       await logAuditAction(firestore, {
         action: 'session.products.update',
         target: 'machines',
@@ -597,16 +442,7 @@ export default function Dashboard() {
   const availableMachines = visibleMachines.filter((machine) => machine.status === "available").length;
   const activeMachines = visibleMachines.filter((machine) => machine.status === "occupied" || machine.status === "warning").length;
   const maintenanceMachines = visibleMachines.filter((machine) => machine.status === "maintenance").length;
-  const filteredMachines = useMemo(() => {
-    if (machineViewFilter === "active") {
-      return visibleMachines.filter((machine) => machine.status === "occupied" || machine.status === "warning");
-    }
-    if (machineViewFilter === "available") {
-      return visibleMachines.filter((machine) => machine.status === "available");
-    }
-    return visibleMachines;
-  }, [visibleMachines, machineViewFilter]);
-  const dailySales = visibleSales.reduce((sum, sale) => sum + sale.amount, 0);
+
 
   // Hook para obtener alertas de inventario
   const inventoryAlerts = useInventoryAlerts(inventoryData || []);
@@ -771,7 +607,7 @@ export default function Dashboard() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <PCGrid machines={filteredMachines} onCardAction={handleCardAction} isLoading={machinesLoading} />
+               <PCGrid machines={filteredMachines} onCardAction={handleCardAction} isLoading={isLoading} />
             </div>
           </section>
         </div>
@@ -806,7 +642,7 @@ export default function Dashboard() {
         machine={machineToCharge}
         onConfirmPayment={handleConfirmPayment}
         isProcessing={isProcessingPayment}
-        fractionMinutes={locationsData?.find(loc => loc.id === (machineToCharge?.locationId || selectedLocationId))?.fractionMinutes || 5}
+        fractionMinutes={locations?.find((loc: Location) => loc.id === (machineToCharge?.locationId || selectedLocationId))?.fractionMinutes || 5}
       />
 
       <SalesHistorySheet 

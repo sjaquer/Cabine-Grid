@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useCartStore } from "@/store/useCartStore";
 import type { Product, SoldProduct } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,13 +45,19 @@ export default function ProductsPOS({
   onGoToCharge,
   inventoryByProduct = {}
 }: ProductsPOSProps) {
-    const [quantities, setQuantities] = useState<Record<string, number>>(() => {
-        if (!initialProducts || initialProducts.length === 0) return {};
-        return initialProducts.reduce((acc, item) => {
+    const { quantities, updateQuantity, setQuantities, clearCart } = useCartStore();
+
+    useEffect(() => {
+        if (!initialProducts || initialProducts.length === 0) {
+            clearCart();
+            return;
+        }
+        const initialQuantities = initialProducts.reduce((acc, item) => {
             acc[item.productId] = item.quantity;
             return acc;
         }, {} as Record<string, number>);
-    });
+        setQuantities(initialQuantities);
+    }, [initialProducts, setQuantities, clearCart]);
     const [searchTerm, setSearchTerm] = useState("");
     const [onlyInStock, setOnlyInStock] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -83,17 +90,7 @@ export default function ProductsPOS({
         if (!product) return;
 
         const availableStock = getAvailableStock(productId, product);
-        const newQuantities = { ...quantities };
-        const currentQuantity = newQuantities[productId] || 0;
-        const newQuantity = Math.max(0, Math.min(currentQuantity + delta, availableStock));
-
-        if (newQuantity > 0) {
-            newQuantities[productId] = newQuantity;
-        } else {
-            delete newQuantities[productId];
-        }
-
-        setQuantities(newQuantities);
+        updateQuantity(productId, delta, availableStock);
     };
 
     const buildSoldProducts = (currentQuantities: Record<string, number>) => {

@@ -137,7 +137,10 @@ export async function closeSession(
             ? Number(inventorySnap.data().currentStock ?? 0)
             : 0;
 
-          const newStock = Math.max(0, currentStock - product.quantity);
+          const newStock = currentStock - product.quantity;
+          if (newStock < 0) {
+            throw new Error(`Stock insuficiente para ${product.productName}. Disponible: ${currentStock}, Solicitado: ${product.quantity}`);
+          }
 
           inventoryAdjustments.push({
             productId: product.productId,

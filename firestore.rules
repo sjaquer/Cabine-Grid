@@ -95,7 +95,8 @@ service cloud.firestore {
           request.resource.data.role == resource.data.role &&
           request.resource.data.locationIds == resource.data.locationIds &&
           request.resource.data.isActive == resource.data.isActive &&
-          request.resource.data.email == resource.data.email
+          request.resource.data.email == resource.data.email &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['balance']) || request.resource.data.balance >= 0)
         )
       );
 
