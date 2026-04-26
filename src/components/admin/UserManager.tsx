@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Location, UserProfile, UserRole } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,9 @@ const createUserSchema = z.object({
 const userRoleSchema = z.object({
   role: z.enum(["admin", "manager", "operator", "view-only"]),
   locationId: z.string(),
+  void_sales: z.boolean().default(false),
+  free_time: z.boolean().default(false),
+  cash_drawer: z.boolean().default(false),
 }).superRefine((values, context) => {
   if (values.role === "operator" && values.locationId === "__none") {
     context.addIssue({
@@ -71,7 +75,7 @@ type UserManagerProps = {
   users: UserProfile[];
   locations: Location[];
   onCreateUser: (payload: CreateUserFormValues) => Promise<void>;
-  onChangeRole: (userId: string, role: UserRole, locationIds: string[]) => Promise<void>;
+  onChangeRole: (userId: string, role: UserRole, locationIds: string[], permissions: string[]) => Promise<void>;
   onDeactivate: (userId: string) => Promise<void>;
 };
 
@@ -155,6 +159,12 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
     setEditingId(user.uid);
     form.setValue("role", user.role);
     form.setValue("locationId", user.locationIds?.[0] ?? "__none");
+    
+    const perms = user.permissions || [];
+    form.setValue("void_sales", perms.includes("void_sales"));
+    form.setValue("free_time", perms.includes("free_time"));
+    form.setValue("cash_drawer", perms.includes("cash_drawer"));
+    
     setIsOpen(true);
   };
 
@@ -162,7 +172,13 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
     try {
       if (editingId) {
         const locationIds = values.locationId === "__none" ? [] : [values.locationId];
-        await onChangeRole(editingId, values.role, locationIds);
+        
+        const permissions: string[] = [];
+        if (values.void_sales) permissions.push("void_sales");
+        if (values.free_time) permissions.push("free_time");
+        if (values.cash_drawer) permissions.push("cash_drawer");
+
+        await onChangeRole(editingId, values.role, locationIds, permissions);
         setIsOpen(false);
         setEditingId(null);
         form.reset();
@@ -292,47 +308,58 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
             <TableRow>
               <TableHead>Nombre/Email</TableHead>
               <TableHead>Rol Actual</TableHead>
+              <TableHead>Permisos</TableHead>
               <TableHead>Local asignado</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.uid}>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{user.name || "Sin nombre"}</span>
-                    <span className="text-sm text-muted-foreground">{user.email}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge className={`${roleColors[user.role]} border`}>
-                    <span className="mr-1">{roleIcons[user.role]}</span>
-                    {user.role === "admin"
-                      ? "Administrador"
-                      : user.role === "manager"
-                      ? "Gerente"
-                      : user.role === "operator"
-                      ? "Operador"
-                      : "Lectura"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <span className="text-sm text-muted-foreground">{getUserLocationText(user)}</span>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={user.isActive !== false ? "default" : "secondary"}>
-                    {user.isActive !== false ? "Activo" : "Inactivo"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(user)}
-                    disabled={user.uid === "self" || user.role === "admin"}
-                  >
+            {users.map((user) => {
+              const perms = user.permissions || [];
+              return (
+                <TableRow key={user.uid}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{user.name || "Sin nombre"}</span>
+                      <span className="text-sm text-muted-foreground">{user.email}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={`${roleColors[user.role]} border`}>
+                      <span className="mr-1">{roleIcons[user.role]}</span>
+                      {user.role === "admin"
+                        ? "Administrador"
+                        : user.role === "manager"
+                        ? "Gerente"
+                        : user.role === "operator"
+                        ? "Operador"
+                        : "Lectura"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1 max-w-[220px]">
+                      {perms.includes("void_sales") && <Badge variant="outline" className="text-[9px] border-zinc-700 bg-zinc-900">Anular</Badge>}
+                      {perms.includes("free_time") && <Badge variant="outline" className="text-[9px] border-zinc-700 bg-zinc-900">Tiempo</Badge>}
+                      {perms.includes("cash_drawer") && <Badge variant="outline" className="text-[9px] border-zinc-700 bg-zinc-900">Caja</Badge>}
+                      {perms.length === 0 && <span className="text-[10px] text-zinc-500">-</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-muted-foreground">{getUserLocationText(user)}</span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={user.isActive !== false ? "default" : "secondary"}>
+                      {user.isActive !== false ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(user)}
+                      disabled={user.uid === "self"}
+                    >
                     <Pencil className="w-4 h-4" />
                   </Button>
                   <Button
@@ -345,8 +372,9 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
                   </Button>
                 </TableCell>
               </TableRow>
-            ))}
-          </TableBody>
+            );
+          })}
+        </TableBody>
         </Table>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -433,6 +461,67 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
                     </FormItem>
                   )}
                 />
+                <div className="border-t border-zinc-800 pt-3 space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Permisos Especiales</span>
+                  
+                  <FormField
+                    control={form.control}
+                    name="void_sales"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-zinc-800 p-3 bg-zinc-900/40">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="text-xs font-semibold text-zinc-200">Puede anular ventas</FormLabel>
+                          <FormDescription className="text-[10px] text-zinc-400">Habilita la anulacion de tickets generados</FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="free_time"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-zinc-800 p-3 bg-zinc-900/40">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="text-xs font-semibold text-zinc-200">Puede regalar tiempo</FormLabel>
+                          <FormDescription className="text-[10px] text-zinc-400">Acceso a otorgar tiempo libre/gratis</FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="cash_drawer"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-zinc-800 p-3 bg-zinc-900/40">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="text-xs font-semibold text-zinc-200">Puede abrir caja sin venta</FormLabel>
+                          <FormDescription className="text-[10px] text-zinc-400">Apertura de cajon monedero manual</FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 {form.formState.errors.root?.message && (
                   <p className="text-sm text-destructive">
                     {form.formState.errors.root.message}

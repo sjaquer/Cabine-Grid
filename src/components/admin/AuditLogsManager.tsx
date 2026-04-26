@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Pagination from "@/components/ui/pagination";
 import { usePagination } from "@/hooks/usePagination";
-import { AlertTriangle, ShieldAlert } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Trash2, User, Clock } from "lucide-react";
 
 export type AuditLogRecord = {
   id: string;
@@ -163,6 +164,46 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
           <div className="space-y-2 xl:col-span-2">
             <Label>Buscar accion / detalle</Label>
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ej. shift.close, inventory.adjust, delete..." />
+            
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-[10px] h-6 px-2 bg-zinc-900/40 border-rose-500/30 hover:bg-rose-500/10 text-rose-400"
+                onClick={() => { setSeverityFilter('critical'); setSearch(''); }}
+              >
+                🚨 Acciones Críticas
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-[10px] h-6 px-2 bg-zinc-900/40 border-amber-500/30 hover:bg-amber-500/10 text-amber-400"
+                onClick={() => { setSeverityFilter('all'); setSearch('void'); }}
+              >
+                ❌ Anulaciones
+              </Button>
+
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-[10px] h-6 px-2 bg-zinc-900/40 border-blue-500/30 hover:bg-blue-500/10 text-blue-400"
+                onClick={() => { setSeverityFilter('all'); setSearch('drawer'); }}
+              >
+                💵 Apertura de Caja
+              </Button>
+
+              {(severityFilter !== 'all' || search !== '') && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-[10px] h-6 px-2 text-zinc-500 hover:text-zinc-300"
+                  onClick={() => { setSeverityFilter('all'); setSearch(''); }}
+                >
+                  Limpiar filtros
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -249,42 +290,66 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Accion</TableHead>
-                <TableHead>Usuario</TableHead>
-                <TableHead>Local</TableHead>
-                <TableHead>Severidad</TableHead>
-                <TableHead className="text-right">Riesgo</TableHead>
-                <TableHead>Recomendacion</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedItems.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell>{toDate(log).toLocaleString("es-PE")}</TableCell>
-                  <TableCell>
-                    <div className="font-medium">{log.action}</div>
-                    <div className="text-xs text-muted-foreground">{log.target}{log.targetId ? ` / ${log.targetId}` : ""}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div>{log.actor?.email || "No identificado"}</div>
-                    <div className="text-xs text-muted-foreground">{log.actor?.role || "Sin rol"}</div>
-                  </TableCell>
-                  <TableCell>{locationsMap.get(log.locationId || "") || log.locationId || "Sin local"}</TableCell>
-                  <TableCell>
-                    <Badge variant={severityVariant(log.severity)}>{log.severity || "low"}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={(log.anomalyScore || 0) >= 60 ? "destructive" : "secondary"}>{log.anomalyScore || 0}</Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[320px] text-xs text-muted-foreground">{explainRisk(log).action}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="relative border-l border-zinc-800 ml-4 md:ml-6 pl-6 md:pl-8 space-y-6 py-4">
+            {paginatedItems.map((log) => {
+              const isCritical = log.severity === "critical" || log.severity === "high";
+              const isVoid = /void|anular/i.test(log.action);
+              const isDrawer = /drawer|caja/i.test(log.action);
+              
+              return (
+                <div key={log.id} className="relative group">
+                  {/* Timeline Node Indicator */}
+                  <span className={`absolute -left-[31px] md:-left-[37px] top-1.5 flex items-center justify-center w-5 h-5 rounded-full border bg-zinc-950 transition-all ${
+                    isCritical 
+                      ? "border-rose-500/80 text-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.25)]" 
+                      : isVoid 
+                        ? "border-amber-500/80 text-amber-500" 
+                        : isDrawer 
+                          ? "border-blue-500/80 text-blue-500" 
+                          : "border-zinc-700 text-zinc-400"
+                  }`}>
+                    {isCritical ? <AlertTriangle className="w-3 h-3" /> : isVoid ? <Trash2 className="w-3 h-3" /> : isDrawer ? <Clock className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                  </span>
+
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 rounded-xl border border-zinc-900/60 bg-zinc-900/20 p-4 hover:bg-zinc-900/40 transition-all">
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-xs font-bold tracking-tight ${isCritical ? "text-rose-400 font-black" : "text-zinc-200"}`}>
+                          {log.action}
+                        </span>
+                        <Badge variant={severityVariant(log.severity)} className="text-[9px] py-0 px-1.5 h-4">{log.severity || "low"}</Badge>
+                        {(log.anomalyScore || 0) >= 60 && (
+                          <Badge variant="destructive" className="text-[9px] py-0 px-1.5 h-4">{log.anomalyScore} pts</Badge>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-zinc-400 flex flex-wrap items-center gap-1.5">
+                        <span className="text-zinc-300 font-medium">{log.actor?.email || "Operador"}</span>
+                        <span className="text-zinc-600">•</span>
+                        <span>{locationsMap.get(log.locationId || "") || log.locationId || "Local Único"}</span>
+                        <span className="text-zinc-600">•</span>
+                        <span className="text-zinc-500 text-[10px] font-mono">{toDate(log).toLocaleString("es-PE")}</span>
+                      </div>
+
+                      <div className="text-xs text-zinc-300 bg-zinc-950/40 border border-zinc-800/50 rounded-lg p-2.5 mt-2">
+                        <strong className="text-zinc-400">Contexto:</strong> {log.target} {log.targetId && `[${log.targetId}]`}
+                        {log.details && Object.keys(log.details).length > 0 && (
+                          <pre className="text-[10px] text-zinc-500 overflow-x-auto mt-1 max-w-full block bg-zinc-950/60 p-1 rounded">
+                            {JSON.stringify(log.details, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col md:text-right gap-1 self-start md:self-center shrink-0 min-w-[200px]">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Recomendación</span>
+                      <span className="text-xs text-zinc-400 max-w-xs">{explainRisk(log).action}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           {filtered.length > 0 && (
             <Pagination
               currentPage={currentPage}

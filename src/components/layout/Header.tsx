@@ -90,9 +90,12 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
         const preview = await getShiftClosurePreview();
         if (!isMounted || !preview) return;
         setClosurePreview(preview);
-        setCountedCash(String(preview.expectedCash));
-        setCountedYape(String(preview.expectedYape));
-        setCountedOther(String(preview.expectedOther));
+        
+        // Cierre Ciego: Operadores no ven el monton inicial esperado.
+        const isOp = userProfile?.role === 'operator';
+        setCountedCash(isOp ? "" : String(preview.expectedCash));
+        setCountedYape(isOp ? "" : String(preview.expectedYape));
+        setCountedOther(isOp ? "" : String(preview.expectedOther));
       } catch (error) {
         const message = error instanceof Error ? error.message : "No se pudo cargar el cierre de turno.";
         toast({ variant: "destructive", title: message });

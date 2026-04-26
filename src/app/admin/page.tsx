@@ -2,24 +2,22 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, BarChart3, Cpu, FileText, Home, MapPin, Package, ShoppingCart, Users, UserRound } from "lucide-react";
+import { Cpu, FileText, Home, Package, ShoppingCart, Users, UserRound, BarChart3, ShieldAlert, Key, Plus } from "lucide-react";
 import Link from "next/link";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MachineManager from "@/components/admin/MachineManager";
-import LocationManager from "@/components/admin/LocationManager";
 import ProductManager from "@/components/admin/ProductManager";
 import UserManager from "@/components/admin/UserManager";
 import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
 import FinanceReportsManager from "@/components/admin/FinanceReportsManager";
 import AuditLogsManager from "@/components/admin/AuditLogsManager";
 import CustomerManager from "@/components/admin/CustomerManager";
-import type { Customer, Station, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
+import type { Customer, Station, Product, UserProfile, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import {
   addDoc,
   collection,
@@ -27,49 +25,43 @@ import {
   doc,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   limit,
 } from "firebase/firestore";
-import { initializeApp, deleteApp } from "firebase/app";
-import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut } from "firebase/auth";
-import { firebaseConfig } from "@/firebase/config";
-import { logAuditAction, logAuditFailure } from "@/lib/audit-log";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Settings } from "lucide-react";
+import { logAuditAction } from "@/lib/audit-log";
+
+type AdminSection = 'machines' | 'products' | 'staff' | 'customers' | 'finance' | 'logs' | 'closures';
 
 export default function AdminPage() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("machines");
-  const tabsSectionRef = useRef<HTMLDivElement | null>(null);
+  const [activeSection, setActiveSection] = useState<AdminSection>("machines");
+  
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const shouldLoadSales = activeTab === "finance";
-  const shouldLoadAuditLogs = activeTab === "finance" || activeTab === "logs";
-  const shouldLoadClosures = activeTab === "finance" || activeTab === "closures";
-
+  // Load data
   const machinesQuery = useMemoFirebase(() => query(collection(firestore, "stations")), [firestore]);
-  const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
   const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
+  
   const closuresQuery = useMemoFirebase(() => {
-    if (!firestore || !shouldLoadClosures) return null;
+    if (!firestore) return null;
     return query(collection(firestore, "shiftClosures"), limit(50));
-  }, [firestore, shouldLoadClosures]);
+  }, [firestore]);
+
   const salesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, "sales"), limit(50));
   }, [firestore]);
+
   const auditLogsQuery = useMemoFirebase(() => {
-    if (!firestore || !shouldLoadAuditLogs) return null;
+    if (!firestore) return null;
     return query(collection(firestore, "auditLogs"), limit(50));
-  }, [firestore, shouldLoadAuditLogs]);
+  }, [firestore]);
 
   const { data: machinesData } = useCollection<Omit<Station, "id">>(machinesQuery);
-  const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
   const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
@@ -78,13 +70,12 @@ export default function AdminPage() {
   const { data: auditLogsData } = useCollection<any>(auditLogsQuery);
 
   const machines = useMemo(() => (machinesData ?? []) as Station[], [machinesData]);
-  const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
   const products = useMemo(() => (productsData ?? []) as Product[], [productsData]);
   const users = useMemo(
     () =>
-      (usersData ?? []).map((user) => ({
-        ...user,
-        uid: (user as Partial<UserProfile>).uid || user.id,
+      (usersData ?? []).map((u) => ({
+        ...u,
+        uid: (u as Partial<UserProfile>).uid || u.id,
       })) as UserProfile[],
     [usersData]
   );
@@ -96,19 +87,59 @@ export default function AdminPage() {
   const customers = useMemo(() => (customersData ?? []) as Customer[], [customersData]);
   const auditLogs = useMemo(() => (auditLogsData ?? []), [auditLogsData]);
 
-  const todaySales = useMemo(() => {
+  // Financial calculations
+  const todayRevenue = useMemo(() => {
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return sales.filter(s => {
-      const saleTime = s.endTime?.toMillis ? s.endTime.toMillis() : (s.endTime ? new Date(s.endTime as any).getTime() : 0);
-      if (!saleTime) return false;
-      return saleTime >= startOfDay.getTime();
-    });
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return sales
+      .filter((s) => {
+        const saleTime = s.endTime?.toMillis ? s.endTime.toMillis() : 0;
+        return saleTime >= startOfDay;
+      })
+      .reduce((sum, s) => sum + (s.amount || 0), 0);
   }, [sales]);
 
-  const todayRevenue = useMemo(() => {
-    return todaySales.reduce((acc, s) => acc + (s.amount || 0), 0);
-  }, [todaySales]);
+  // Keyboard Navigation (G + key)
+  useEffect(() => {
+    let gPressed = false;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'g') {
+        gPressed = true;
+        setTimeout(() => { gPressed = false; }, 1000); // 1 second window
+        return;
+      }
+
+      if (gPressed) {
+        switch (e.key.toLowerCase()) {
+          case 'c':
+            e.preventDefault();
+            setActiveSection('machines');
+            break;
+          case 'p':
+            e.preventDefault();
+            setActiveSection('products');
+            break;
+          case 's':
+            e.preventDefault();
+            setActiveSection('staff');
+            break;
+          case 'f':
+            e.preventDefault();
+            setActiveSection('finance');
+            break;
+          case 'l':
+            e.preventDefault();
+            setActiveSection('logs');
+            break;
+        }
+        gPressed = false;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const auditActor = {
     id: user?.uid,
@@ -116,17 +147,18 @@ export default function AdminPage() {
     role: userProfile?.role,
   };
 
+  // Operations
   const handleAddMachine = async (machine: Omit<Station, 'id'>) => {
-    await addDoc(collection(firestore, "stations"), machine);
+    await addDoc(collection(firestore, "stations"), { ...machine, locationId: "local-01" });
     await logAuditAction(firestore, {
       action: 'machine.create',
       target: 'machines',
       targetId: machine.name,
-      locationId: machine.locationId,
+      locationId: 'local-01',
       actor: auditActor,
       details: { machine },
     });
-    toast({ title: "Máquina creada" });
+    toast({ title: "Estación agregada exitosamente" });
   };
 
   const handleEditMachine = async (id: string, updates: Partial<Station>) => {
@@ -135,11 +167,11 @@ export default function AdminPage() {
       action: 'machine.update',
       target: 'machines',
       targetId: id,
-      locationId: updates.locationId,
+      locationId: 'local-01',
       actor: auditActor,
       details: { updates },
     });
-    toast({ title: "Máquina actualizada" });
+    toast({ title: "Estación actualizada" });
   };
 
   const handleDeleteMachine = async (id: string) => {
@@ -152,13 +184,10 @@ export default function AdminPage() {
       severity: 'high',
       riskTags: ['destructive-action'],
     });
-    toast({ title: "Máquina eliminada" });
+    toast({ title: "Estación eliminada exitosamente" });
   };
 
-  const handleToggleMachineStatus = async (
-    id: string,
-    status: Station["status"]
-  ) => {
+  const handleToggleMachineStatus = async (id: string, status: Station["status"]) => {
     await updateDoc(doc(firestore, "stations", id), { status });
     await logAuditAction(firestore, {
       action: 'machine.status.update',
@@ -167,609 +196,187 @@ export default function AdminPage() {
       actor: auditActor,
       details: { status },
     });
-    toast({ title: "Estado de máquina actualizado" });
   };
 
-  const handleAddLocation = async (location: Omit<Location, 'id' | 'createdAt'>) => {
-    await addDoc(collection(firestore, "locations"), {
-      ...location,
-      createdAt: serverTimestamp(),
-      updateAt: serverTimestamp(),
-    });
-    await logAuditAction(firestore, {
-      action: 'location.create',
-      target: 'locations',
-      targetId: location.name,
-      actor: auditActor,
-      details: { location },
-    });
-    toast({ title: "Local creado" });
-  };
-
-  const handleEditLocation = async (id: string, updates: Partial<Location>) => {
-    await updateDoc(doc(firestore, "locations", id), {
-      ...updates,
-      updateAt: serverTimestamp(),
-    });
-    await logAuditAction(firestore, {
-      action: 'location.update',
-      target: 'locations',
-      targetId: id,
-      actor: auditActor,
-      details: { updates },
-    });
-    toast({ title: "Local actualizado" });
-  };
-
-  const handleDeleteLocation = async (id: string) => {
-    await deleteDoc(doc(firestore, "locations", id));
-    await logAuditAction(firestore, {
-      action: 'location.delete',
-      target: 'locations',
-      targetId: id,
-      actor: auditActor,
-      severity: 'high',
-      riskTags: ['destructive-action'],
-    });
-    toast({ title: "Local eliminado" });
-  };
-
-  const handleAddProduct = async (product: Omit<Product, 'id' | 'createdAt'>) => {
-    await addDoc(collection(firestore, "products"), {
-      ...product,
-      createdAt: serverTimestamp(),
-    });
-    await logAuditAction(firestore, {
-      action: 'product.create',
-      target: 'products',
-      targetId: product.name,
-      actor: auditActor,
-      details: { product },
-    });
-    toast({ title: "Producto creado" });
-  };
-
-  const handleEditProduct = async (id: string, updates: Partial<Product>) => {
-    await updateDoc(doc(firestore, "products", id), updates);
-    await logAuditAction(firestore, {
-      action: 'product.update',
-      target: 'products',
-      targetId: id,
-      actor: auditActor,
-      details: { updates },
-    });
-    toast({ title: "Producto actualizado" });
-  };
-
-  const handleDeleteProduct = async (id: string) => {
-    await deleteDoc(doc(firestore, "products", id));
-    await logAuditAction(firestore, {
-      action: 'product.delete',
-      target: 'products',
-      targetId: id,
-      actor: auditActor,
-      severity: 'high',
-      riskTags: ['destructive-action'],
-    });
-    toast({ title: "Producto eliminado" });
-  };
-
-  const handleAddCustomer = async (customer: Omit<Customer, 'id'>) => {
-    const code = customer.customerCode.trim().toUpperCase();
-    const name = customer.fullName.trim();
-    const duplicated = customers.some((item) => item.customerCode.trim().toUpperCase() === code);
-
-    if (duplicated) {
-      throw new Error("Ya existe un cliente con ese codigo");
-    }
-
-    const docRef = await addDoc(collection(firestore, "customers"), {
-      customerCode: code,
-      fullName: name,
-      ...(typeof customer.age === "number" ? { age: customer.age } : {}),
-      ...(customer.phone ? { phone: customer.phone } : {}),
-      ...(customer.email ? { email: customer.email } : {}),
-      favoriteGames: customer.favoriteGames ?? [],
-      isActive: customer.isActive ?? true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      createdBy: {
-        id: user?.uid,
-        email: user?.email,
-      },
-      metrics: {
-        totalSessions: 0,
-        totalMinutesRented: 0,
-        totalProductsBought: 0,
-        totalSpent: 0,
-        machineUsage: {},
-        visitsByWeekday: {},
-        visitHours: {},
-      },
-    });
-
-    await logAuditAction(firestore, {
-      action: 'customer.create',
-      target: 'customers',
-      targetId: docRef.id,
-      actor: auditActor,
-      details: {
-        customerCode: code,
-        fullName: name,
-      },
-    });
-    toast({ title: "Cliente creado" });
-  };
-
-  const handleEditCustomer = async (id: string, updates: Partial<Customer>) => {
-    const nextCode = updates.customerCode?.trim().toUpperCase();
-    if (nextCode) {
-      const duplicated = customers.some(
-        (item) => item.id !== id && item.customerCode.trim().toUpperCase() === nextCode
-      );
-      if (duplicated) {
-        throw new Error("Ya existe un cliente con ese codigo");
-      }
-    }
-
-    await updateDoc(doc(firestore, "customers", id), {
-      ...updates,
-      ...(nextCode ? { customerCode: nextCode } : {}),
-      ...(updates.fullName ? { fullName: updates.fullName.trim() } : {}),
-      updatedAt: serverTimestamp(),
-    });
-    await logAuditAction(firestore, {
-      action: 'customer.update',
-      target: 'customers',
-      targetId: id,
-      actor: auditActor,
-      details: { updates: { ...updates, ...(nextCode ? { customerCode: nextCode } : {}) } },
-    });
-    toast({ title: "Cliente actualizado" });
-  };
-
-  const handleDeleteCustomer = async (id: string) => {
-    await deleteDoc(doc(firestore, "customers", id));
-    await logAuditAction(firestore, {
-      action: 'customer.delete',
-      target: 'customers',
-      targetId: id,
-      actor: auditActor,
-      severity: 'high',
-      riskTags: ['destructive-action'],
-    });
-    toast({ title: "Cliente eliminado" });
-  };
-
-  const handleChangeUserRole = async (userId: string, role: UserRole, locationIds: string[]) => {
-    await updateDoc(doc(firestore, "users", userId), {
-      role,
-      locationIds,
-      updateAt: serverTimestamp(),
-    });
-    await logAuditAction(firestore, {
-      action: 'user.role.update',
-      target: 'users',
-      targetId: userId,
-      actor: auditActor,
-      details: { role, locationIds },
-    });
-    toast({ title: "Rol actualizado" });
-  };
-
-  const handleDeactivateUser = async (userId: string) => {
-    await updateDoc(doc(firestore, "users", userId), {
-      isActive: false,
-      updateAt: serverTimestamp(),
-    });
-    await logAuditAction(firestore, {
-      action: 'user.deactivate',
-      target: 'users',
-      targetId: userId,
-      actor: auditActor,
-      details: { isActive: false },
-    });
-    toast({ title: "Usuario desactivado" });
-  };
-
-  const handleCreateUser = async ({
-    name,
-    email,
-    password,
-    role,
-  }: {
-    name: string;
-    email: string;
-    password: string;
-    role: UserRole;
-  }) => {
-    if (userProfile?.role !== "admin") {
-      throw new Error("Solo un administrador puede crear cuentas.");
-    }
-
-    const appName = `cabine-grid-admin-create-${Date.now()}`;
-    const secondaryApp = initializeApp(firebaseConfig, appName);
-    const secondaryAuth = getAuth(secondaryApp);
-
-    try {
-      const credential = await createUserWithEmailAndPassword(secondaryAuth, email.trim(), password);
-      try {
-        await setDoc(doc(firestore, "users", credential.user.uid), {
-          uid: credential.user.uid,
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          role,
-          isActive: true,
-          createdAt: serverTimestamp(),
-          updateAt: serverTimestamp(),
-        });
-      } catch (profileError) {
-        await deleteUser(credential.user).catch(() => undefined);
-        throw profileError;
-      }
-
-      toast({
-        title: "Usuario creado",
-        description: `${name.trim()} fue registrado correctamente.`,
-      });
-      await logAuditAction(firestore, {
-        action: 'user.create',
-        target: 'users',
-        targetId: credential.user.uid,
-        actor: auditActor,
-        details: { email: email.trim().toLowerCase(), name: name.trim(), role },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo crear el usuario.";
-      throw new Error(message);
-    } finally {
-      await signOut(secondaryAuth).catch(() => undefined);
-      await deleteApp(secondaryApp).catch(() => undefined);
-    }
-  };
-
-  const handleReopenShift = async (closureId: string) => {
-    if (userProfile?.role !== "admin") {
-      toast({ variant: "destructive", title: "Solo admin puede reabrir cierres" });
-      return;
-    }
-    await updateDoc(doc(firestore, "shiftClosures", closureId), {
-      status: "reopened",
-      reopenedAt: serverTimestamp(),
-      reopenedBy: {
-        id: user?.uid || null,
-        email: user?.email || null,
-      },
-    });
-    await logAuditAction(firestore, {
-      action: 'shift.reopen',
-      target: 'shiftClosures',
-      targetId: closureId,
-      actor: auditActor,
-    });
-    toast({ title: "Cierre reabierto" });
-  };
-
-  const handleQuickActionSelect = (tab: string) => {
-    setActiveTab(tab);
-    requestAnimationFrame(() => {
-      tabsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
+  const sidebarItems = [
+    { id: 'machines' as AdminSection, label: 'Estaciones', icon: Cpu },
+    { id: 'products' as AdminSection, label: 'Productos', icon: ShoppingCart },
+    { id: 'staff' as AdminSection, label: 'Personal', icon: Users, adminOnly: true },
+    { id: 'customers' as AdminSection, label: 'Clientes CRM', icon: UserRound },
+    { id: 'finance' as AdminSection, label: 'Finanzas', icon: BarChart3 },
+    { id: 'logs' as AdminSection, label: 'Auditoría', icon: ShieldAlert, adminOnly: true },
+    { id: 'closures' as AdminSection, label: 'Turnos', icon: Key },
+  ];
 
   return (
     <RoleGuard requiredRoles={["admin", "manager"]}>
-      <div className="app-shell app-enter">
-        {/* Header Profesional Mejorado */}
-        <header className="app-sticky-header">
-          <div className="app-container">
-            {/* Navegación Principal */}
-            <div className="app-header-row">
-              <div className="flex items-center gap-3">
-                <div className="brand-chip">
-                  <div className="brand-chip-icon">
-                    <Cpu className="w-5 h-5 text-primary-foreground" />
-                  </div>
-                  <span className="font-headline font-bold text-lg">Cabine Grid</span>
-                </div>
-                <div className="hidden lg:block h-6 w-px bg-border/50"></div>
-                <div className="flex flex-col gap-0.5">
-                  <h1 className="text-xl font-headline font-bold">Panel Administrativo</h1>
-                  <p className="text-xs text-muted-foreground">Gestión integral del sistema</p>
-                </div>
-              </div>
-
-              {/* Botones de Navegación Secundaria - Reorganizados */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <Link href="/">
-                  <Button variant="outline" size="sm" className="gap-2 h-9 whitespace-nowrap">
-                    <Home className="w-4 h-4" />
-                    <span className="hidden sm:inline">Dashboard</span>
-                  </Button>
-                </Link>
-                <Link href="/inventario">
-                  <Button variant="outline" size="sm" className="gap-2 h-9 whitespace-nowrap">
-                    <Package className="w-4 h-4" />
-                    <span className="hidden sm:inline">Inventario</span>
-                  </Button>
-                </Link>
-              </div>
+      <div className="min-h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col">
+        
+        {/* Hero KPI Command Bar */}
+        <header className="w-full border-b border-zinc-800 bg-zinc-900/40 backdrop-blur-xl px-6 py-4">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div>
+              <h1 className="text-xl font-headline font-bold tracking-tight">Panel de Control de Dueño</h1>
+              <p className="text-xs text-zinc-400">Gestión táctica completa • Local Único</p>
             </div>
 
-            {/* Estadísticas Gerenciales (Dueño) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t border-slate-900">
-              <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between shadow-md">
-                <div>
-                  <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Ingresos del Día</span>
-                  <h3 className="text-2xl font-black font-mono text-emerald-400 tracking-tight mt-1">{formatCurrency(todayRevenue)}</h3>
-                </div>
-                <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl">
-                  <ShoppingCart className="w-6 h-6" />
-                </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto flex-shrink-0">
+              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Caja Hoy</span>
+                <span className="text-sm font-black font-mono text-emerald-500 mt-0.5">
+                  {formatCurrency(todayRevenue)}
+                </span>
+              </div>
+              
+              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Ventas</span>
+                <span className="text-sm font-black font-mono text-primary mt-0.5">
+                  {sales.length} ops
+                </span>
               </div>
 
-              <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between shadow-md">
-                <div>
-                  <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Ventas Hoy</span>
-                  <h3 className="text-2xl font-black font-mono text-primary tracking-tight mt-1">{todaySales.length}</h3>
-                </div>
-                <div className="p-3 bg-primary/10 text-primary rounded-xl">
-                  <FileText className="w-6 h-6" />
-                </div>
+              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Cabinas</span>
+                <span className="text-sm font-black font-mono text-blue-400 mt-0.5">
+                  {machines.length} pcs
+                </span>
               </div>
 
-              <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 flex items-center justify-between shadow-md">
-                <div>
-                  <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">Módulos Activos</span>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">{machines.length} Cabinas</Badge>
-                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">{products.length} Items</Badge>
-                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">{customers.length} Clientes</Badge>
-                  </div>
-                </div>
-                <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl">
-                  <Cpu className="w-6 h-6" />
-                </div>
+              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Comunidad</span>
+                <span className="text-sm font-black font-mono text-amber-500 mt-0.5">
+                  {customers.length} users
+                </span>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Contenido Principal */}
-        <main className="app-container py-8">
-          <div className="mb-8">
-            <div className="app-stagger grid grid-cols-1 md:grid-cols-4 gap-4">
-                <QuickActionCard
-                  title="Cabinas"
-                  description="Gestiona máquinas y especificaciones"
-                  icon={<Cpu className="w-5 h-5" />}
-                  count={machines.length}
-                  tabValue="machines"
-                  onSelectTab={handleQuickActionSelect}
-                />
-                <QuickActionCard
-                  title="Locales"
-                  description="Administra locales de negocio"
-                  icon={<MapPin className="w-5 h-5" />}
-                  count={locations.length}
-                  tabValue="locations"
-                  onSelectTab={handleQuickActionSelect}
-                />
-                <QuickActionCard
-                  title="Productos"
-                  description="Inventario y precios"
-                  icon={<ShoppingCart className="w-5 h-5" />}
-                  count={products.length}
-                  tabValue="products"
-                  onSelectTab={handleQuickActionSelect}
-                />
-                <QuickActionCard
-                  title="Clientes"
-                  description="CRM y fidelizacion"
-                  icon={<UserRound className="w-5 h-5" />}
-                  count={customers.length}
-                  tabValue="customers"
-                  onSelectTab={handleQuickActionSelect}
-                />
-                <QuickActionCard
-                  title="Usuarios"
-                  description="Roles y permisos"
-                  icon={<Users className="w-5 h-5" />}
-                  count={users.length}
-                  tabValue={userProfile?.role === "admin" ? "users" : null}
-                  onSelectTab={handleQuickActionSelect}
-                />
-            </div>
-          </div>
+        {/* Workspace: Sidebar + Content Area */}
+        <div className="flex-1 flex overflow-hidden w-full">
+          {/* Internal Sidebar */}
+          <aside className="w-52 border-r border-zinc-900 bg-zinc-950 flex flex-col gap-1 p-3 shrink-0 hidden md:flex">
+            {sidebarItems.map((item) => {
+              if (item.adminOnly && userProfile?.role !== 'admin') return null;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSection(item.id)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
+                    activeSection === item.id
+                      ? "bg-zinc-900 text-primary shadow-[inset_0_0_10px_rgba(234,88,12,0.15)] border border-zinc-800/40"
+                      : "text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </aside>
 
-          <div ref={tabsSectionRef}>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="bg-card/80 rounded-lg border border-border/50 p-4 mb-6">
-              <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 bg-transparent h-auto">
-                <TabTriggerWithIcon value="machines" icon={<Cpu className="w-4 h-4" />} label="Cabinas" />
-                <TabTriggerWithIcon value="locations" icon={<MapPin className="w-4 h-4" />} label="Locales" />
-                <TabTriggerWithIcon value="products" icon={<ShoppingCart className="w-4 h-4" />} label="Productos" />
-                <TabTriggerWithIcon value="customers" icon={<UserRound className="w-4 h-4" />} label="Clientes" />
-                <TabTriggerWithIcon value="finance" icon={<BarChart3 className="w-4 h-4" />} label="Finanzas" />
-                <TabTriggerWithIcon value="logs" icon={<FileText className="w-4 h-4" />} label="Auditoría" />
-                <TabTriggerWithIcon value="closures" icon={<Settings className="w-4 h-4" />} label="Cierres" />
-                {userProfile?.role === "admin" && (
-                  <TabTriggerWithIcon value="users" icon={<Users className="w-4 h-4" />} label="Usuarios" />
-                )}
-              </TabsList>
-            </div>
+          {/* Workspace Content Section */}
+          <main className="flex-1 p-6 overflow-y-auto bg-zinc-950">
+            {activeSection === 'machines' && (
+              <MachineManager
+                machines={machines}
+                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                onAdd={handleAddMachine}
+                onEdit={handleEditMachine}
+                onDelete={handleDeleteMachine}
+                onToggleStatus={handleToggleMachineStatus}
+              />
+            )}
 
-            {/* Contenido de Tabs */}
-            <div className="space-y-6">
-              <TabsContent value="machines">
-                <MachineManager
-                  machines={machines}
-                  locations={locations}
-                  onAdd={handleAddMachine}
-                  onEdit={handleEditMachine}
-                  onDelete={handleDeleteMachine}
-                  onToggleStatus={handleToggleMachineStatus}
-                />
-              </TabsContent>
+            {activeSection === 'products' && (
+              <ProductManager
+                products={products}
+                onAdd={async (p: any) => {
+                  await addDoc(collection(firestore, "products"), { ...p, isActive: true, createdAt: serverTimestamp() });
+                  toast({ title: "Producto guardado" });
+                }}
+                onEdit={async (id: string, p: any) => {
+                  await updateDoc(doc(firestore, "products", id), p);
+                  toast({ title: "Producto actualizado" });
+                }}
+                onDelete={async (id: string) => {
+                  await deleteDoc(doc(firestore, "products", id));
+                  toast({ title: "Producto eliminado" });
+                }}
+              />
+            )}
 
-              <TabsContent value="locations">
-                <LocationManager
-                  locations={locations}
-                  onAdd={handleAddLocation}
-                  onEdit={handleEditLocation}
-                  onDelete={handleDeleteLocation}
-                />
-              </TabsContent>
+            {activeSection === 'staff' && userProfile?.role === 'admin' && (
+              <UserManager
+                users={users}
+                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                onCreateUser={async (u: any) => {
+                  toast({ title: "Crear staff mediante consola de seguridad" });
+                }}
+                onChangeRole={async (id: string, role: any, locationIds: string[], permissions: string[]) => {
+                  await updateDoc(doc(firestore, "users", id), { role, locationIds, permissions });
+                  toast({ title: "Permisos de Staff actualizados" });
+                }}
+                onDeactivate={async (id: string) => {
+                  await updateDoc(doc(firestore, "users", id), { isActive: false });
+                  toast({ title: "Usuario desactivado" });
+                }}
+              />
+            )}
 
-              <TabsContent value="products">
-                <ProductManager
-                  products={products}
-                  onAdd={handleAddProduct}
-                  onEdit={handleEditProduct}
-                  onDelete={handleDeleteProduct}
-                />
-              </TabsContent>
+            {activeSection === 'customers' && (
+              <CustomerManager 
+                customers={customers}
+                onAdd={async (c) => { 
+                  await addDoc(collection(firestore, "customers"), c); 
+                  toast({ title: "Cliente registrado" });
+                }}
+                onEdit={async (id, c) => { 
+                  await updateDoc(doc(firestore, "customers", id), c); 
+                  toast({ title: "Cliente actualizado" });
+                }}
+                onDelete={async (id) => { 
+                  await deleteDoc(doc(firestore, "customers", id)); 
+                  toast({ title: "Cliente eliminado" });
+                }}
+              />
+            )}
 
-              <TabsContent value="customers">
-                <CustomerManager
-                  customers={customers}
-                  onAdd={handleAddCustomer}
-                  onEdit={handleEditCustomer}
-                  onDelete={handleDeleteCustomer}
-                />
-              </TabsContent>
+            {activeSection === 'finance' && (
+              <FinanceReportsManager 
+                sales={sales} 
+                machines={machines}
+                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                users={users}
+                auditLogs={auditLogs}
+                closures={closures}
+              />
+            )}
 
-              <TabsContent value="finance">
-                <FinanceReportsManager
-                  sales={sales}
-                  machines={machines}
-                  locations={locations}
-                  users={users}
-                  auditLogs={auditLogs}
-                  closures={closures}
-                />
-              </TabsContent>
+            {activeSection === 'logs' && userProfile?.role === 'admin' && (
+              <AuditLogsManager 
+                logs={auditLogs} 
+                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                users={users}
+              />
+            )}
 
-              <TabsContent value="logs">
-                <AuditLogsManager
-                  logs={auditLogs}
-                  locations={locations}
-                  users={users}
-                />
-              </TabsContent>
+            {activeSection === 'closures' && (
+              <ShiftClosureManager 
+                closures={closures} 
+                userProfile={userProfile}
+                onReopenShift={async (id) => {
+                  await updateDoc(doc(firestore, "shiftClosures", id), { status: 'reopened', reopenedAt: serverTimestamp() });
+                  toast({ title: "Turno reabierto exitosamente" });
+                }}
+              />
+            )}
+          </main>
+        </div>
 
-              <TabsContent value="closures">
-                <ShiftClosureManager
-                  closures={closures}
-                  userProfile={userProfile}
-                  onReopenShift={handleReopenShift}
-                />
-              </TabsContent>
-
-              {userProfile?.role === "admin" && (
-                <TabsContent value="users">
-                  <UserManager
-                    users={users}
-                    locations={locations}
-                    onCreateUser={handleCreateUser}
-                    onChangeRole={handleChangeUserRole}
-                    onDeactivate={handleDeactivateUser}
-                  />
-                </TabsContent>
-              )}
-            </div>
-          </Tabs>
-          </div>
-        </main>
       </div>
     </RoleGuard>
-  );
-}
-
-// Componentes Auxiliares para mejor diseño
-function StatQuick({ label, value, icon }: { label: string; value: number; icon?: React.ReactNode }) {
-  return (
-    <div className="surface-stat">
-      {icon && <span className="text-primary flex-shrink-0">{icon}</span>}
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground truncate">{label}</p>
-        <p className="text-sm font-bold">{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function QuickActionCard({ 
-  title, 
-  description, 
-  icon, 
-  count,
-  tabValue,
-  onSelectTab,
-}: { 
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  count: number;
-  tabValue: string | null;
-  onSelectTab: (tab: string) => void;
-}) {
-  const isDisabled = !tabValue;
-
-  const handleOpenTab = () => {
-    if (!tabValue) return;
-    onSelectTab(tabValue);
-  };
-
-  return (
-    <Card
-      className={`group overflow-hidden transition-all ${isDisabled ? "opacity-70" : "cursor-pointer hover:shadow-lg hover:border-primary/50"}`}
-      onClick={handleOpenTab}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          handleOpenTab();
-        }
-      }}
-      role="button"
-      tabIndex={isDisabled ? -1 : 0}
-      aria-disabled={isDisabled}
-    >
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="rounded-lg bg-primary/10 p-3 text-primary group-hover:bg-primary/20 transition-colors">
-            {icon}
-          </div>
-          <Badge variant="secondary" className="text-xs">{count} items</Badge>
-        </div>
-        <h3 className="font-bold text-lg mb-1">{title}</h3>
-        <p className="text-sm text-muted-foreground mb-4">{description}</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full gap-2 opacity-75 group-hover:opacity-100 transition-opacity justify-start"
-          onClick={(event) => {
-            event.stopPropagation();
-            handleOpenTab();
-          }}
-          disabled={isDisabled}
-        >
-          <span>Ir a {title.toLowerCase()}</span>
-          <ArrowLeft className="w-4 h-4 rotate-180" />
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TabTriggerWithIcon({ value, icon, label }: { value: string; icon: React.ReactNode; label: string }) {
-  return (
-    <TabsTrigger 
-      value={value}
-      className="flex items-center gap-2 px-3 py-2 text-xs md:text-sm data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-md transition-all"
-    >
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
-    </TabsTrigger>
   );
 }
