@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/firebase';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import SidebarWrapper from '@/components/layout/SidebarWrapper';
 
 export const metadata: Metadata = {
   title: 'Cabine Grid',
@@ -47,7 +48,7 @@ export default function RootLayout({
       <body className="font-body antialiased text-foreground">
         <FirebaseClientProvider>
           <AuthProvider>
-            {children}
+            <SidebarWrapper>{children}</SidebarWrapper>
           </AuthProvider>
         </FirebaseClientProvider>
         <Toaster />

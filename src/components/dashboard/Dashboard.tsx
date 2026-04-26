@@ -515,13 +515,7 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell app-enter flex h-screen flex-col">
-      <Header 
-        dailySales={dailySales}
-        availableMachines={availableMachines}
-        occupiedMachines={activeMachines}
-        onHistoryClick={() => setHistorySheetOpen(true)}
-        userProfile={userProfile}
-      />
+      {/* Eliminado Header Superior Tradicional */}
 
       <main className="app-container flex-1 overflow-hidden py-3 sm:py-4">
         <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
