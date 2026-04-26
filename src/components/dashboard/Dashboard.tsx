@@ -70,14 +70,7 @@ export default function Dashboard() {
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(false);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4 p-8 animate-pulse">
-        <Skeleton className="h-10 w-[250px]" />
-        <Skeleton className="h-[400px] w-full" />
-      </div>
-    );
-  }
+
 
 
   const handleCardAction = useCallback((machine: Machine) => {
@@ -519,6 +512,15 @@ export default function Dashboard() {
       )}
     </div>
   );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-8 animate-pulse">
+        <Skeleton className="h-10 w-[250px]" />
+        <Skeleton className="h-[400px] w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell app-enter flex h-screen flex-col">
