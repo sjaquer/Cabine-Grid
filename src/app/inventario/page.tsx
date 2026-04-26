@@ -606,20 +606,6 @@ export default function InventoryPage() {
                   <p className="text-xs text-muted-foreground">Control de stock por local</p>
                 </div>
               </div>
-              <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
-                <Link href="/">
-                  <Button variant="outline" size="sm" className="h-9 gap-2 whitespace-nowrap">
-                    <Home className="w-4 h-4" />
-                    <span className="hidden sm:inline">Dashboard</span>
-                  </Button>
-                </Link>
-                <Link href="/admin">
-                  <Button variant="outline" size="sm" className="h-9 gap-2 whitespace-nowrap">
-                    <Settings className="w-4 h-4" />
-                    <span className="hidden sm:inline">Administración</span>
-                  </Button>
-                </Link>
-              </div>
             </div>
 
             {/* Stats rápidas en el header */}
