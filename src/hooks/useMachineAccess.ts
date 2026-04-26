@@ -1,15 +1,15 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { Machine, UserProfile } from '@/lib/types';
+import type { Station, UserProfile } from '@/lib/types';
 
 export function canAccessMachine(
-  machine: Machine | null,
+  station: Station | null,
   userProfile: UserProfile | null,
 ): boolean {
-  if (!machine || !userProfile) return false;
+  if (!station || !userProfile) return false;
 
-  // Admins and managers can access all machines
+  // Admins and managers can access all stations
   if (userProfile.role === 'admin' || userProfile.role === 'manager') {
     return true;
   }
@@ -21,56 +21,56 @@ export function canAccessMachine(
     return true;
   }
 
-  // Operators can only access machines in their assigned locations
-  if (machine.locationId) {
-    return userLocationIds.includes(machine.locationId);
+  // Operators can only access stations in their assigned locations
+  if (station.locationId) {
+    return userLocationIds.includes(station.locationId);
   }
 
-  // Machines without locationId are accessible to anyone
+  // Stations without locationId are accessible to anyone
   return true;
 }
 
 /**
- * Hook to validate and filter machines that the user has access to
+ * Hook to validate and filter stations that the user has access to
  * based on their role and assigned locations
  */
 export function useAccessibleMachines(
-  machines: Machine[],
+  stations: Station[],
   userProfile: UserProfile | null,
 ): {
-  accessible: Machine[];
-  forbidden: Machine[];
+  accessible: Station[];
+  forbidden: Station[];
   canAccessAll: boolean;
 } {
   return useMemo(() => {
     if (!userProfile) {
-      return { accessible: [], forbidden: machines, canAccessAll: false };
+      return { accessible: [], forbidden: stations, canAccessAll: false };
     }
 
-    // Admins and managers can see all machines
+    // Admins and managers can see all stations
     if (userProfile.role === 'admin' || userProfile.role === 'manager') {
-      return { accessible: machines, forbidden: [], canAccessAll: true };
+      return { accessible: stations, forbidden: [], canAccessAll: true };
     }
 
-    // Operators can only see machines in their assigned locations
+    // Operators can only see stations in their assigned locations
     const userLocationIds = userProfile.locationIds ?? [];
 
     if (userLocationIds.length === 0) {
       // If no locations assigned, can see all
-      return { accessible: machines, forbidden: [], canAccessAll: true };
+      return { accessible: stations, forbidden: [], canAccessAll: true };
     }
 
-    const accessible: Machine[] = [];
-    const forbidden: Machine[] = [];
+    const accessible: Station[] = [];
+    const forbidden: Station[] = [];
 
-    machines.forEach((machine) => {
-      if (machine.locationId && userLocationIds.includes(machine.locationId)) {
-        accessible.push(machine);
-      } else if (machine.locationId) {
-        forbidden.push(machine);
+    stations.forEach((station) => {
+      if (station.locationId && userLocationIds.includes(station.locationId)) {
+        accessible.push(station);
+      } else if (station.locationId) {
+        forbidden.push(station);
       } else {
-        // Machines without locationId are accessible to anyone
-        accessible.push(machine);
+        // Stations without locationId are accessible to anyone
+        accessible.push(station);
       }
     });
 
@@ -79,15 +79,15 @@ export function useAccessibleMachines(
       forbidden,
       canAccessAll: false,
     };
-  }, [machines, userProfile]);
+  }, [stations, userProfile]);
 }
 
 /**
- * Hook to check if user can access a specific machine
+ * Hook to check if user can access a specific station
  */
 export function useCanAccessMachine(
-  machine: Machine | null,
+  station: Station | null,
   userProfile: UserProfile | null,
 ): boolean {
-  return useMemo(() => canAccessMachine(machine, userProfile), [machine, userProfile]);
+  return useMemo(() => canAccessMachine(station, userProfile), [station, userProfile]);
 }

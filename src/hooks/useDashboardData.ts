@@ -3,18 +3,18 @@ import { query, collection, where, Timestamp, doc, writeBatch } from "firebase/f
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { setShiftLocation } from "@/lib/shift-session";
 import { useAccessibleMachines } from "@/hooks/useMachineAccess";
-import type { Machine, Location, Product, Customer, Inventory, Sale } from "@/lib/types";
+import type { Station, Location, Product, Customer, Inventory, Sale } from "@/lib/types";
 
 export function useDashboardData() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
 
-  const machinesQuery = useMemoFirebase(() => {
+  const stationsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, "machines"));
+    return query(collection(firestore, "stations"));
   }, [firestore]);
   
-  const { data: machinesData, isLoading: machinesLoading } = useCollection<Omit<Machine, 'id'>>(machinesQuery);
+  const { data: stationsData, isLoading: stationsLoading } = useCollection<Omit<Station, 'id'>>(stationsQuery);
 
   const locationsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -59,16 +59,17 @@ export function useDashboardData() {
     return result;
   }, [inventoryData]);
 
-  const machines = useMemo(() => {
-    if (!machinesData) return [];
-    return [...machinesData].sort((a, b) => {
+  const stations = useMemo(() => {
+    if (!stationsData) return [];
+    return [...stationsData].sort((a, b) => {
       const numA = parseInt(a.name.split(' ')[1] || '0', 10);
       const numB = parseInt(b.name.split(' ')[1] || '0', 10);
       return numA - numB;
     });
-  }, [machinesData]);
+  }, [stationsData]);
 
-  const { accessible: accessibleMachines } = useAccessibleMachines(machines, userProfile);
+  // Note: for permissions we still use useAccessibleMachines, but rename in useDashboardData
+  const { accessible: accessibleStations } = useAccessibleMachines(stations, userProfile);
 
   const locations = useMemo(() => {
     return (locationsData ?? [])
@@ -98,7 +99,7 @@ export function useDashboardData() {
     return locations.filter((location) => profileLocationIds.includes(location.id));
   }, [locations, userProfile?.locationIds, userProfile?.role]);
 
-  const hasMachinesWithLocation = useMemo(() => accessibleMachines.some((machine) => Boolean(machine.locationId)), [accessibleMachines]);
+  const hasStationsWithLocation = useMemo(() => accessibleStations.some((station) => Boolean(station.locationId)), [accessibleStations]);
 
   useEffect(() => {
     if (availableLocations.length === 0) {
@@ -119,24 +120,24 @@ export function useDashboardData() {
     setShiftLocation(user.uid, selectedLocationId);
   }, [user?.uid, selectedLocationId]);
 
-  const visibleMachines = useMemo(() => {
-    if (!selectedLocationId || !hasMachinesWithLocation) {
-      return accessibleMachines;
+  const visibleStations = useMemo(() => {
+    if (!selectedLocationId || !hasStationsWithLocation) {
+      return accessibleStations;
     }
-    return accessibleMachines.filter((machine) => machine.locationId === selectedLocationId);
-  }, [accessibleMachines, selectedLocationId, hasMachinesWithLocation]);
+    return accessibleStations.filter((station) => station.locationId === selectedLocationId);
+  }, [accessibleStations, selectedLocationId, hasStationsWithLocation]);
 
-  const [machineViewFilter, setMachineViewFilter] = useState<"active" | "all" | "available">("active");
+  const [stationViewFilter, setStationViewFilter] = useState<"active" | "all" | "available">("active");
 
-  const filteredMachines = useMemo(() => {
-    if (machineViewFilter === "active") {
-      return visibleMachines.filter((machine) => machine.status === "occupied" || machine.status === "warning");
+  const filteredStations = useMemo(() => {
+    if (stationViewFilter === "active") {
+      return visibleStations.filter((station) => station.status === "occupied" || station.status === "warning");
     }
-    if (machineViewFilter === "available") {
-      return visibleMachines.filter((machine) => machine.status === "available");
+    if (stationViewFilter === "available") {
+      return visibleStations.filter((station) => station.status === "available");
     }
-    return visibleMachines;
-  }, [visibleMachines, machineViewFilter]);
+    return visibleStations;
+  }, [visibleStations, stationViewFilter]);
 
   const salesQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -162,41 +163,41 @@ export function useDashboardData() {
 
   const dailySales = visibleSales.reduce((sum, sale) => sum + sale.amount, 0);
 
-  // Prepaid machine time warning interval
+  // Prepaid station time warning interval
   useEffect(() => {
-    if (machinesLoading || !firestore) return;
+    if (stationsLoading || !firestore) return;
     
     const interval = setInterval(() => {
-      machines.forEach(m => {
-        if (m.session?.usageMode === 'prepaid' && (m.status === 'occupied' || m.status === 'warning')) {
-            const { startTime, prepaidHours } = m.session;
+      stations.forEach(s => {
+        if (s.session?.usageMode === 'prepaid' && (s.status === 'occupied' || s.status === 'warning')) {
+            const { startTime, prepaidHours } = s.session;
             const prepaidSeconds = (prepaidHours || 0) * 3600;
             const elapsedSeconds = (Date.now() - startTime) / 1000;
             const remainingSeconds = prepaidSeconds - elapsedSeconds;
 
-            if (remainingSeconds <= 300 && remainingSeconds > 0 && m.status !== 'warning') {
-              const machineRef = doc(firestore, 'machines', m.id);
+            if (remainingSeconds <= 300 && remainingSeconds > 0 && s.status !== 'warning') {
+              const stationRef = doc(firestore, 'stations', s.id);
               const batch = writeBatch(firestore);
-              batch.update(machineRef, { status: 'warning' });
-              batch.commit().catch(e => console.error("Error updating machine status:", e));
-            } else if (remainingSeconds > 300 && m.status === 'warning') {
-              const machineRef = doc(firestore, 'machines', m.id);
+              batch.update(stationRef, { status: 'warning' });
+              batch.commit().catch(e => console.error("Error updating station status:", e));
+            } else if (remainingSeconds > 300 && s.status === 'warning') {
+              const stationRef = doc(firestore, 'stations', s.id);
               const batch = writeBatch(firestore);
-              batch.update(machineRef, { status: 'occupied' });
-              batch.commit().catch(e => console.error("Error updating machine status:", e));
+              batch.update(stationRef, { status: 'occupied' });
+              batch.commit().catch(e => console.error("Error updating station status:", e));
             }
         }
       });
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [machines, firestore, machinesLoading]);
+  }, [stations, firestore, stationsLoading]);
 
   return {
-    machines,
-    accessibleMachines,
-    visibleMachines,
-    filteredMachines,
+    stations,
+    accessibleStations,
+    visibleStations,
+    filteredStations,
     locations,
     availableLocations,
     selectedLocationId,
@@ -207,9 +208,9 @@ export function useDashboardData() {
     inventoryByProduct,
     visibleSales,
     dailySales,
-    isLoading: machinesLoading || locationsLoading || productsLoading || customersLoading || inventoryLoading,
-    machineViewFilter,
-    setMachineViewFilter,
+    isLoading: stationsLoading || locationsLoading || productsLoading || customersLoading || inventoryLoading,
+    stationViewFilter,
+    setStationViewFilter,
     firestore,
     user,
     userProfile,

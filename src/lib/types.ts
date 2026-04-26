@@ -28,9 +28,12 @@ export type Session = {
   userId?: string;
 };
 
-export type Machine = {
+export type StationType = 'PC' | 'PS5' | 'XBOX' | 'PS4' | 'PS3' | 'NINTENDO' | 'VR' | 'SIMULADOR';
+
+export type Station = {
   id: string;
   name: string;
+  type: StationType;
   status: MachineStatus;
   hourlyRate?: number;
   rateId?: string;

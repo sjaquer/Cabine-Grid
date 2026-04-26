@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Cpu, History, CircleUser, LogOut, Settings, Package, Loader2, AlertTriangle } from "lucide-react";
+import { Cpu, History, CircleUser, LogOut, Settings, Package, Loader2, AlertTriangle, UserRound } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
@@ -191,6 +191,12 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
                 </Badge>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/clientes" className="cursor-pointer">
+                  <UserRound className="mr-2 h-4 w-4" />
+                  <span>Clientes (Mini-CRM)</span>
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/inventario" className="cursor-pointer">
                   <Package className="mr-2 h-4 w-4" />

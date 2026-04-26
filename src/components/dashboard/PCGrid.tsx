@@ -1,15 +1,15 @@
-import type { Machine } from "@/lib/types";
+import type { Station } from "@/lib/types";
 import { Skeleton } from "../ui/skeleton";
 import PCCard from "./PCCard";
 import { AlertCircle } from "lucide-react";
 
 type PCGridProps = {
-  machines: Machine[];
-  onCardAction: (machine: Machine) => void;
+  machines: Station[]; // renamed for component backward compatibility
+  onCardAction: (station: Station) => void;
   isLoading: boolean;
 };
 
-export default function PCGrid({ machines, onCardAction, isLoading }: PCGridProps) {
+export default function PCGrid({ machines: stations, onCardAction, isLoading }: PCGridProps) {
   if (isLoading) {
     return (
       <div className="flex-1 p-3 sm:p-4 lg:p-6">
@@ -23,16 +23,16 @@ export default function PCGrid({ machines, onCardAction, isLoading }: PCGridProp
     )
   }
 
-  if (machines.length === 0) {
+  if (stations.length === 0) {
     return (
       <div className="flex-1 p-3 sm:p-4 lg:p-6 flex items-center justify-center">
         <div className="max-w-sm text-center">
           <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
             <AlertCircle className="w-6 h-6 text-muted-foreground" />
           </div>
-          <h3 className="font-semibold text-lg mb-2">Sin cabinas disponibles</h3>
+          <h3 className="font-semibold text-lg mb-2">Sin estaciones disponibles</h3>
           <p className="text-sm text-muted-foreground">
-            No hay cabinas configuradas para este local en este momento. Crea nuevas cabinas en el panel de administración.
+            No hay estaciones configuradas en este momento. Crea nuevas estaciones en el panel de administración.
           </p>
         </div>
       </div>
@@ -46,16 +46,16 @@ export default function PCGrid({ machines, onCardAction, isLoading }: PCGridProp
         <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
           <div>
             <h2 className="text-sm font-semibold md:text-base">Disponibles en pantalla</h2>
-            <p className="text-xs text-muted-foreground">{machines.length} {machines.length === 1 ? 'cabina' : 'cabinas'} en esta vista</p>
+            <p className="text-xs text-muted-foreground">{stations.length} {stations.length === 1 ? 'estación' : 'estaciones'} en esta vista</p>
           </div>
         </div>
         
-        {/* Grid de máquinas */}
+        {/* Grid de estaciones */}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
-          {machines.map((machine) => (
+          {stations.map((station) => (
             <PCCard
-              key={machine.id}
-              machine={machine}
+              key={station.id}
+              machine={station}
               onAction={onCardAction}
             />
           ))}

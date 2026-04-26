@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Customer, Machine, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
+import type { Customer, Station, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
 import Header from "@/components/layout/Header";
@@ -34,10 +34,10 @@ export default function Dashboard() {
   const { toast } = useToast();
   
   const {
-    machines,
-    accessibleMachines,
-    visibleMachines,
-    filteredMachines,
+    stations: machines,
+    accessibleStations: accessibleMachines,
+    visibleStations: visibleMachines,
+    filteredStations: filteredMachines,
     locations,
     availableLocations,
     selectedLocationId,
@@ -49,8 +49,8 @@ export default function Dashboard() {
     visibleSales,
     dailySales,
     isLoading,
-    machineViewFilter,
-    setMachineViewFilter,
+    stationViewFilter: machineViewFilter,
+    setStationViewFilter: setMachineViewFilter,
     firestore,
     user,
     userProfile,
@@ -58,14 +58,14 @@ export default function Dashboard() {
 
   // Local UI States
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [machineToAssign, setMachineToAssign] = useState<Machine | null>(null);
+  const [machineToAssign, setMachineToAssign] = useState<Station | null>(null);
 
   const [isChargeDialogOpen, setChargeDialogOpen] = useState(false);
-  const [machineToCharge, setMachineToCharge] = useState<Machine | null>(null);
+  const [machineToCharge, setMachineToCharge] = useState<Station | null>(null);
   const [isProcessingPayment, setProcessingPayment] = useState(false);
 
   const [isPosDialogOpen, setPosDialogOpen] = useState(false);
-  const [machineToPos, setMachineToPos] = useState<Machine | null>(null);
+  const [machineToPos, setMachineToPos] = useState<Station | null>(null);
 
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(false);
@@ -73,7 +73,7 @@ export default function Dashboard() {
 
 
 
-  const handleCardAction = useCallback((machine: Machine) => {
+  const handleCardAction = useCallback((machine: Station) => {
     if (machine.status === 'available') {
       setMachineToAssign(machine);
       setAssignDialogOpen(true);
@@ -315,8 +315,8 @@ export default function Dashboard() {
       
       // Use the new transactional closeSession function
       const result = await closeSession(firestore, {
-        machineId,
-        machine,
+        stationId: machineId,
+        station: machine,
         session,
         amount,
         paymentMethod,
@@ -458,19 +458,10 @@ export default function Dashboard() {
       </div>
 
       <div className="surface-soft space-y-2 p-3.5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cambiar local</p>
-        <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-          <SelectTrigger className="h-10 w-full">
-            <SelectValue placeholder="Selecciona local" />
-          </SelectTrigger>
-          <SelectContent>
-            {availableLocations.map((location) => (
-              <SelectItem key={location.id} value={location.id}>
-                {location.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Local Actual</p>
+        <div className="text-sm font-bold px-1 py-2 text-foreground">
+          {selectedLocationName || 'Local Principal'}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

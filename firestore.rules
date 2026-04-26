@@ -68,7 +68,7 @@ service cloud.firestore {
     }
 
     function machineLocationId() {
-      return get(/databases/$(database)/documents/machines/$(resource.data.machineId)).data.locationId;
+      return get(/databases/$(database)/documents/stations/$(resource.data.machineId)).data.locationId;
     }
 
     match /users/{userId} {
@@ -103,7 +103,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /machines/{machineId} {
+    match /stations/{machineId} {
       allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
       allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
       allow delete: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);

@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useMemo, useRef, useState } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
@@ -15,7 +17,7 @@ import ShiftClosureManager from "@/components/admin/ShiftClosureManager";
 import FinanceReportsManager from "@/components/admin/FinanceReportsManager";
 import AuditLogsManager from "@/components/admin/AuditLogsManager";
 import CustomerManager from "@/components/admin/CustomerManager";
-import type { Customer, Machine, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
+import type { Customer, Station, Location, Product, UserProfile, UserRole, Sale } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import {
   addDoc,
@@ -46,7 +48,7 @@ export default function AdminPage() {
   const shouldLoadAuditLogs = activeTab === "finance" || activeTab === "logs";
   const shouldLoadClosures = activeTab === "finance" || activeTab === "closures";
 
-  const machinesQuery = useMemoFirebase(() => query(collection(firestore, "machines")), [firestore]);
+  const machinesQuery = useMemoFirebase(() => query(collection(firestore, "stations")), [firestore]);
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
   const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
@@ -64,7 +66,7 @@ export default function AdminPage() {
     return query(collection(firestore, "auditLogs"));
   }, [firestore, shouldLoadAuditLogs]);
 
-  const { data: machinesData } = useCollection<Omit<Machine, "id">>(machinesQuery);
+  const { data: machinesData } = useCollection<Omit<Station, "id">>(machinesQuery);
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
   const { data: usersData } = useCollection<Omit<UserProfile, "uid">>(usersQuery);
@@ -73,7 +75,7 @@ export default function AdminPage() {
   const { data: salesData } = useCollection<Omit<Sale, "id">>(salesQuery);
   const { data: auditLogsData } = useCollection<any>(auditLogsQuery);
 
-  const machines = useMemo(() => (machinesData ?? []) as Machine[], [machinesData]);
+  const machines = useMemo(() => (machinesData ?? []) as Station[], [machinesData]);
   const locations = useMemo(() => (locationsData ?? []) as Location[], [locationsData]);
   const products = useMemo(() => (productsData ?? []) as Product[], [productsData]);
   const users = useMemo(
@@ -98,8 +100,8 @@ export default function AdminPage() {
     role: userProfile?.role,
   };
 
-  const handleAddMachine = async (machine: Omit<Machine, 'id'>) => {
-    await addDoc(collection(firestore, "machines"), machine);
+  const handleAddMachine = async (machine: Omit<Station, 'id'>) => {
+    await addDoc(collection(firestore, "stations"), machine);
     await logAuditAction(firestore, {
       action: 'machine.create',
       target: 'machines',
@@ -111,8 +113,8 @@ export default function AdminPage() {
     toast({ title: "Máquina creada" });
   };
 
-  const handleEditMachine = async (id: string, updates: Partial<Machine>) => {
-    await updateDoc(doc(firestore, "machines", id), updates);
+  const handleEditMachine = async (id: string, updates: Partial<Station>) => {
+    await updateDoc(doc(firestore, "stations", id), updates);
     await logAuditAction(firestore, {
       action: 'machine.update',
       target: 'machines',
@@ -125,7 +127,7 @@ export default function AdminPage() {
   };
 
   const handleDeleteMachine = async (id: string) => {
-    await deleteDoc(doc(firestore, "machines", id));
+    await deleteDoc(doc(firestore, "stations", id));
     await logAuditAction(firestore, {
       action: 'machine.delete',
       target: 'machines',
@@ -139,9 +141,9 @@ export default function AdminPage() {
 
   const handleToggleMachineStatus = async (
     id: string,
-    status: Machine["status"]
+    status: Station["status"]
   ) => {
-    await updateDoc(doc(firestore, "machines", id), { status });
+    await updateDoc(doc(firestore, "stations", id), { status });
     await logAuditAction(firestore, {
       action: 'machine.status.update',
       target: 'machines',

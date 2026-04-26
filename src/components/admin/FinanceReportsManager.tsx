@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ElementType } from "react";
-import type { Machine, Location, PaymentMethod, Sale, UserProfile } from "@/lib/types";
+import type { Station, Location, PaymentMethod, Sale, UserProfile } from "@/lib/types";
 import type { Timestamp } from "firebase/firestore";
 import {
   buildFinanceAnalytics,
@@ -34,7 +34,7 @@ type ShiftClosureLike = {
 
 type FinanceReportsManagerProps = {
   sales: Sale[];
-  machines: Machine[];
+  machines: Station[];
   locations: Location[];
   users: UserProfile[];
   auditLogs: AuditLogLike[];

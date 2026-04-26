@@ -4,7 +4,7 @@ import { z } from "zod";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Customer, Machine } from "@/lib/types";
+import type { Customer, Station } from "@/lib/types";
 import { rates } from "@/lib/data";
 
 import { Button } from "@/components/ui/button";
@@ -101,7 +101,7 @@ function customerMatchScore(customer: Customer, query: string): number {
 type AssignPCDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  machine: Machine | null;
+  machine: Station | null;
   customers: Customer[];
   onCreateCustomer: (payload: Omit<Customer, "id">) => Promise<Customer>;
   onAssign: (values: AssignPCFormValues) => void;
@@ -303,12 +303,33 @@ export default function AssignPCDialog({
                       {customerSearch && (
                         <button
                           type="button"
-                          onClick={() => setCustomerSearch("")}
+                          onClick={() => {
+                            setCustomerSearch("");
+                            field.onChange(undefined);
+                          }}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                           aria-label="Limpiar búsqueda"
                         >
                           <X className="w-4 h-4" />
                         </button>
+                      )}
+                      
+                      {customerSearch && filteredCustomers.length > 0 && (
+                        <div className="absolute z-50 w-full bg-background border rounded-md shadow-lg mt-1 max-h-[160px] overflow-y-auto">
+                          {filteredCustomers.map((customer) => (
+                            <div
+                              key={customer.id}
+                              className="p-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm flex justify-between items-center"
+                              onClick={() => {
+                                field.onChange(customer.id);
+                                setCustomerSearch(customer.fullName);
+                              }}
+                            >
+                              <span className="font-medium">{customer.fullName}</span>
+                              <span className="text-xs text-muted-foreground font-mono">{customer.customerCode}</span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>

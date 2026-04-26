@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Machine, PaymentMethod } from "@/lib/types";
+import type { Station, PaymentMethod } from "@/lib/types";
 import { formatCurrency, formatDuration, formatTime } from "@/lib/utils";
 import { calculateSessionCost } from "@/lib/session-cost";
 import { sanitizeString } from "@/lib/sanitize";
@@ -21,7 +21,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 type ChargeDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  machine: Machine | null;
+  machine: Station | null;
   onConfirmPayment: (machineId: string, amount: number, paymentMethod: PaymentMethod) => void;
   isProcessing?: boolean;
   fractionMinutes?: number;

@@ -2,29 +2,29 @@ import { Firestore, doc, runTransaction } from "firebase/firestore";
 import type { Session, SoldProduct } from "@/lib/types";
 
 /**
- * Updates the products attached to an active machine session using a transaction.
+ * Updates the products attached to an active station session using a transaction.
  */
 export const updateSessionProducts = async (
   firestore: Firestore,
-  machineId: string,
+  stationId: string,
   products: SoldProduct[]
 ) => {
-  const machineRef = doc(firestore, "machines", machineId);
+  const stationRef = doc(firestore, "stations", stationId);
 
   try {
     await runTransaction(firestore, async (transaction) => {
-      const machineDoc = await transaction.get(machineRef);
-      if (!machineDoc.exists()) {
-        throw new Error("La máquina no existe.");
+      const stationDoc = await transaction.get(stationRef);
+      if (!stationDoc.exists()) {
+        throw new Error("La estación no existe.");
       }
 
-      const machineData = machineDoc.data();
-      const currentSession = machineData.session;
+      const stationData = stationDoc.data();
+      const currentSession = stationData.session;
       if (!currentSession) {
-        throw new Error("No hay una sesión activa en esta máquina.");
+        throw new Error("No hay una sesión activa en esta estación.");
       }
 
-      transaction.update(machineRef, {
+      transaction.update(stationRef, {
         session: {
           ...currentSession,
           soldProducts: products,
@@ -39,34 +39,34 @@ export const updateSessionProducts = async (
 };
 
 /**
- * Starts a machine session using a transaction to prevent concurrency issues.
+ * Starts a station session using a transaction to prevent concurrency issues.
  */
 export const startMachineSession = async (
   firestore: Firestore,
-  machineId: string,
+  stationId: string,
   session: Session,
   rateId: string,
   selectedLocationId?: string
 ) => {
-  const machineRef = doc(firestore, "machines", machineId);
+  const stationRef = doc(firestore, "stations", stationId);
 
   try {
     await runTransaction(firestore, async (transaction) => {
-      const machineDoc = await transaction.get(machineRef);
-      if (!machineDoc.exists()) {
-        throw new Error("La máquina no existe.");
+      const stationDoc = await transaction.get(stationRef);
+      if (!stationDoc.exists()) {
+        throw new Error("La estación no existe.");
       }
 
-      const machineData = machineDoc.data();
-      if (machineData.status === "occupied") {
-        throw new Error("La máquina ya está ocupada por otra sesión.");
+      const stationData = stationDoc.data();
+      if (stationData.status === "occupied") {
+        throw new Error("La estación ya está ocupada por otra sesión.");
       }
 
-      transaction.update(machineRef, {
+      transaction.update(stationRef, {
         status: "occupied",
         session: session,
         rateId: rateId,
-        ...(!machineData.locationId && selectedLocationId ? { locationId: selectedLocationId } : {}),
+        ...(!stationData.locationId && selectedLocationId ? { locationId: selectedLocationId } : {}),
       });
     });
     return true;

@@ -12,7 +12,7 @@ import type { User } from 'firebase/auth';
 import { addDoc, collection, doc, getDocs, query, Timestamp, where, serverTimestamp } from 'firebase/firestore';
 
 import { useFirebaseAuthInstance, useFirestore } from '../provider';
-import type { Machine, Sale, UserProfile } from '@/lib/types';
+import type { Station, Sale, UserProfile } from '@/lib/types';
 import { useMemoFirebase } from '../provider';
 import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
@@ -173,12 +173,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Get open machines
-        const machinesRef = collection(firestore, 'machines');
+        const machinesRef = collection(firestore, 'stations');
         const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
         const machinesSnap = await getDocs(machinesQuery);
-        const allOpenMachines: Machine[] = machinesSnap.docs.map((snapshot) => ({
+        const allOpenMachines: Station[] = machinesSnap.docs.map((snapshot) => ({
           id: snapshot.id,
-          ...(snapshot.data() as Omit<Machine, 'id'>),
+          ...(snapshot.data() as Omit<Station, 'id'>),
         }));
 
         const openMachines = shiftLocationId
@@ -318,12 +318,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .reduce((sum, sale) => sum + sale.amount, 0);
     const totalExpected = Math.round((expectedCash + expectedYape + expectedOther) * 100) / 100;
 
-    const machinesRef = collection(firestore, 'machines');
+    const machinesRef = collection(firestore, 'stations');
     const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
     const machinesSnap = await getDocs(machinesQuery);
-    const allOpenMachines: Machine[] = machinesSnap.docs.map((snapshot) => ({
+    const allOpenMachines: Station[] = machinesSnap.docs.map((snapshot) => ({
       id: snapshot.id,
-      ...(snapshot.data() as Omit<Machine, 'id'>),
+      ...(snapshot.data() as Omit<Station, 'id'>),
     }));
     const openMachines = shiftLocationId
       ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)

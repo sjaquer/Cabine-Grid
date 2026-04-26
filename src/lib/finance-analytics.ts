@@ -1,4 +1,4 @@
-import type { Machine, PaymentMethod, Sale, SoldProduct } from "@/lib/types";
+import type { Station, PaymentMethod, Sale, SoldProduct } from "@/lib/types";
 import type { Timestamp } from "firebase/firestore";
 
 export type ReportFilters = {
@@ -200,7 +200,7 @@ function buildProductsMix(sales: Sale[]): ProductMixItem[] {
     .slice(0, 8);
 }
 
-function countMachinesByLocation(machines: Machine[]): Map<string, number> {
+function countMachinesByLocation(machines: Station[]): Map<string, number> {
   const map = new Map<string, number>();
   machines.forEach((machine) => {
     const key = machine.locationId || "sin-local";
@@ -230,7 +230,7 @@ function overlapsRange(date: Date, start: Date, end: Date): boolean {
 
 export function buildFinanceAnalytics(params: {
   sales: Sale[];
-  machines: Machine[];
+  machines: Station[];
   filters: ReportFilters;
   auditLogs: AuditLogLike[];
   closures: ShiftClosureLike[];

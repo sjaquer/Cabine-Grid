@@ -1,6 +1,6 @@
 "use client";
 
-import type { Machine } from "@/lib/types";
+import type { Station } from "@/lib/types";
 import { rates } from "@/lib/data";
 import { sanitizeString } from "@/lib/sanitize";
 import { useTimer } from "@/hooks/useTimer";
@@ -8,12 +8,12 @@ import { formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Computer, Clock, User, PlusCircle, Zap, AlertTriangle, Wrench } from "lucide-react";
+import { Computer, Clock, User, PlusCircle, Zap, AlertTriangle, Wrench, Gamepad } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 type PCCardProps = {
-  machine: Machine;
-  onAction: (machine: Machine) => void;
+  machine: Station; // renamed to machine for component compatibility
+  onAction: (station: Station) => void;
 };
 
 const statusColors = {
@@ -37,10 +37,10 @@ const statusBadge = {
   maintenance: { label: "Mantenimiento", color: "bg-muted text-foreground" },
 };
 
-export default function PCCard({ machine, onAction }: PCCardProps) {
-  const { session, status } = machine;
-  const rate = rates.find(r => r.id === (session?.rateId || machine.rateId));
-  const hourlyRate = session?.hourlyRate || machine.hourlyRate || rate?.pricePerHour || 3.00;
+export default function PCCard({ machine: station, onAction }: PCCardProps) {
+  const { session, status } = station;
+  const rate = rates.find(r => r.id === (session?.rateId || station.rateId));
+  const hourlyRate = session?.hourlyRate || station.hourlyRate || rate?.pricePerHour || 3.00;
   const prepaidSeconds = session?.usageMode === 'prepaid' ? (session.prepaidHours || 0) * 3600 : undefined;
   
   const { elapsedSeconds, remainingSeconds } = useTimer(session?.startTime, prepaidSeconds);
@@ -52,15 +52,24 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
   const isWarning = remainingSeconds !== undefined && remainingSeconds > 0 && remainingSeconds <= 300;
 
   const getStatusIcon = () => {
-    switch (status) {
-      case 'available':
-        return <Computer className="w-12 h-12 text-status-available/80" />;
-      case 'occupied':
-        return <Zap className="w-12 h-12 text-status-occupied/80 animate-pulse" />;
-      case 'warning':
-        return <AlertTriangle className="w-12 h-12 text-status-warning/80 animate-bounce" />;
-      case 'maintenance':
-        return <Wrench className="w-12 h-12 text-muted-foreground/80" />;
+    if (status === 'maintenance') return <Wrench className="w-12 h-12 text-muted-foreground/80" />;
+    if (status === 'warning') return <AlertTriangle className="w-12 h-12 text-status-warning/80 animate-bounce" />;
+    
+    const isOccupied = status === 'occupied';
+    const iconClass = cn("w-12 h-12", isOccupied ? "text-status-occupied/80 animate-pulse" : "text-status-available/80");
+    
+    switch (station.type) {
+      case 'PS5':
+      case 'PS4':
+      case 'PS3':
+      case 'XBOX':
+      case 'NINTENDO':
+      case 'VR':
+      case 'SIMULADOR':
+        return <Gamepad className={iconClass} />;
+      case 'PC':
+      default:
+        return <Computer className={iconClass} />;
     }
   };
 
@@ -70,14 +79,19 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
         "group flex min-h-[230px] flex-col overflow-hidden border-2 transition-all duration-300 hover:shadow-xl cursor-pointer",
         statusColors[status]
       )}
-      onClick={() => status !== "maintenance" && onAction(machine)}
+      onClick={() => status !== "maintenance" && onAction(station)}
     >
       <CardHeader className="flex-row items-start justify-between space-y-0 px-3 pb-2.5 pt-3.5">
         <div className="flex flex-col gap-2 flex-1">
-          <CardTitle className="text-xl font-headline font-bold tracking-tight">{machine.name}</CardTitle>
-          <Badge className={`w-fit px-2.5 py-0.5 text-xs font-semibold ${statusBadge[status].color}`}>
-            {statusBadge[status].label}
-          </Badge>
+          <CardTitle className="text-xl font-headline font-bold tracking-tight">{station.name}</CardTitle>
+          <div className="flex gap-2 items-center">
+            <Badge className={`w-fit px-2.5 py-0.5 text-xs font-semibold ${statusBadge[status].color}`}>
+              {statusBadge[status].label}
+            </Badge>
+            <Badge variant="outline" className="w-fit text-xs font-medium border-primary/20 text-primary">
+              {station.type || 'PC'}
+            </Badge>
+          </div>
         </div>
         <div className="relative flex h-4 w-4">
           {status !== 'available' && (
@@ -105,7 +119,7 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
               size="sm" 
               onClick={(event) => {
                 event.stopPropagation();
-                onAction(machine);
+                onAction(station);
               }}
             >
               <PlusCircle className="mr-2 h-4 w-4" /> 
@@ -174,7 +188,7 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
               size="sm" 
               onClick={(event) => {
                 event.stopPropagation();
-                onAction(machine);
+                onAction(station);
               }}
             >
               Abrir TPV
@@ -185,4 +199,3 @@ export default function PCCard({ machine, onAction }: PCCardProps) {
     </Card>
   );
 }
-        

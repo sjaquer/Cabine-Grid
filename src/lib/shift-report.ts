@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { Machine, PaymentMethod, Sale, UserProfile } from "@/lib/types";
+import type { Station, PaymentMethod, Sale, UserProfile } from "@/lib/types";
 import { formatCurrency, formatDateTime, formatDuration } from "@/lib/utils";
 import type { Timestamp } from "firebase/firestore";
 
@@ -19,7 +19,7 @@ type BuildShiftReportPdfParams = {
   sales: Sale[];
   shiftStartMs: number;
   shiftEndMs: number;
-  openMachines: Machine[];
+  openMachines: Station[];
 };
 
 export function buildShiftReportPdf({

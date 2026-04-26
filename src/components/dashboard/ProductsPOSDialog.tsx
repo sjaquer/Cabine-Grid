@@ -1,6 +1,6 @@
 "use client";
 
-import type { Machine, Product, SoldProduct } from "@/lib/types";
+import type { Station, Product, SoldProduct } from "@/lib/types";
 import { sanitizeString } from "@/lib/sanitize";
 import { formatTime } from "@/lib/utils";
 import {
@@ -15,7 +15,7 @@ import ProductsPOS from "./ProductsPOS";
  type ProductsPOSDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  machine: Machine | null;
+  machine: Station | null;
   products: Product[];
   onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
   onGoToCharge: (machineId: string, products: SoldProduct[]) => void;

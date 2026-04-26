@@ -6,12 +6,12 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import type { Customer, Machine, Session, Sale, SoldProduct, PaymentMethod, StockMovement } from './types';
+import type { Customer, Station, Session, Sale, SoldProduct, PaymentMethod, StockMovement } from './types';
 import { logAuditAction, logAuditFailure } from './audit-log';
 
 export interface CloseSessionPayload {
-  machineId: string;
-  machine: Machine;
+  stationId: string;
+  station: Station;
   session: Session;
   amount: number;
   paymentMethod: PaymentMethod;
@@ -32,20 +32,14 @@ export interface CloseSessionResult {
 
 /**
  * Atomically closes a session with full transaction support.
- * This function ensures that:
- * 1. Sale document is created
- * 2. Inventory is updated for each sold product
- * 3. Stock movement audit logs are created
- * 4. Machine is marked as available
- * 5. All changes are committed atomically or all fail
  */
 export async function closeSession(
   firestore: Firestore,
   payload: CloseSessionPayload,
 ): Promise<CloseSessionResult> {
   const {
-    machineId,
-    machine,
+    stationId,
+    station,
     session,
     amount,
     paymentMethod,
@@ -72,7 +66,7 @@ export async function closeSession(
   };
 
   const newSale: Omit<Sale, 'id'> = {
-    machineName: machine.name,
+    machineName: station.name, // keeping machineName in Sale interface for db compatibility
     clientName: session.client || 'Ocasional',
     ...(session.clientId ? { customerId: session.clientId } : {}),
     ...(session.clientCode ? { customerCode: session.clientCode } : {}),
@@ -91,11 +85,11 @@ export async function closeSession(
 
   try {
     const result = await runTransaction(firestore, async (transaction) => {
-      // 1. Validate machine exists in this transaction
-      const machineRef = doc(firestore, 'machines', machineId);
-      const machineSnap = await transaction.get(machineRef);
-      if (!machineSnap.exists()) {
-        throw new Error(`Machine ${machineId} not found`);
+      // 1. Validate station exists in this transaction
+      const stationRef = doc(firestore, 'stations', stationId);
+      const stationSnap = await transaction.get(stationRef);
+      if (!stationSnap.exists()) {
+        throw new Error(`Station ${stationId} not found`);
       }
 
       // Read customer document before writes if this session is linked to a customer.
@@ -113,7 +107,7 @@ export async function closeSession(
         };
       }
 
-      // 2. Read all inventory docs before any write (Firestore requirement)
+      // 2. Read all inventory docs before any write
       const inventoryAdjustments: Array<{
         productId: string;
         productName: string;
@@ -190,7 +184,7 @@ export async function closeSession(
             quantity: adjustment.quantity,
             quantityBefore: adjustment.currentStock,
             quantityAfter: adjustment.newStock,
-            reason: `Sale from ${machine.name}`,
+            reason: `Sale from Station ${station.name}`,
             saleId: saleRef.id,
             shiftId: shiftId || undefined,
             approvedBy: {
@@ -204,8 +198,8 @@ export async function closeSession(
         }
       }
 
-      // 4. Clear machine session and mark as available
-      transaction.update(machineRef, {
+      // 4. Clear station session and mark as available
+      transaction.update(stationRef, {
         status: 'available',
         session: null,
       });
@@ -225,7 +219,7 @@ export async function closeSession(
             totalSpent: (currentMetrics?.totalSpent ?? 0) + amount,
             machineUsage: {
               ...currentMachineUsage,
-              [machine.name]: (currentMachineUsage[machine.name] ?? 0) + 1,
+              [station.name]: (currentMachineUsage[station.name] ?? 0) + 1,
             },
             visitsByWeekday: {
               ...currentVisitsByWeekday,
@@ -248,50 +242,36 @@ export async function closeSession(
       };
     });
 
-    // Log success
     await logAuditAction(firestore, {
       action: 'session.close',
-      target: 'sales',
-      targetId: result.saleId,
+      target: 'stations',
+      targetId: stationId,
       locationId,
-      actor: {
-        id: operatorId,
-        email: operatorEmail,
-        role: operatorRole,
-      },
+      actor: { id: operatorId, email: operatorEmail, role: operatorRole },
       details: {
-        machineId,
-        machineName: machine.name,
+        stationName: station.name,
         amount,
         paymentMethod,
-        receiptNumber,
-        shiftId: shiftId || null,
-        productsCount: soldProducts.reduce((sum, p) => sum + p.quantity, 0),
+        receiptNumber: result.receiptNumber,
+        productsCount: soldProducts.length,
       },
     });
 
     return result;
   } catch (error) {
-    // Log failure
+    console.error('Failed to close session:', error);
     await logAuditFailure(firestore, {
       action: 'session.close.error',
-      target: 'sales',
-      targetId: machineId,
+      target: 'stations',
+      targetId: stationId,
       locationId,
-      actor: {
-        id: operatorId,
-        email: operatorEmail,
-        role: operatorRole,
-      },
+      actor: { id: operatorId, email: operatorEmail, role: operatorRole },
       error,
       details: {
-        machineId,
+        stationName: station.name,
         amount,
-        paymentMethod,
-        receiptNumber,
       },
     });
-
     throw error;
   }
 }
