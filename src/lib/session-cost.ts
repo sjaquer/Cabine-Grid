@@ -46,7 +46,12 @@ export function calculateSessionCost(
 
   const billedHours = billedMinutes / 60;
   const sessionCostRaw = billedHours * hourlyRate;
-  const sessionCost = Math.round(sessionCostRaw * 100) / 100;
+  let sessionCost = Math.round(sessionCostRaw * 100) / 100;
+
+  // Monto Mínimo: Si la sesión dura menos de 10 minutos, cobrar S/ 0.50
+  if (elapsedMinutes > 0 && elapsedMinutes < 10) {
+    sessionCost = 0.50;
+  }
 
   // Cost of products
   const soldProducts = session.soldProducts ?? [];

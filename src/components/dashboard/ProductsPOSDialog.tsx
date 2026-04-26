@@ -1,6 +1,6 @@
 "use client";
 
-import type { Station, Product, SoldProduct } from "@/lib/types";
+import type { Station, Product, SoldProduct, PaymentMethod } from "@/lib/types";
 import { sanitizeString } from "@/lib/sanitize";
 import { formatTime } from "@/lib/utils";
 import {
@@ -12,14 +12,18 @@ import {
 } from "@/components/ui/sheet";
 import ProductsPOS from "./ProductsPOS";
 
+import { ShoppingCart, X } from "lucide-react";
+
  type ProductsPOSDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   machine: Station | null;
   products: Product[];
   onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
-  onGoToCharge: (machineId: string, products: SoldProduct[]) => void;
+  onConfirmPayment: (machineId: string, amount: number, paymentMethod: PaymentMethod) => void;
+  isProcessingPayment?: boolean;
   inventoryByProduct?: Record<string, number>; // productId -> stock
+  fractionMinutes?: number;
  };
 
 export default function ProductsPOSDialog({
@@ -28,8 +32,10 @@ export default function ProductsPOSDialog({
   machine,
   products,
   onSaveProducts,
-  onGoToCharge,
+  onConfirmPayment,
+  isProcessingPayment = false,
   inventoryByProduct,
+  fractionMinutes = 5,
 }: ProductsPOSDialogProps) {
   if (!machine || !machine.session) return null;
 
@@ -42,32 +48,42 @@ export default function ProductsPOSDialog({
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[100vw] sm:max-w-xl p-0 overflow-hidden h-full flex flex-col border-slate-800 bg-slate-950 text-slate-50">
-        <div className="bg-gradient-to-r from-background via-accent/5 to-secondary p-4 sm:p-6 border-b relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+      <SheetContent side="right" className="w-[100vw] sm:max-w-xl p-0 overflow-hidden h-full flex flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 [&>button]:hidden">
+        <div className="bg-zinc-900 p-4 border-b border-zinc-800 relative overflow-hidden">
           <SheetHeader className="space-y-1 relative z-10">
-            <SheetTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2 font-black text-slate-50">
-              TPV - <span className="text-primary">{machine.name}</span>
+            <button 
+              onClick={() => onOpenChange(false)}
+              className="absolute right-0 top-0 p-1 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
+            >
+              <X size={18} />
+            </button>
+            <SheetTitle className="text-lg font-bold tracking-tight flex items-center text-white">
+              <ShoppingCart className="text-zinc-500 mr-2" size={18} />
+              Punto de Venta - <span className="text-emerald-400 ml-1">{machine.name}</span>
             </SheetTitle>
-            <SheetDescription className="text-xs font-medium text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
-              <span className="bg-slate-900 px-2.5 py-1 rounded-md text-slate-300 font-semibold shadow-sm">
+            <SheetDescription className="text-xs font-medium text-zinc-400 mt-1 flex items-center gap-2">
+              <span className="bg-zinc-950 px-2.5 py-1 rounded-md text-zinc-300 font-semibold border border-zinc-800/60 shadow-sm">
                 {sanitizeString(session.client) || "Cliente Ocasional"}
               </span>
-              <span className="bg-primary/20 text-primary px-2.5 py-1 rounded-md font-mono font-bold tracking-tight shadow-sm">
+              <span className="bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-md font-mono font-bold tracking-tight border border-emerald-500/30 shadow-sm">
                 {formatTime(elapsedSeconds)}
               </span>
             </SheetDescription>
           </SheetHeader>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto bg-background/50">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-zinc-950">
           <ProductsPOS
             availableProducts={products}
             initialProducts={session.soldProducts}
             onSave={handleSave}
             onClose={() => onOpenChange(false)}
-            onGoToCharge={(selectedProducts) => onGoToCharge(machine.id, selectedProducts)}
+            onConfirmPayment={(amount, paymentMethod) => onConfirmPayment(machine.id, amount, paymentMethod)}
+            isProcessing={isProcessingPayment}
             inventoryByProduct={inventoryByProduct}
+            activeSession={session}
+            fractionMinutes={fractionMinutes}
+            machineName={machine.name}
           />
         </div>
       </SheetContent>

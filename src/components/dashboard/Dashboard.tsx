@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { Customer, Station, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -8,7 +8,6 @@ import { formatCurrency } from "@/lib/utils";
 import Header from "@/components/layout/Header";
 import PCGrid from "./PCGrid";
 import AssignPCDialog, { type AssignPCFormValues } from "./AssignPCDialog";
-import ChargeDialog from "./ChargeDialog";
 import ProductsPOSDialog from "./ProductsPOSDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
 import { doc, Timestamp, addDoc, collection, serverTimestamp, runTransaction } from "firebase/firestore";
@@ -22,7 +21,8 @@ import { useHotkeys } from "@/hooks/useHotkeys";
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Building2, Settings, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, Building2, Settings, SlidersHorizontal, Search, Zap } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useDashboardData } from "@/hooks/useDashboardData";
@@ -57,19 +57,36 @@ export default function Dashboard() {
     userProfile,
   } = useDashboardData();
 
-  // Local UI States
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
   const [machineToAssign, setMachineToAssign] = useState<Station | null>(null);
 
-  const [isChargeDialogOpen, setChargeDialogOpen] = useState(false);
-  const [machineToCharge, setMachineToCharge] = useState<Station | null>(null);
   const [isProcessingPayment, setProcessingPayment] = useState(false);
 
   const [isPosDialogOpen, setPosDialogOpen] = useState(false);
   const [machineToPos, setMachineToPos] = useState<Station | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const finalFilteredMachines = useMemo(() => {
+    if (!searchQuery.trim()) return filteredMachines;
+    const q = searchQuery.toLowerCase().trim();
+    return filteredMachines.filter((m) => {
+      const matchesName = m.name.toLowerCase().includes(q);
+      const matchesClient = m.session?.client?.toLowerCase().includes(q);
+      return matchesName || matchesClient;
+    });
+  }, [filteredMachines, searchQuery]);
+
   const [isHistorySheetOpen, setHistorySheetOpen] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(false);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, []);
 
 
 
@@ -101,12 +118,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleChargeDialogChange = useCallback((open: boolean) => {
-    setChargeDialogOpen(open);
-    if (!open) {
-      setMachineToCharge(null);
-    }
-  }, []);
+
 
   const handlePosDialogChange = useCallback((open: boolean) => {
     setPosDialogOpen(open);
@@ -344,7 +356,6 @@ export default function Dashboard() {
         title: "Pago Confirmado",
         description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${result.receiptNumber}.`,
       });
-      handleChargeDialogChange(false);
       handlePosDialogChange(false);
 
     } catch (error) {
@@ -358,7 +369,7 @@ export default function Dashboard() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [accessibleMachines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handleChargeDialogChange, handlePosDialogChange, userProfile]);
+  }, [accessibleMachines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handlePosDialogChange, userProfile]);
 
   const handleSaveProducts = useCallback(async (machineId: string, products: SoldProduct[]) => {
     if (!firestore) return;
@@ -411,37 +422,7 @@ export default function Dashboard() {
     }
   }, [accessibleMachines, firestore, toast, selectedLocationId, user?.uid, user?.email, userProfile]);
 
-  const handleGoToCharge = useCallback((machineId: string, selectedProducts?: SoldProduct[]) => {
-    const machine = accessibleMachines.find((item) => item.id === machineId) ?? null;
-    if (!machine) return;
-    
-    // Validate user has access to this machine
-    if (!canAccessMachine(machine, userProfile)) {
-      toast({
-        variant: "destructive",
-        title: "Acceso denegado",
-        description: "No tienes permiso para operar esta máquina.",
-      });
-      return;
-    }
 
-    // Cerrar el POS antes de abrir cobro para evitar doble modal y clics extra.
-    handlePosDialogChange(false);
-    const machineForCharge = selectedProducts
-      ? {
-          ...machine,
-          session: machine.session
-            ? {
-                ...machine.session,
-                soldProducts: selectedProducts,
-              }
-            : machine.session,
-        }
-      : machine;
-
-    setMachineToCharge(machineForCharge);
-    setChargeDialogOpen(true);
-  }, [accessibleMachines, handlePosDialogChange, toast, userProfile]);
 
   const availableMachines = visibleMachines.filter((machine) => machine.status === "available").length;
   const activeMachines = visibleMachines.filter((machine) => machine.status === "occupied" || machine.status === "warning").length;
@@ -525,91 +506,45 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="app-shell app-enter flex h-screen flex-col">
-      {/* Eliminado Header Superior Tradicional */}
-
-      <main className="app-container flex-1 overflow-hidden py-3 sm:py-4">
-        <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="surface-card hidden h-full overflow-y-auto p-4 lg:block">
-            {operationPanel}
-          </aside>
-
-          <section className="surface-card flex h-full min-h-0 flex-col overflow-hidden">
-            <div className="border-b border-border/40 p-3 sm:p-4">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold sm:text-lg">Cabinas operativas</h2>
-                  <p className="text-xs text-muted-foreground sm:text-sm">Selecciona una cabina para asignar, cobrar o abrir TPV.</p>
-                </div>
-                <div className="hidden items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:flex">
-                  <Building2 className="h-3.5 w-3.5" />
-                  {selectedLocationName || "Sin local"}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <Button
-                size="sm"
-                className="h-9 rounded-full px-4 text-sm"
-                variant={machineViewFilter === "available" ? "default" : "outline"}
-                onClick={() => setMachineViewFilter("available")}
-              >
-                Libres {availableMachines}
-              </Button>
-              <Button
-                size="sm"
-                className="h-9 rounded-full px-4 text-sm"
-                variant={machineViewFilter === "active" ? "default" : "outline"}
-                onClick={() => setMachineViewFilter("active")}
-              >
-                Activas {activeMachines}
-              </Button>
-              <Button
-                size="sm"
-                className="h-9 rounded-full px-4 text-sm"
-                variant={machineViewFilter === "all" ? "default" : "outline"}
-                onClick={() => setMachineViewFilter("all")}
-              >
-                Todas {visibleMachines.length}
-              </Button>
-
-              {selectedLocationName && (
-                <Badge variant="secondary" className="h-9 rounded-full px-3 text-xs sm:hidden">
-                  {selectedLocationName}
-                </Badge>
-              )}
-
-              {maintenanceMachines > 0 && (
-                <Badge variant="outline" className="h-9 rounded-full px-3 text-xs">
-                  Mantenimiento {maintenanceMachines}
-                </Badge>
-              )}
-
-              {inventoryAlerts.length > 0 && (
-                <Badge variant="outline" className="h-9 rounded-full px-3 text-xs lg:hidden">
-                  <AlertTriangle className="mr-1 h-3.5 w-3.5" />
-                  Alertas {inventoryAlerts.length}
-                </Badge>
-              )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto h-9 gap-1 px-3 lg:hidden"
-                onClick={() => setShowMobileControls(true)}
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                Panel
-              </Button>
-            </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-               <PCGrid machines={filteredMachines} onCardAction={handleCardAction} isLoading={isLoading} />
-            </div>
-          </section>
+    <>
+      <div className="flex flex-col h-full w-full p-4 lg:p-6 gap-6 bg-zinc-950">
+      {/* Barra de Control Omnibar Superior */}
+      <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-3">
+        
+        {/* Lado Izquierdo: Buscador */}
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <Input
+            id="omnibar-search"
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar Estación o Jugador..."
+            className="pl-9 h-9 bg-zinc-950/50 border-zinc-800 focus-visible:ring-primary/80 text-zinc-200 text-xs rounded-lg"
+          />
         </div>
-      </main>
+
+        {/* Lado Derecho: Hero Metrics */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-zinc-950/60 border border-zinc-800/50 rounded-lg px-3 py-1.5">
+            <Zap className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">En Uso:</span>
+            <span className="text-xs font-black font-mono text-slate-100">{activeMachines}/{visibleMachines.length}</span>
+          </div>
+
+          <div className="flex items-center gap-2 bg-zinc-950/60 border border-zinc-800/50 rounded-lg px-3 py-1.5">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">Alertas:</span>
+            <span className="text-xs font-black font-mono text-slate-100">{inventoryAlerts.length}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Área Expansiva para el Grid */}
+      <div className="flex-1 w-full overflow-y-auto custom-scrollbar min-h-0">
+        <PCGrid machines={finalFilteredMachines} onCardAction={handleCardAction} isLoading={isLoading} />
+      </div>
 
       <Sheet open={showMobileControls} onOpenChange={setShowMobileControls}>
         <SheetContent side="left" className="w-[88vw] p-4 sm:max-w-sm">
@@ -634,15 +569,6 @@ export default function Dashboard() {
         onAssign={handleAssignPC}
       />
       
-      <ChargeDialog 
-        isOpen={isChargeDialogOpen}
-        onOpenChange={handleChargeDialogChange}
-        machine={machineToCharge}
-        onConfirmPayment={handleConfirmPayment}
-        isProcessing={isProcessingPayment}
-        fractionMinutes={locations?.find((loc: Location) => loc.id === (machineToCharge?.locationId || selectedLocationId))?.fractionMinutes || 5}
-      />
-
       <SalesHistorySheet 
         isOpen={isHistorySheetOpen}
         onOpenChange={setHistorySheetOpen}
@@ -656,9 +582,12 @@ export default function Dashboard() {
         machine={machineToPos}
         products={products}
         onSaveProducts={handleSaveProducts}
-        onGoToCharge={handleGoToCharge}
+        onConfirmPayment={handleConfirmPayment}
+        isProcessingPayment={isProcessingPayment}
         inventoryByProduct={inventoryByProduct}
+        fractionMinutes={locations?.find((loc: Location) => loc.id === (machineToPos?.locationId || selectedLocationId))?.fractionMinutes || 5}
       />
-    </div>
+      </div>
+    </>
   );
 }

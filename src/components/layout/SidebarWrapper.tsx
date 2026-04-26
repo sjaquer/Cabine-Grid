@@ -136,13 +136,13 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
 
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-50 overflow-hidden">
+    <div className="flex w-full min-h-screen bg-background text-foreground overflow-hidden">
       <CommandPalette isOpen={isCommandPaletteOpen} onOpenChange={setIsCommandPaletteOpen} />
 
       {/* Sidebar colapsable dinámico */}
       <aside 
         className={cn(
-          "bg-slate-900/95 border-r border-slate-800/50 flex flex-col items-center py-4 justify-between z-30 shrink-0 transition-all duration-300 ease-in-out group/sidebar",
+          "bg-zinc-950 border-r border-zinc-900 flex flex-col items-center py-4 justify-between z-30 shrink-0 transition-all duration-300 ease-in-out group/sidebar",
           isCollapsed ? "w-16 sm:w-20 hover:w-60" : "w-60"
         )}
       >
@@ -165,7 +165,7 @@ export default function SidebarWrapper({ children }: { children: React.ReactNode
                     variant="ghost"
                     className={cn(
                       "w-full transition-all rounded-xl flex items-center gap-3",
-                      isActive ? "bg-primary/20 text-primary font-bold" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200",
+                      isActive ? "bg-primary/20 text-primary font-bold" : "text-zinc-400 hover:bg-zinc-900/80 hover:text-zinc-200",
                       isCollapsed ? "aspect-square justify-center p-0 group-hover/sidebar:justify-start group-hover/sidebar:px-4 group-hover/sidebar:aspect-auto group-hover/sidebar:py-3" : "justify-start px-4 py-3"
                     )}
                   >

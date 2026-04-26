@@ -15,8 +15,8 @@ export default function PCGrid({ machines: stations, onCardAction, isLoading }: 
       <div className="flex-1 p-3 sm:p-4 lg:p-6">
         <div className="space-y-4">
           <div className="h-11 bg-background/50 rounded-lg animate-pulse" />
-          <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2 md:gap-3">
-            {Array.from({length: 12}).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3.5 w-full pb-10">
+            {Array.from({length: 12}).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl bg-zinc-900/50 border border-zinc-800/40" />)}
           </div>
         </div>
       </div>
@@ -55,7 +55,7 @@ export default function PCGrid({ machines: stations, onCardAction, isLoading }: 
             {list.length}
           </span>
         </div>
-        <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2 md:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3.5 w-full pb-10">
           {list.map((station) => (
             <PCCard
               key={station.id}

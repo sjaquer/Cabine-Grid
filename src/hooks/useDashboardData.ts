@@ -127,7 +127,7 @@ export function useDashboardData() {
     return accessibleStations.filter((station) => station.locationId === selectedLocationId);
   }, [accessibleStations, selectedLocationId, hasStationsWithLocation]);
 
-  const [stationViewFilter, setStationViewFilter] = useState<"active" | "all" | "available">("active");
+  const [stationViewFilter, setStationViewFilter] = useState<"active" | "all" | "available">("all");
 
   const filteredStations = useMemo(() => {
     if (stationViewFilter === "active") {
