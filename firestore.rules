@@ -60,7 +60,7 @@ service cloud.firestore {
     function hasValidSaleData() {
       return request.resource.data.amount is number && 
              request.resource.data.amount > 0 &&
-             request.resource.data.paymentMethod in ['efectivo', 'yape', 'otro'];
+             request.resource.data.paymentMethod is string;
     }
 
     function userCanAccessLocation(locationId) {
@@ -153,6 +153,18 @@ service cloud.firestore {
       allow create: if canOperate();
       allow update: if canOperate() && (request.auth.uid == resource.data.operatorId || isAdminOrManager());
       allow delete: if isAdmin();
+    }
+
+    match /inventory_movements/{movementId} {
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdmin() && userCanAccessLocation(resource.data.locationId);
+    }
+
+    match /inventoryDiscrepancies/{discrepancyId} {
+      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
+      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
+      allow delete: if isAdmin() && userCanAccessLocation(resource.data.locationId);
     }
 
     match /inventoryMovements/{movementId} {

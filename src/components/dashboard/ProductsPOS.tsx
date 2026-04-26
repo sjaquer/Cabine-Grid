@@ -5,7 +5,7 @@ import { useCartStore } from "@/store/useCartStore";
 import type { Product, SoldProduct, Session, PaymentMethod } from "@/lib/types";
 import { formatCurrency, formatTime, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, MinusCircle, ShoppingCart } from "lucide-react";
+import { PlusCircle, MinusCircle, ShoppingCart, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -358,7 +358,7 @@ export default function ProductsPOS({
                             </Label>
                             <Label htmlFor="yape" className="flex flex-col items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-2 cursor-pointer transition-all hover:bg-zinc-800/50 [&:has([data-state=checked])]:border-[#742384] [&:has([data-state=checked])]:bg-[#742384]/10">
                                 <RadioGroupItem value="yape" id="yape" className="sr-only" />
-                                <span className="text-xs font-bold">Yape</span>
+                                <span className="text-xs font-bold">Yape/Plin</span>
                             </Label>
                             <Label htmlFor="otro" className="flex flex-col items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-2 cursor-pointer transition-all hover:bg-zinc-800/50 [&:has([data-state=checked])]:border-amber-500 [&:has([data-state=checked])]:bg-amber-500/10">
                                 <RadioGroupItem value="otro" id="otro" className="sr-only" />
@@ -429,6 +429,18 @@ export default function ProductsPOS({
                         {formatCurrency(total)}
                     </span>
                 </div>
+
+                {activeSession && onConfirmPayment && (
+                    <div className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-[11px] text-amber-200/90 leading-tight mb-2 mt-1">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <p>
+                            Estás cobrando con <strong>{paymentMethod.toUpperCase()}</strong>.
+                            {paymentMethod === 'efectivo' 
+                              ? " Recuerda registrar SIEMPRE el monto físico que te está entregando el cliente." 
+                              : " Valida que el comprobante digital corresponda al total."}
+                        </p>
+                    </div>
+                )}
 
                 {activeSession && onConfirmPayment && (
                     <Button 

@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import type { Customer, Station, Session, Sale, SoldProduct, PaymentMethod, StockMovement } from './types';
 import { logAuditAction, logAuditFailure } from './audit-log';
+import { logInventoryMovement } from './services/inventory-log';
 
 export interface CloseSessionPayload {
   stationId: string;
@@ -83,6 +84,15 @@ export async function closeSession(
     ...(Object.keys(operator).length > 0 ? { operator } : {}),
   };
 
+  const inventoryAdjustments: Array<{
+    productId: string;
+    productName: string;
+    quantity: number;
+    currentStock: number;
+    newStock: number;
+    inventoryDocId: string;
+  }> = [];
+
   try {
     const result = await runTransaction(firestore, async (transaction) => {
       // 1. Validate station exists in this transaction
@@ -108,14 +118,7 @@ export async function closeSession(
       }
 
       // 2. Read all inventory docs before any write
-      const inventoryAdjustments: Array<{
-        productId: string;
-        productName: string;
-        quantity: number;
-        currentStock: number;
-        newStock: number;
-        inventoryDocId: string;
-      }> = [];
+
 
       if (locationId && soldProducts.length > 0) {
         const inventoryCollection = collection(firestore, 'inventory');
@@ -127,9 +130,16 @@ export async function closeSession(
           const inventoryRef = doc(inventoryCollection, inventoryDocId);
           const inventorySnap = await transaction.get(inventoryRef);
 
-          const currentStock = inventorySnap.exists()
-            ? Number(inventorySnap.data().currentStock ?? 0)
-            : 0;
+          let currentStock = 0;
+          if (inventorySnap.exists()) {
+            currentStock = Number(inventorySnap.data().currentStock ?? 0);
+          } else {
+            const productRef = doc(firestore, 'products', product.productId);
+            const productSnap = await transaction.get(productRef);
+            if (productSnap.exists()) {
+              currentStock = Number(productSnap.data().stock ?? 0);
+            }
+          }
 
           const newStock = currentStock - product.quantity;
           if (newStock < 0) {
@@ -241,6 +251,29 @@ export async function closeSession(
         stockMovements: stockMovementIds,
       };
     });
+
+    // Fase 4: Registro de Kardex de Movimientos para Ventas POS
+    if (locationId && inventoryAdjustments.length > 0) {
+      for (const adjustment of inventoryAdjustments) {
+        await logInventoryMovement(firestore, {
+          locationId,
+          locationName: `Local ${locationId}`,
+          productId: adjustment.productId,
+          productName: adjustment.productName,
+          type: 'sale',
+          quantity: adjustment.quantity,
+          previousStock: adjustment.currentStock,
+          currentStock: adjustment.newStock,
+          note: `Venta automática en POS (Estación: ${station.name})`,
+          operator: {
+            id: operatorId || null,
+            email: operatorEmail || null,
+            role: operatorRole || null,
+          },
+          source: 'pos',
+        });
+      }
+    }
 
     await logAuditAction(firestore, {
       action: 'session.close',
