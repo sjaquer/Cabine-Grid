@@ -58,6 +58,9 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
     expectedYape: number;
     expectedOther: number;
     totalExpected: number;
+    debtsGenerated: number;
+    grossSales: number;
+    theoreticalIncome: number;
     openMachinesCount: number;
   } | null>(null);
   
@@ -264,6 +267,14 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Total esperado</span>
                       <span className="font-semibold">{formatCurrency(closurePreview.totalExpected)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Deudas generadas</span>
+                      <span className="font-semibold text-destructive">{formatCurrency(closurePreview.debtsGenerated || 0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Ingreso teórico (real)</span>
+                      <span className="font-semibold">{formatCurrency(closurePreview.theoreticalIncome || 0)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Maquinas abiertas</span>

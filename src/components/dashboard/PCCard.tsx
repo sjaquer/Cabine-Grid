@@ -6,14 +6,16 @@ import { sanitizeString } from "@/lib/sanitize";
 import { useTimer } from "@/hooks/useTimer";
 import { formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { Monitor, Gamepad2, User } from "lucide-react";
+import { Monitor, Gamepad2, User, ArrowLeftRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type PCCardProps = {
   machine: Station;
   onAction: (station: Station) => void;
+  onMove?: (station: Station) => void;
 };
 
-export default function PCCard({ machine: station, onAction }: PCCardProps) {
+export default function PCCard({ machine: station, onAction, onMove }: PCCardProps) {
   const { session, status, type, name } = station;
   const rate = rates.find(r => r.id === (session?.rateId || station.rateId));
   const prepaidSeconds = session?.usageMode === 'prepaid' ? (session.prepaidHours || 0) * 3600 : undefined;
@@ -88,6 +90,24 @@ export default function PCCard({ machine: station, onAction }: PCCardProps) {
             : '---'}
         </span>
       </div>
+
+      {(status === 'occupied' || status === 'warning') && onMove && (
+        <div className="mt-2 flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-[10px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMove(station);
+            }}
+          >
+            <ArrowLeftRight className="w-3 h-3 mr-1" />
+            Mover
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

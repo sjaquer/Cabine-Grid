@@ -26,8 +26,16 @@ import { Input } from "@/components/ui/input";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useDashboardData } from "@/hooks/useDashboardData";
-import { updateSessionProducts, startMachineSession } from "@/lib/services/sales";
+import { updateSessionProducts, startMachineSession, moveStationSession } from "@/lib/services/sales";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 
 export default function Dashboard() {
@@ -64,6 +72,10 @@ export default function Dashboard() {
 
   const [isPosDialogOpen, setPosDialogOpen] = useState(false);
   const [machineToPos, setMachineToPos] = useState<Station | null>(null);
+  const [isMoveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [machineToMove, setMachineToMove] = useState<Station | null>(null);
+  const [destinationMachineId, setDestinationMachineId] = useState<string>("");
+  const [isMovingSession, setIsMovingSession] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -109,6 +121,12 @@ export default function Dashboard() {
       setMachineToPos(machine);
       setPosDialogOpen(true);
     }
+  }, []);
+
+  const handleMoveRequest = useCallback((machine: Station) => {
+    setMachineToMove(machine);
+    setDestinationMachineId("");
+    setMoveDialogOpen(true);
   }, []);
 
   const handleAssignDialogChange = useCallback((open: boolean) => {
@@ -286,7 +304,12 @@ export default function Dashboard() {
     return created;
   }, [firestore, customers, user?.uid, user?.email, userProfile?.role, toast]);
 
-  const handleConfirmPayment = useCallback(async (machineId: string, amount: number, paymentMethod: PaymentMethod) => {
+  const handleConfirmPayment = useCallback(async (
+    machineId: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    options?: { markAsUnpaid?: boolean },
+  ) => {
     if (!firestore || isProcessingPayment) return;
     const machine = accessibleMachines.find(m => m.id === machineId);
     if (!machine || !machine.session) return;
@@ -343,6 +366,7 @@ export default function Dashboard() {
         session,
         amount,
         paymentMethod,
+        markAsUnpaid: options?.markAsUnpaid,
         locationId: effectiveLocationId,
         operatorId: user?.uid,
         operatorEmail: user?.email || undefined,
@@ -352,10 +376,17 @@ export default function Dashboard() {
         soldProducts,
       });
 
-      toast({
-        title: "Pago Confirmado",
-        description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${result.receiptNumber}.`,
-      });
+      if (options?.markAsUnpaid) {
+        toast({
+          title: "Deuda Registrada",
+          description: `Se registró ${formatCurrency(amount)} como deuda para ${session.client || 'el cliente'} en ${machine.name}.`,
+        });
+      } else {
+        toast({
+          title: "Pago Confirmado",
+          description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${result.receiptNumber}.`,
+        });
+      }
       handlePosDialogChange(false);
 
     } catch (error) {
@@ -371,7 +402,10 @@ export default function Dashboard() {
     }
   }, [accessibleMachines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handlePosDialogChange, userProfile]);
 
-  const handleSaveProducts = useCallback(async (machineId: string, products: SoldProduct[]) => {
+  const handleSaveProducts = useCallback(async (
+    machineId: string,
+    products: SoldProduct[],
+  ) => {
     if (!firestore) return;
     const machine = accessibleMachines.find((item) => item.id === machineId);
     if (!machine || !machine.session) return;
@@ -397,6 +431,8 @@ export default function Dashboard() {
         details: {
           totalItems: products.reduce((sum, p) => sum + p.quantity, 0),
           totalProducts: products.length,
+          discountAmount: machine.session?.discount?.amount ?? 0,
+          discountReason: machine.session?.discount?.reason ?? null,
         },
       });
       toast({ title: "Productos guardados", description: "Se anexaron a la boleta del cliente." });
@@ -421,6 +457,73 @@ export default function Dashboard() {
       });
     }
   }, [accessibleMachines, firestore, toast, selectedLocationId, user?.uid, user?.email, userProfile]);
+
+  const moveCandidates = useMemo(() => {
+    if (!machineToMove) return [] as Station[];
+    return accessibleMachines.filter((station) =>
+      station.id !== machineToMove.id
+      && station.status === "available"
+      && (station.locationId || selectedLocationId) === (machineToMove.locationId || selectedLocationId)
+    );
+  }, [accessibleMachines, machineToMove, selectedLocationId]);
+
+  const confirmMoveSession = useCallback(async () => {
+    if (!firestore || !machineToMove || !destinationMachineId) return;
+    const destinationMachine = accessibleMachines.find((station) => station.id === destinationMachineId);
+    if (!destinationMachine) return;
+
+    try {
+      setIsMovingSession(true);
+      await moveStationSession(firestore, machineToMove.id, destinationMachineId);
+
+      await logAuditAction(firestore, {
+        action: 'session.move',
+        target: 'machines',
+        targetId: machineToMove.id,
+        locationId: machineToMove.locationId || selectedLocationId || undefined,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: {
+          fromMachineId: machineToMove.id,
+          fromMachineName: machineToMove.name,
+          toMachineId: destinationMachine.id,
+          toMachineName: destinationMachine.name,
+          customerId: machineToMove.session?.clientId || null,
+          customerName: machineToMove.session?.client || null,
+        },
+      });
+
+      toast({
+        title: "Sesión transferida",
+        description: `${machineToMove.name} fue movida a ${destinationMachine.name} sin perder la sesión.`,
+      });
+
+      setMoveDialogOpen(false);
+      setMachineToMove(null);
+      setDestinationMachineId("");
+    } catch (error) {
+      console.error("Error moving session:", error);
+      await logAuditFailure(firestore, {
+        action: 'session.move.error',
+        target: 'machines',
+        targetId: machineToMove.id,
+        locationId: machineToMove.locationId || selectedLocationId || undefined,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        error,
+        details: {
+          fromMachineId: machineToMove.id,
+          toMachineId: destinationMachineId,
+        },
+      });
+
+      toast({
+        variant: "destructive",
+        title: "No se pudo mover la sesión",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+      });
+    } finally {
+      setIsMovingSession(false);
+    }
+  }, [firestore, machineToMove, destinationMachineId, accessibleMachines, selectedLocationId, user?.uid, user?.email, userProfile, toast]);
 
 
 
@@ -543,8 +646,53 @@ export default function Dashboard() {
 
       {/* Área Expansiva para el Grid */}
       <div className="flex-1 w-full overflow-y-auto custom-scrollbar min-h-0">
-        <PCGrid machines={finalFilteredMachines} onCardAction={handleCardAction} isLoading={isLoading} />
+        <PCGrid
+          machines={finalFilteredMachines}
+          onCardAction={handleCardAction}
+          onMoveSession={handleMoveRequest}
+          isLoading={isLoading}
+        />
       </div>
+
+      <Dialog open={isMoveDialogOpen} onOpenChange={setMoveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transferir Sesión</DialogTitle>
+            <DialogDescription>
+              Mueve la sesión activa de {machineToMove?.name || "-"} a otra estación disponible.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Select value={destinationMachineId} onValueChange={setDestinationMachineId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona estación destino" />
+              </SelectTrigger>
+              <SelectContent>
+                {moveCandidates.map((station) => (
+                  <SelectItem key={station.id} value={station.id}>
+                    {station.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {moveCandidates.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No hay estaciones disponibles en este local para transferir la sesión.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveDialogOpen(false)} disabled={isMovingSession}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmMoveSession} disabled={!destinationMachineId || isMovingSession}>
+              {isMovingSession ? "Moviendo..." : "Confirmar Transferencia"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={showMobileControls} onOpenChange={setShowMobileControls}>
         <SheetContent side="left" className="w-[88vw] p-4 sm:max-w-sm">

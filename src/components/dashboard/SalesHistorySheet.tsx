@@ -34,6 +34,8 @@ type SalesHistorySheetProps = {
 
 export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userProfile }: SalesHistorySheetProps) {
   const totalSales = sales.reduce((sum, sale) => sum + sale.amount, 0);
+   const totalGross = sales.reduce((sum, sale) => sum + (sale.grossAmount ?? sale.amount), 0);
+   const totalDiscounts = sales.reduce((sum, sale) => sum + (sale.discountAmount ?? 0), 0);
   const totalSessions = sales.length;
   
   const cashSales = sales.filter(s => s.paymentMethod === 'efectivo').reduce((sum, s) => sum + s.amount, 0);
@@ -56,7 +58,7 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 px-4 sm:px-6 py-4 border-b overflow-x-auto">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Recaudado</CardTitle>
+               <CardTitle className="text-sm font-medium">Ingreso Real</CardTitle>
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
@@ -65,29 +67,29 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
             </Card>
              <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Sesiones Totales</CardTitle>
+               <CardTitle className="text-sm font-medium">Ingreso Bruto</CardTitle>
                     <Hash className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">{totalSessions}</div>
+               <div className="text-2xl font-bold">{formatCurrency(totalGross)}</div>
                 </CardContent>
             </Card>
              <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Ventas TPV</CardTitle>
+               <CardTitle className="text-sm font-medium">Descuentos</CardTitle>
                     <ShoppingCart className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">{formatCurrency(productSales)}</div>
+               <div className="text-2xl font-bold text-amber-500">-{formatCurrency(totalDiscounts)}</div>
                 </CardContent>
             </Card>
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Ventas Efectivo</CardTitle>
+               <CardTitle className="text-sm font-medium">Sesiones Totales</CardTitle>
                     <Landmark className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">{formatCurrency(cashSales)}</div>
+               <div className="text-2xl font-bold">{totalSessions}</div>
                 </CardContent>
             </Card>
         </div>
@@ -130,6 +132,25 @@ export default function SalesHistorySheet({ isOpen, onOpenChange, sales, userPro
                             <InfoCard icon={Landmark} title="Tarifa" value={`${sale.rate?.name || ''} (${formatCurrency(sale.rate?.pricePerHour || sale.hourlyRate || 0)}/hr)`} />
                            {userProfile?.role === 'admin' && <InfoCard icon={User} title="Operador" value={sale.operator?.email || 'N/A'} />}
                         </div>
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                           <div className="rounded-md border p-2">
+                              <span className="text-muted-foreground">Ingreso Bruto</span>
+                              <div className="font-mono font-semibold">{formatCurrency(sale.grossAmount ?? sale.amount)}</div>
+                           </div>
+                           <div className="rounded-md border p-2">
+                              <span className="text-muted-foreground">Descuento</span>
+                              <div className="font-mono font-semibold text-amber-500">-{formatCurrency(sale.discountAmount ?? 0)}</div>
+                           </div>
+                           <div className="rounded-md border p-2">
+                              <span className="text-muted-foreground">Ingreso Real</span>
+                              <div className="font-mono font-semibold text-emerald-500">{formatCurrency(sale.netAmount ?? sale.amount)}</div>
+                           </div>
+                        </div>
+                        {sale.discountReason && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Motivo descuento: {sale.discountReason}
+                          </p>
+                        )}
                                     {sale.soldProducts && sale.soldProducts.length > 0 && (
                             <div className="mt-4">
                                               <h4 className="font-semibold mb-2 flex items-center gap-2">

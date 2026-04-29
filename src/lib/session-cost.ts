@@ -31,6 +31,8 @@ export function calculateSessionCost(
   const now = Date.now();
   const elapsedSeconds = Math.max(0, (now - session.startTime) / 1000);
   const elapsedMinutes = Math.max(0, Math.ceil(elapsedSeconds / 60));
+  const extraMinutes = Math.max(0, session.extraMinutes ?? 0);
+  const effectiveElapsedMinutes = Math.max(0, elapsedMinutes - extraMinutes);
   const graceMinutes = Math.max(1, Math.floor(fractionMinutes));
 
   // Calculate billable minutes:
@@ -38,11 +40,11 @@ export function calculateSessionCost(
   // - Up to grace period = charge exact time
   // - Beyond grace period = round up to next full hour
   const billedMinutes =
-    elapsedMinutes === 0
+    effectiveElapsedMinutes === 0
       ? 0
-      : elapsedMinutes <= graceMinutes
-        ? elapsedMinutes
-        : Math.ceil(elapsedMinutes / 60) * 60;
+      : effectiveElapsedMinutes <= graceMinutes
+        ? effectiveElapsedMinutes
+        : Math.ceil(effectiveElapsedMinutes / 60) * 60;
 
   const billedHours = billedMinutes / 60;
   const sessionCostRaw = billedHours * hourlyRate;
@@ -70,7 +72,7 @@ export function calculateSessionCost(
 
   return {
     elapsedSeconds,
-    elapsedMinutes,
+    elapsedMinutes: effectiveElapsedMinutes,
     billedMinutes,
     billedHours,
     sessionCost,

@@ -100,6 +100,8 @@ export default function FinanceReportsManager({ sales, machines, locations, user
   }, [sales, machines, filters, auditLogs, closures]);
 
   const globalRevenue = analytics.filteredSales.reduce((sum, sale) => sum + sale.amount, 0);
+  const globalGrossRevenue = analytics.filteredSales.reduce((sum, sale) => sum + (sale.grossAmount ?? sale.amount), 0);
+  const globalDiscounts = analytics.filteredSales.reduce((sum, sale) => sum + (sale.discountAmount ?? 0), 0);
   const globalSalesCount = analytics.filteredSales.length;
   const globalAvgTicket = globalSalesCount > 0 ? globalRevenue / globalSalesCount : 0;
   const weightedMargin = analytics.executiveByLocation.reduce((sum, item) => sum + item.estimatedMargin, 0);
@@ -303,8 +305,13 @@ export default function FinanceReportsManager({ sales, machines, locations, user
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <MetricCard title="Ingresos" value={formatCurrency(globalRevenue)} subtitle={`${globalSalesCount} ventas`} icon={TrendingUp} />
+        <MetricCard title="Ingreso Bruto" value={formatCurrency(globalGrossRevenue)} subtitle={`${globalSalesCount} ventas`} icon={TrendingUp} />
+        <MetricCard title="Descuentos" value={`-${formatCurrency(globalDiscounts)}`} subtitle="Promociones aplicadas" icon={AlertTriangle} />
+        <MetricCard title="Ingreso Real" value={formatCurrency(globalRevenue)} subtitle="Bruto - Descuentos" icon={TrendingUp} />
         <MetricCard title="Ticket promedio" value={formatCurrency(globalAvgTicket)} subtitle="Promedio por venta" icon={Building2} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MetricCard title="Margen estimado" value={formatCurrency(weightedMargin)} subtitle={`${weightedMarginPercent.toFixed(1)}% sobre ingresos`} icon={TrendingUp} />
         <MetricCard
           title="Local lider"
@@ -488,7 +495,9 @@ export default function FinanceReportsManager({ sales, machines, locations, user
                     <TableHead>Local</TableHead>
                     <TableHead>Operador</TableHead>
                     <TableHead>Cabina</TableHead>
-                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-right">Bruto</TableHead>
+                    <TableHead className="text-right">Descuento</TableHead>
+                    <TableHead className="text-right">Neto</TableHead>
                     <TableHead>Pago</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -499,7 +508,9 @@ export default function FinanceReportsManager({ sales, machines, locations, user
                       <TableCell>{resolveLocationLabel(sale.locationId || "sin-local", locationsMap)}</TableCell>
                       <TableCell>{sale.operator?.email || "No identificado"}</TableCell>
                       <TableCell>{sale.machineName}</TableCell>
-                      <TableCell className="text-right font-mono">{formatCurrency(sale.amount)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(sale.grossAmount ?? sale.amount)}</TableCell>
+                      <TableCell className="text-right font-mono text-amber-500">-{formatCurrency(sale.discountAmount ?? 0)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(sale.netAmount ?? sale.amount)}</TableCell>
                       <TableCell className="capitalize">{sale.paymentMethod}</TableCell>
                     </TableRow>
                   ))}

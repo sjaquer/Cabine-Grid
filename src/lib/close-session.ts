@@ -16,6 +16,7 @@ export interface CloseSessionPayload {
   session: Session;
   amount: number;
   paymentMethod: PaymentMethod;
+  markAsUnpaid?: boolean;
   locationId?: string;
   operatorId?: string;
   operatorEmail?: string;
@@ -44,6 +45,7 @@ export async function closeSession(
     session,
     amount,
     paymentMethod,
+    markAsUnpaid = false,
     locationId,
     operatorId,
     operatorEmail,
@@ -54,11 +56,17 @@ export async function closeSession(
   } = payload;
 
   const endTime = Date.now();
+  const isUnpaid = markAsUnpaid || paymentMethod === 'deuda';
+  const effectivePaymentMethod: PaymentMethod = isUnpaid ? 'deuda' : paymentMethod;
   const totalMinutes = Math.ceil((endTime - session.startTime) / (1000 * 60));
   const visitDate = new Date(session.startTime);
   const weekdayKey = String(visitDate.getDay());
   const hourKey = String(visitDate.getHours());
   const totalProductsBought = soldProducts.reduce((sum, product) => sum + product.quantity, 0);
+  const discountAmount = Math.max(0, Math.round((session.discount?.amount ?? 0) * 100) / 100);
+  const grossAmount = Math.round((amount + discountAmount) * 100) / 100;
+  const netAmount = Math.round(amount * 100) / 100;
+  const discountReason = session.discount?.reason?.trim() || undefined;
 
   // Build the Sale document
   const operator = {
@@ -77,9 +85,16 @@ export async function closeSession(
     startTime: Timestamp.fromMillis(session.startTime),
     endTime: Timestamp.fromMillis(endTime),
     totalMinutes,
+    grossAmount,
+    discountAmount,
+    ...(discountReason ? { discountReason } : {}),
+    netAmount,
     amount,
     ...(typeof session.hourlyRate === 'number' ? { hourlyRate: session.hourlyRate } : {}),
-    paymentMethod,
+    paymentMethod: effectivePaymentMethod,
+    isUnpaid,
+    extraMinutes: session.extraMinutes ?? 0,
+    appliedCards: session.appliedCards ?? [],
     soldProducts,
     ...(Object.keys(operator).length > 0 ? { operator } : {}),
   };
@@ -115,6 +130,10 @@ export async function closeSession(
           ...(customerSnap.data() as Customer),
           id: customerSnap.id,
         };
+      }
+
+      if (isUnpaid && !session.clientId) {
+        throw new Error('No se puede registrar deuda sin cliente asociado.');
       }
 
       // 2. Read all inventory docs before any write
@@ -221,12 +240,14 @@ export async function closeSession(
         const currentVisitsByWeekday = currentMetrics?.visitsByWeekday ?? {};
         const currentVisitHours = currentMetrics?.visitHours ?? {};
 
+        const currentDebt = Number(customerData.debt ?? 0);
+
         transaction.set(customerRef, {
           metrics: {
             totalSessions: (currentMetrics?.totalSessions ?? 0) + 1,
             totalMinutesRented: (currentMetrics?.totalMinutesRented ?? 0) + totalMinutes,
             totalProductsBought: (currentMetrics?.totalProductsBought ?? 0) + totalProductsBought,
-            totalSpent: (currentMetrics?.totalSpent ?? 0) + amount,
+            totalSpent: (currentMetrics?.totalSpent ?? 0) + (isUnpaid ? 0 : amount),
             machineUsage: {
               ...currentMachineUsage,
               [station.name]: (currentMachineUsage[station.name] ?? 0) + 1,
@@ -241,6 +262,7 @@ export async function closeSession(
             },
             lastVisitAt: Timestamp.fromMillis(endTime),
           },
+          ...(isUnpaid ? { debt: Math.round((currentDebt + amount) * 100) / 100 } : {}),
           updatedAt: serverTimestamp(),
         }, { merge: true });
       }
@@ -284,11 +306,33 @@ export async function closeSession(
       details: {
         stationName: station.name,
         amount,
-        paymentMethod,
+        grossAmount,
+        discountAmount,
+        discountReason: discountReason ?? null,
+        paymentMethod: effectivePaymentMethod,
+        isUnpaid,
         receiptNumber: result.receiptNumber,
         productsCount: soldProducts.length,
       },
     });
+
+    if (isUnpaid) {
+      await logAuditAction(firestore, {
+        action: 'session.debt.close',
+        target: 'customers',
+        targetId: session.clientId,
+        locationId,
+        severity: 'high',
+        actor: { id: operatorId, email: operatorEmail, role: operatorRole },
+        details: {
+          message: `Cierre de deuda por S/${amount.toFixed(2)} - Cliente: ${session.client || 'Sin nombre'}`,
+          stationName: station.name,
+          amount,
+          clientName: session.client || null,
+          customerId: session.clientId || null,
+        },
+      });
+    }
 
     return result;
   } catch (error) {

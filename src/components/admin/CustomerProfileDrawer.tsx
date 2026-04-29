@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import type { Customer } from "@/lib/types";
 import { useAuth, useFirestore } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, where, getDocs, orderBy, limit, Timestamp } from "firebase/firestore";
 import { logAuditAction } from "@/lib/audit-log";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -19,7 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Trophy, Clock, HardDrive, CalendarDays, Gamepad2, ShieldAlert, Save } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Trophy, Clock, Gamepad2, ShieldAlert, Save } from "lucide-react";
 
 interface CustomerProfileDrawerProps {
   customer: Customer | null;
@@ -45,6 +46,22 @@ export function CustomerProfileDrawer({
   
   const [isSaving, setIsSaving] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [inventoryCards, setInventoryCards] = useState<any[]>(
+    Array.isArray(customer?.inventoryCards) ? customer.inventoryCards : []
+  );
+
+  // Card gifting form
+  const PREMADE_CARDS = [
+    { name: 'Carta 30% Descuento', type: 'discount', value: 30, description: '30% de descuento en una compra' },
+    { name: 'Carta +30 Min', type: 'time', value: 30, description: 'Regala 30 minutos extra' },
+    { name: 'Carta Recompensa', type: 'reward', value: 0, description: 'Recompensa especial VIP' },
+  ];
+
+  const [selectedPreMade, setSelectedPreMade] = useState<string | null>(null);
+  const [customName, setCustomName] = useState("");
+  const [customType, setCustomType] = useState<"time" | "discount" | "challenge" | "reward">("reward");
+  const [customValue, setCustomValue] = useState<string>("");
+  const [customDescription, setCustomDescription] = useState("");
 
   useEffect(() => {
     if (customer && isOpen) {
@@ -58,6 +75,10 @@ export function CustomerProfileDrawer({
       }
     }
   }, [customer, isOpen, userProfile]);
+
+  useEffect(() => {
+    setInventoryCards(Array.isArray(customer?.inventoryCards) ? customer.inventoryCards : []);
+  }, [customer]);
 
   const fetchAuditLogs = async (customerId: string) => {
     try {
@@ -154,6 +175,56 @@ export function CustomerProfileDrawer({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const giftCardToCustomer = async (card: { name: string; type: string; value?: number; description?: string }) => {
+    if (!customer) return;
+    try {
+      const customerRef = doc(firestore, 'customers', customer.id);
+      const newCard = {
+        id: `card_${Date.now()}`,
+        name: card.name,
+        type: card.type,
+        value: card.value ?? undefined,
+        description: card.description ?? undefined,
+        isUsed: false,
+        createdAt: serverTimestamp(),
+      };
+
+      const currentCards = Array.isArray(customer.inventoryCards) ? customer.inventoryCards : [];
+      const updatedCards = [...currentCards, newCard];
+      await updateDoc(customerRef, {
+        inventoryCards: updatedCards,
+        updatedAt: serverTimestamp(),
+      });
+
+      await logAuditAction(firestore, {
+        action: 'customer.card.gift',
+        target: 'customers',
+        targetId: customer.id,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: { card: { name: newCard.name, type: newCard.type, value: newCard.value }, message: 'Carta obsequiada al cliente' },
+      });
+
+      setInventoryCards(updatedCards);
+      if (onUpdated) onUpdated();
+    } catch (error) {
+      console.error('Error regalando carta:', error);
+    }
+  };
+
+  const handleGiftPreMade = async () => {
+    if (!selectedPreMade) return;
+    const template = PREMADE_CARDS.find((c) => c.name === selectedPreMade);
+    if (!template) return;
+    await giftCardToCustomer(template);
+    setSelectedPreMade(null);
+  };
+
+  const handleCreateCustomCard = async () => {
+    if (!customName) return;
+    await giftCardToCustomer({ name: customName, type: customType, value: Number(customValue) || undefined, description: customDescription });
+    setCustomName(''); setCustomDescription(''); setCustomValue(''); setCustomType('reward');
   };
 
   return (
@@ -266,6 +337,64 @@ export function CustomerProfileDrawer({
           >
             <Save className="w-4 h-4" /> {isSaving ? "Guardando..." : "Guardar Cambios CRM"}
           </Button>
+        </div>
+
+        {/* Cards management */}
+        <div className="space-y-4 mt-6 pt-6 border-t border-zinc-900">
+          <h3 className="text-sm font-bold">Cartas del Cliente</h3>
+          <div className="space-y-2">
+            {inventoryCards.length === 0 ? (
+              <p className="text-xs text-zinc-500">El cliente no tiene cartas.</p>
+            ) : (
+              inventoryCards.map((c: any) => (
+                <Card key={c.id} className="border-zinc-800/40 bg-zinc-900/10">
+                  <CardContent className="p-2 flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold">{c.name}</div>
+                      <div className="text-[11px] text-zinc-400">{c.type} {c.value ? `• ${c.value}` : ''}</div>
+                    </div>
+                    <div className="text-xs text-zinc-300">{c.isUsed ? 'Usada' : 'Disponible'}</div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+
+          <div className="pt-3">
+            <Label className="text-xs text-zinc-400 font-semibold">Regalar carta prehecha</Label>
+            <div className="flex gap-2 mt-2">
+              <Select onValueChange={(val) => setSelectedPreMade(val || null)}>
+                <SelectTrigger className="w-full"><SelectValue>{selectedPreMade || 'Seleccionar carta'}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  {PREMADE_CARDS.map((pc) => (
+                    <SelectItem key={pc.name} value={pc.name}>{pc.name} — {pc.description}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleGiftPreMade} disabled={!selectedPreMade} className="h-9">Regalar</Button>
+            </div>
+
+            <div className="mt-4">
+              <Label className="text-xs text-zinc-400 font-semibold">Crear carta personalizada</Label>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <Input placeholder="Nombre" value={customName} onChange={(e) => setCustomName(e.target.value)} />
+                <Select onValueChange={(val) => setCustomType(val as any)}>
+                  <SelectTrigger className="w-full"><SelectValue>{customType}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="time">time</SelectItem>
+                    <SelectItem value="discount">discount</SelectItem>
+                    <SelectItem value="challenge">challenge</SelectItem>
+                    <SelectItem value="reward">reward</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input placeholder="Valor (ej: 30)" value={customValue} onChange={(e) => setCustomValue(e.target.value)} />
+                <Input placeholder="Descripción" value={customDescription} onChange={(e) => setCustomDescription(e.target.value)} />
+              </div>
+              <div className="flex gap-2 mt-3">
+                <Button onClick={handleCreateCustomCard} disabled={!customName} className="h-9">Crear y Regalar</Button>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Audit Logs (Only for admin) */}

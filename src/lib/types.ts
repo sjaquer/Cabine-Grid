@@ -1,7 +1,7 @@
 import type { User as FirebaseUser } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 
-export type PaymentMethod = 'efectivo' | 'yape' | 'otro';
+export type PaymentMethod = 'efectivo' | 'yape' | 'otro' | 'deuda';
 
 export type UsageMode = 'free' | 'prepaid';
 
@@ -26,6 +26,27 @@ export type Session = {
   prepaidHours?: number;
   soldProducts?: SoldProduct[];
   userId?: string;
+  discount?: {
+    amount: number;
+    reason: string;
+  };
+  isUnpaid?: boolean;
+  appliedCards?: string[];
+  extraMinutes?: number;
+};
+
+export type CardItemType = 'time' | 'discount' | 'challenge' | 'reward';
+
+export type CardItem = {
+  id: string;
+  name: string;
+  type: CardItemType;
+  value?: number;
+  description?: string;
+  isUsed?: boolean;
+  createdAt?: Timestamp;
+  expiresAt?: Timestamp;
+  usedAt?: Timestamp;
 };
 
 export type StationType = 'PC' | 'PS5' | 'XBOX' | 'PS4' | 'PS3' | 'NINTENDO' | 'VR' | 'SIMULADOR';
@@ -92,15 +113,22 @@ export type Sale = {
   startTime: Timestamp;
   endTime: Timestamp;
   totalMinutes: number;
+  grossAmount?: number;
+  discountAmount?: number;
+  discountReason?: string;
+  netAmount?: number;
   amount: number;
   hourlyRate?: number;
   rate?: Rate;
   paymentMethod: PaymentMethod;
+  isUnpaid?: boolean;
   soldProducts?: SoldProduct[];
   operator?: {
     id?: string;
     email?: string | null;
   }
+  extraMinutes?: number;
+  appliedCards?: string[];
 };
 
 export type UserRole = 'admin' | 'manager' | 'operator' | 'view-only';
@@ -135,6 +163,9 @@ export type Customer = {
   dni?: string;
   whatsapp?: string;
   loyaltyLevel?: 'bronze' | 'silver' | 'gold';
+  debt?: number;
+  inventoryCards?: CardItem[];
+  loyaltyPoints?: number;
   totalSpent?: number;
   lastVisit?: Timestamp;
   notes?: string;
@@ -189,6 +220,8 @@ export type AuthContextType = {
   loading: boolean;
   logout: (payload?: {
     countedCash?: number;
+    countedYape?: number;
+    countedOther?: number;
     inventoryChecked?: boolean;
     discrepancyReason?: string;
   }) => Promise<void>;

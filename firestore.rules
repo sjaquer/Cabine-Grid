@@ -57,6 +57,11 @@ service cloud.firestore {
         request.resource.data.fullName.size() > 1;
     }
 
+    function hasValidCardTemplate() {
+      return request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.type is string;
+    }
+
     function hasValidSaleData() {
       return request.resource.data.amount is number && 
              request.resource.data.amount > 0 &&
@@ -126,7 +131,18 @@ service cloud.firestore {
     match /customers/{customerId} {
       allow read: if isSignedIn();
       allow create: if canOperate() && hasValidCustomerBaseData();
-      allow update: if canOperate() && hasValidCustomerBaseData();
+      allow update: if canOperate() && hasValidCustomerBaseData() && (
+        // inventoryCards must be a list when present
+        (!request.resource.data.keys().hasAny(['inventoryCards']) || request.resource.data.inventoryCards is list)
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Card templates used by admin to create pre-made cards
+    match /cardTemplates/{templateId} {
+      allow read: if isSignedIn();
+      allow create: if isAdminOrManager() && hasValidCardTemplate();
+      allow update: if isAdminOrManager() && hasValidCardTemplate();
       allow delete: if isAdmin();
     }
 

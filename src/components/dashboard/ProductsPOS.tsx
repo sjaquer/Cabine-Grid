@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useCartStore } from "@/store/useCartStore";
-import type { Product, SoldProduct, Session, PaymentMethod } from "@/lib/types";
+import type { Product, SoldProduct, Session, PaymentMethod, CardItem } from "@/lib/types";
 import { formatCurrency, formatTime, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, MinusCircle, ShoppingCart, AlertTriangle } from "lucide-react";
@@ -13,19 +13,23 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { calculateSessionCost } from "@/lib/session-cost";
+import { useFirestore } from "@/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { applyCardToSession } from "@/lib/services/sales";
 
 interface ProductsPOSProps {
     availableProducts: Product[];
     initialProducts?: SoldProduct[];
-    onSave: (products: SoldProduct[]) => Promise<void>;
+    onSave: (products: SoldProduct[], discount?: Session['discount']) => Promise<void>;
     onClose?: () => void;
     onGoToCharge?: (products: SoldProduct[]) => void;
     inventoryByProduct?: Record<string, number>;
     activeSession?: Session;
     fractionMinutes?: number;
-    onConfirmPayment?: (amount: number, paymentMethod: PaymentMethod) => void;
+    onConfirmPayment?: (amount: number, paymentMethod: PaymentMethod, options?: { markAsUnpaid?: boolean }) => void;
     isProcessing?: boolean;
     machineName?: string;
+    machineId?: string;
 }
 
 const categoryLabels = {
@@ -54,6 +58,7 @@ export default function ProductsPOS({
   onConfirmPayment,
   isProcessing = false,
   machineName = "PC",
+    machineId,
 }: ProductsPOSProps) {
     const { quantities, updateQuantity, setQuantities, clearCart } = useCartStore();
     const [searchTerm, setSearchTerm] = useState("");
@@ -134,7 +139,13 @@ export default function ProductsPOS({
     }, 0);
 
     const sessionCost = costCalculation?.sessionCost || 0;
-    const total = productsTotal + sessionCost;
+        const grossTotal = productsTotal + sessionCost;
+        const appliedDiscount = Math.max(0, Math.round((activeSession?.discount?.amount ?? 0) * 100) / 100);
+        const total = Math.max(0, Math.round((grossTotal - appliedDiscount) * 100) / 100);
+    const canRegisterDebt = Boolean(activeSession?.clientId);
+            const sessionDiscount = appliedDiscount > 0
+                ? { amount: appliedDiscount, reason: activeSession?.discount?.reason || "PROMOCION" }
+                : undefined;
 
     const numAmountPaid = Math.max(0, parseFloat(amountPaid) || 0);
     const change = numAmountPaid > total ? numAmountPaid - total : 0;
@@ -150,6 +161,37 @@ export default function ProductsPOS({
             };
         });
     }, [quantities, availableProducts]);
+
+    // Customer cards
+    const firestore = useFirestore();
+    const [customerCards, setCustomerCards] = useState<CardItem[] | null>(null);
+    const [loadingCards, setLoadingCards] = useState(false);
+
+    useEffect(() => {
+        const fetchCards = async () => {
+            if (!activeSession?.clientId) {
+                setCustomerCards(null);
+                return;
+            }
+            setLoadingCards(true);
+            try {
+                const ref = doc(firestore, 'customers', activeSession.clientId);
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    setCustomerCards(data.inventoryCards || []);
+                } else {
+                    setCustomerCards([]);
+                }
+            } catch (e) {
+                console.error('Error fetching customer cards', e);
+                setCustomerCards([]);
+            } finally {
+                setLoadingCards(false);
+            }
+        };
+        fetchCards();
+    }, [activeSession?.clientId, firestore]);
 
     const renderProductRow = (product: Product) => {
         const availableStock = getAvailableStock(product.id, product);
@@ -390,6 +432,8 @@ export default function ProductsPOS({
                                 )}
                             </div>
                         )}
+
+                        {/* Discounts are card-based only. Applied discounts are stored in session and shown below. */}
                     </div>
                 )}
 
@@ -430,6 +474,23 @@ export default function ProductsPOS({
                     </span>
                 </div>
 
+                {appliedDiscount > 0 && (
+                    <div className="space-y-1 text-xs border border-emerald-500/30 bg-emerald-500/10 rounded-lg p-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-zinc-300">Ingreso Bruto</span>
+                            <span className="font-mono text-zinc-100">{formatCurrency(grossTotal)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-zinc-300">Descuento Aplicado</span>
+                            <span className="font-mono text-amber-300">- {formatCurrency(appliedDiscount)}</span>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-zinc-700 pt-1">
+                            <span className="text-zinc-100 font-semibold">Ingreso Real</span>
+                            <span className="font-mono text-emerald-300 font-bold">{formatCurrency(total)}</span>
+                        </div>
+                    </div>
+                )}
+
                 {activeSession && onConfirmPayment && (
                     <div className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-[11px] text-amber-200/90 leading-tight mb-2 mt-1">
                         <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -439,6 +500,39 @@ export default function ProductsPOS({
                               ? " Recuerda registrar SIEMPRE el monto físico que te está entregando el cliente." 
                               : " Valida que el comprobante digital corresponda al total."}
                         </p>
+                    </div>
+                )}
+
+                {/* Customer Cards */}
+                {activeSession?.clientId && customerCards && customerCards.length > 0 && (
+                    <div className="space-y-2 p-2 rounded-lg border border-zinc-800/40 bg-zinc-900/20">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-zinc-300">Cartas Disponibles</span>
+                        </div>
+                        <div className="grid gap-2">
+                            {customerCards.map((c) => (
+                                <div key={c.id} className="flex items-center justify-between p-2 bg-zinc-950/20 rounded">
+                                    <div className="text-xs">
+                                        <div className="font-semibold">{c.name}</div>
+                                        <div className="text-[11px] text-zinc-400">{c.type} {c.value ? `• ${c.value}` : ''}</div>
+                                    </div>
+                                    <div>
+                                        <Button size="sm" onClick={async () => {
+                                            try {
+                                                if (!machineId) throw new Error('Station id not available');
+                                                await applyCardToSession(firestore, machineId, activeSession.id, c.id);
+                                                // refetch cards
+                                                const ref = doc(firestore, 'customers', activeSession.clientId!);
+                                                const snap = await getDoc(ref);
+                                                if (snap.exists()) setCustomerCards(snap.data().inventoryCards || []);
+                                            } catch (e) {
+                                                console.error(e);
+                                            }
+                                        }} disabled={c.isUsed} className="h-8">{c.isUsed ? 'Usada' : 'Usar'}</Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -460,22 +554,47 @@ export default function ProductsPOS({
                     </Button>
                 )}
 
-                {!activeSession && onGoToCharge && (
-                    <Button 
+                {activeSession && onConfirmPayment && (
+                    <Button
                         onClick={async () => {
                             try {
                                 setIsSaving(true);
                                 await onSave(soldProducts);
-                                if (onGoToCharge) onGoToCharge(soldProducts);
+                                if (onConfirmPayment) onConfirmPayment(total, 'deuda', { markAsUnpaid: true });
                             } finally {
                                 setIsSaving(false);
                             }
-                        }} 
-                        disabled={isSaving}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-lg py-6 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                        }}
+                        disabled={isSaving || isProcessing || !canRegisterDebt}
+                        variant="destructive"
+                        className="w-full font-bold text-sm py-4 rounded-xl"
                     >
-                        Cobrar (Enter)
+                        {isProcessing ? "Procesando..." : "EL CLIENTE NO PAGÓ"}
                     </Button>
+                )}
+
+                {activeSession && onConfirmPayment && !canRegisterDebt && (
+                    <p className="text-[11px] text-amber-300/90 border border-amber-500/30 bg-amber-500/10 rounded-lg p-2">
+                        Para registrar deuda, la sesión debe estar vinculada a un cliente del CRM.
+                    </p>
+                )}
+
+                {!activeSession && onGoToCharge && (
+                        <Button 
+                            onClick={async () => {
+                                try {
+                                    setIsSaving(true);
+                                    await onSave(soldProducts);
+                                    if (onGoToCharge) onGoToCharge(soldProducts);
+                                } finally {
+                                    setIsSaving(false);
+                                }
+                            }} 
+                            disabled={isSaving}
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-lg py-6 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                        >
+                            Cobrar (Enter)
+                        </Button>
                 )}
 
                 <div className="flex gap-2 pt-1">

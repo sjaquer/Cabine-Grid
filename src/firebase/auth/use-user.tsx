@@ -32,6 +32,9 @@ export interface AuthContextValue {
     expectedYape: number;
     expectedOther: number;
     totalExpected: number;
+    debtsGenerated: number;
+    grossSales: number;
+    theoreticalIncome: number;
     openMachinesCount: number;
   } | null>;
   logout: (payload?: {
@@ -148,15 +151,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return sale.locationId === shiftLocationId;
         });
 
-        const expectedCash = operatorShiftSales
+        const paidShiftSales = operatorShiftSales.filter((sale) => !sale.isUnpaid && sale.paymentMethod !== 'deuda');
+
+        const expectedCash = paidShiftSales
           .filter((sale) => sale.paymentMethod === 'efectivo')
           .reduce((sum, sale) => sum + sale.amount, 0);
-        const expectedYape = operatorShiftSales
+        const expectedYape = paidShiftSales
           .filter((sale) => sale.paymentMethod === 'yape')
           .reduce((sum, sale) => sum + sale.amount, 0);
-        const expectedOther = operatorShiftSales
+        const expectedOther = paidShiftSales
           .filter((sale) => sale.paymentMethod === 'otro')
           .reduce((sum, sale) => sum + sale.amount, 0);
+        const debtsGenerated = operatorShiftSales
+          .filter((sale) => sale.isUnpaid || sale.paymentMethod === 'deuda')
+          .reduce((sum, sale) => sum + sale.amount, 0);
+        const grossSales = operatorShiftSales.reduce((sum, sale) => sum + sale.amount, 0);
+        const theoreticalIncome = Math.round((grossSales - debtsGenerated) * 100) / 100;
 
         const countedCash = Math.round(payload.countedCash * 100) / 100;
         const countedYape = Math.round(payload.countedYape * 100) / 100;
@@ -205,11 +215,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           expectedOther,
           countedOther,
           otherDifference,
+          debtsGenerated: Math.round(debtsGenerated * 100) / 100,
+          grossSales: Math.round(grossSales * 100) / 100,
+          theoreticalIncome,
           totalDifference,
           discrepancyReason: payload.discrepancyReason?.trim() || null,
           inventoryChecked: true,
           salesCount: operatorShiftSales.length,
-          totalSales: operatorShiftSales.reduce((sum: number, sale) => sum + sale.amount, 0),
+          totalSales: Math.round(grossSales * 100) / 100,
           status: 'closed',
           createdAt: serverTimestamp(),
         });
@@ -234,6 +247,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             expectedOther,
             countedOther,
             otherDifference,
+            debtsGenerated,
+            grossSales,
+            theoreticalIncome,
             totalDifference,
             salesCount: operatorShiftSales.length,
           },
@@ -307,15 +323,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return sale.locationId === shiftLocationId;
     });
 
-    const expectedCash = operatorShiftSales
+    const paidShiftSales = operatorShiftSales.filter((sale) => !sale.isUnpaid && sale.paymentMethod !== 'deuda');
+
+    const expectedCash = paidShiftSales
       .filter((sale) => sale.paymentMethod === 'efectivo')
       .reduce((sum, sale) => sum + sale.amount, 0);
-    const expectedYape = operatorShiftSales
+    const expectedYape = paidShiftSales
       .filter((sale) => sale.paymentMethod === 'yape')
       .reduce((sum, sale) => sum + sale.amount, 0);
-    const expectedOther = operatorShiftSales
+    const expectedOther = paidShiftSales
       .filter((sale) => sale.paymentMethod === 'otro')
       .reduce((sum, sale) => sum + sale.amount, 0);
+    const debtsGenerated = operatorShiftSales
+      .filter((sale) => sale.isUnpaid || sale.paymentMethod === 'deuda')
+      .reduce((sum, sale) => sum + sale.amount, 0);
+    const grossSales = operatorShiftSales.reduce((sum, sale) => sum + sale.amount, 0);
+    const theoreticalIncome = Math.round((grossSales - debtsGenerated) * 100) / 100;
     const totalExpected = Math.round((expectedCash + expectedYape + expectedOther) * 100) / 100;
 
     const machinesRef = collection(firestore, 'stations');
@@ -338,6 +361,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       expectedYape: Math.round(expectedYape * 100) / 100,
       expectedOther: Math.round(expectedOther * 100) / 100,
       totalExpected,
+      debtsGenerated: Math.round(debtsGenerated * 100) / 100,
+      grossSales: Math.round(grossSales * 100) / 100,
+      theoreticalIncome,
       openMachinesCount: openMachines.length,
     };
   };

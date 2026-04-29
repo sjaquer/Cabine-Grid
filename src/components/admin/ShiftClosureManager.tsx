@@ -28,6 +28,9 @@ type ShiftClosure = {
   locationId?: string | null;
   status?: "closed" | "reopened";
   expectedCash?: number;
+  grossSales?: number;
+  theoreticalIncome?: number;
+  debtsGenerated?: number;
   countedCash?: number;
   cashDifference?: number;
   discrepancyReason?: string | null;
@@ -78,6 +81,8 @@ export default function ShiftClosureManager({ closures, userProfile, onReopenShi
                 <TableHead>Operador</TableHead>
                 <TableHead>Local</TableHead>
                 <TableHead className="text-right">Caja Esperada</TableHead>
+                <TableHead className="text-right">Deudas</TableHead>
+                <TableHead className="text-right">Ingreso Teórico</TableHead>
                 <TableHead className="text-right">Caja Contada</TableHead>
                 <TableHead className="text-right">Diferencia</TableHead>
                 <TableHead>Estado</TableHead>
@@ -87,7 +92,7 @@ export default function ShiftClosureManager({ closures, userProfile, onReopenShi
             <TableBody>
               {closures.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground">
                     No hay cierres registrados.
                   </TableCell>
                 </TableRow>
@@ -100,6 +105,8 @@ export default function ShiftClosureManager({ closures, userProfile, onReopenShi
                     <TableCell>{closure.operator?.email || "-"}</TableCell>
                     <TableCell>{closure.locationId || "Sin local"}</TableCell>
                     <TableCell className="text-right font-mono">{formatCurrency(closure.expectedCash || 0)}</TableCell>
+                    <TableCell className="text-right font-mono text-destructive">{formatCurrency(closure.debtsGenerated || 0)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatCurrency(closure.theoreticalIncome ?? closure.grossSales ?? 0)}</TableCell>
                     <TableCell className="text-right font-mono">{formatCurrency(closure.countedCash || 0)}</TableCell>
                     <TableCell className="text-right font-mono">{formatCurrency(closure.cashDifference || 0)}</TableCell>
                     <TableCell>

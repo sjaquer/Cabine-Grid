@@ -15,6 +15,7 @@ function toDate(value: Timestamp | Date | number): Date {
 function paymentLabel(method: PaymentMethod): string {
   if (method === "efectivo") return "Efectivo";
   if (method === "yape") return "Yape/Plin";
+  if (method === "deuda") return "Deuda";
   return "Tarjeta/Otro";
 }
 
@@ -76,7 +77,7 @@ export function exportFinancePdf(params: {
 
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 14,
-    head: [["Fecha", "Local", "Boleta", "Cabina", "Cliente", "Pago", "Monto"]],
+    head: [["Fecha", "Local", "Boleta", "Cabina", "Cliente", "Pago", "Bruto", "Descuento", "Neto", "ExtraMin", "Cartas"]],
     body: sales.map((sale) => [
       toDate(sale.endTime as Timestamp).toLocaleString("es-PE"),
       locationsMap.get(sale.locationId || "") || sale.locationId || "Sin local",
@@ -84,7 +85,11 @@ export function exportFinancePdf(params: {
       sale.machineName,
       sale.clientName || "Ocasional",
       paymentLabel(sale.paymentMethod),
-      formatCurrency(sale.amount),
+      formatCurrency(sale.grossAmount ?? sale.amount),
+      formatCurrency(sale.discountAmount ?? 0),
+      formatCurrency(sale.netAmount ?? sale.amount),
+      String(sale.extraMinutes ?? 0),
+      Array.isArray(sale.appliedCards) ? (sale.appliedCards as string[]).join(", ") : "",
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [55, 65, 81] },
@@ -133,7 +138,11 @@ export function exportFinanceExcel(params: {
     MetodoPago: paymentLabel(sale.paymentMethod),
     Boleta: sale.receiptNumber || "-",
     DuracionMin: sale.totalMinutes,
-    Monto: sale.amount,
+    Bruto: sale.grossAmount ?? sale.amount,
+    Descuento: sale.discountAmount ?? 0,
+    Neto: sale.netAmount ?? sale.amount,
+    ExtraMin: sale.extraMinutes ?? 0,
+    AppliedCards: Array.isArray(sale.appliedCards) ? (sale.appliedCards as string[]).join(', ') : '',
   }));
 
   const filtrosRows = [

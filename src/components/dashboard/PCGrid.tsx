@@ -6,10 +6,11 @@ import { AlertCircle } from "lucide-react";
 type PCGridProps = {
   machines: Station[]; // renamed for component backward compatibility
   onCardAction: (station: Station) => void;
+  onMoveSession?: (station: Station) => void;
   isLoading: boolean;
 };
 
-export default function PCGrid({ machines: stations, onCardAction, isLoading }: PCGridProps) {
+export default function PCGrid({ machines: stations, onCardAction, onMoveSession, isLoading }: PCGridProps) {
   if (isLoading) {
     return (
       <div className="flex-1 p-3 sm:p-4 lg:p-6">
@@ -61,6 +62,7 @@ export default function PCGrid({ machines: stations, onCardAction, isLoading }: 
               key={station.id}
               machine={station}
               onAction={onCardAction}
+              onMove={onMoveSession}
             />
           ))}
         </div>

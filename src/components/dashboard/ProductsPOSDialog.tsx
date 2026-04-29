@@ -1,6 +1,6 @@
 "use client";
 
-import type { Station, Product, SoldProduct, PaymentMethod } from "@/lib/types";
+import type { Station, Product, SoldProduct, PaymentMethod, Session } from "@/lib/types";
 import { sanitizeString } from "@/lib/sanitize";
 import { formatTime } from "@/lib/utils";
 import {
@@ -20,7 +20,7 @@ import { ShoppingCart, X } from "lucide-react";
   machine: Station | null;
   products: Product[];
   onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
-  onConfirmPayment: (machineId: string, amount: number, paymentMethod: PaymentMethod) => void;
+  onConfirmPayment: (machineId: string, amount: number, paymentMethod: PaymentMethod, options?: { markAsUnpaid?: boolean }) => void;
   isProcessingPayment?: boolean;
   inventoryByProduct?: Record<string, number>; // productId -> stock
   fractionMinutes?: number;
@@ -78,12 +78,13 @@ export default function ProductsPOSDialog({
             initialProducts={session.soldProducts}
             onSave={handleSave}
             onClose={() => onOpenChange(false)}
-            onConfirmPayment={(amount, paymentMethod) => onConfirmPayment(machine.id, amount, paymentMethod)}
+            onConfirmPayment={(amount, paymentMethod, options) => onConfirmPayment(machine.id, amount, paymentMethod, options)}
             isProcessing={isProcessingPayment}
             inventoryByProduct={inventoryByProduct}
             activeSession={session}
-            fractionMinutes={fractionMinutes}
-            machineName={machine.name}
+              fractionMinutes={fractionMinutes}
+              machineName={machine.name}
+              machineId={machine.id}
           />
         </div>
       </SheetContent>
