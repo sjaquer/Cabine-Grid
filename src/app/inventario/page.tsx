@@ -15,6 +15,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  where,
 } from "firebase/firestore";
 import {
   ArrowLeft,
@@ -128,7 +129,10 @@ export default function InventoryPage() {
 
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
-  const inventoryQuery = useMemoFirebase(() => query(collection(firestore, "inventory")), [firestore]);
+  const inventoryQuery = useMemoFirebase(() => {
+    if (!firestore || !selectedLocationId) return null;
+    return query(collection(firestore, "inventory"), where("locationId", "==", selectedLocationId));
+  }, [firestore, selectedLocationId]);
 
   const { data: locationsData } = useCollection<Omit<Location, "id">>(locationsQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);

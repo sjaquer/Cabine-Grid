@@ -422,34 +422,9 @@ export default function Dashboard() {
 
     try {
       await updateSessionProducts(firestore!, machineId, products);
-      await logAuditAction(firestore, {
-        action: 'session.products.update',
-        target: 'machines',
-        targetId: machineId,
-        locationId: machine.locationId || selectedLocationId || undefined,
-        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
-        details: {
-          totalItems: products.reduce((sum, p) => sum + p.quantity, 0),
-          totalProducts: products.length,
-          discountAmount: machine.session?.discount?.amount ?? 0,
-          discountReason: machine.session?.discount?.reason ?? null,
-        },
-      });
       toast({ title: "Productos guardados", description: "Se anexaron a la boleta del cliente." });
     } catch (error) {
       console.error("Error saving products:", error);
-      await logAuditFailure(firestore, {
-        action: 'session.products.update.error',
-        target: 'machines',
-        targetId: machineId,
-        locationId: machine.locationId || selectedLocationId || undefined,
-        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
-        error,
-        details: {
-          totalItems: products.reduce((sum, p) => sum + p.quantity, 0),
-          totalProducts: products.length,
-        },
-      });
       toast({
         variant: "destructive",
         title: "Error al guardar productos",

@@ -17,7 +17,7 @@ service cloud.firestore {
     // Phase 3: Try custom claims first (set by onUserProfileWrite Cloud Function),
     // fallback to Firestore document read for backward compatibility
     function getRole() {
-      return request.auth.token.role != null
+      return ('role' in request.auth.token)
         ? request.auth.token.role
         : (hasUserProfile() ? get(userDocPath()).data.role : null);
     }
@@ -78,7 +78,7 @@ service cloud.firestore {
         isOperator() && (
           locationId != null && (
             // Try custom claims first (no extra read)
-            (request.auth.token.locationIds is list && request.auth.token.locationIds.hasAny([locationId])) ||
+            (('locationIds' in request.auth.token) && request.auth.token.locationIds is list && request.auth.token.locationIds.hasAny([locationId])) ||
             // Fallback to Firestore read
             (get(userDocPath()).data.locationIds is list && get(userDocPath()).data.locationIds.hasAny([locationId]))
           )

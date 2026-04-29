@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import type { Customer, Sale } from "@/lib/types";
-import { collection, query, limit } from "firebase/firestore";
+import { collection, query, limit, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,11 @@ export default function ReportesPage() {
   const salesQuery = useMemoFirebase(() => query(collection(firestore, "sales"), limit(50)), [firestore]);
   const { data: salesData } = useCollection<Omit<Sale, "id">>(salesQuery);
 
-  const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
+  const customersQuery = useMemoFirebase(() => query(
+    collection(firestore, "customers"),
+    orderBy("metrics.totalSpent", "desc"),
+    limit(10)
+  ), [firestore]);
   const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
 
   const sales = useMemo(() => (salesData ?? []) as Sale[], [salesData]);

@@ -239,17 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         });
 
-        // Log logout
-        await logAuditAction(firestore, {
-          action: 'auth.logout',
-          target: 'users',
-          targetId: user.uid,
-          actor: { id: user.uid, email: user.email, role: userProfile.role },
-          details: {
-            shiftId,
-            locationId: shiftLocationId || null,
-          },
-        });
+        // auth.logout audit log removed as redundant with shift.close
 
         // Generate PDF report
         buildShiftReportPdf({
