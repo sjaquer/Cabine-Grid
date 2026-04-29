@@ -15,7 +15,7 @@ import { Home, BarChart3, TrendingUp, Trophy, ShoppingBag, Users, Clock } from "
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 
-const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff8042", "#0088FE", "#00C49F"];
+const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function ReportesPage() {
   const firestore = useFirestore();
@@ -125,7 +125,11 @@ export default function ReportesPage() {
                   <p className="text-xs text-muted-foreground">Métricas y toma de decisiones</p>
                 </div>
               </div>
-              <div>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" size="sm" className="gap-2 h-9 text-muted-foreground hidden sm:flex pointer-events-none">
+                  <Clock className="w-4 h-4" />
+                  Últimos 30 días
+                </Button>
                 <Link href="/">
                   <Button variant="outline" size="sm" className="gap-2 h-9">
                     <Home className="w-4 h-4" />
@@ -140,7 +144,7 @@ export default function ReportesPage() {
         <main className="app-container py-8 space-y-6">
           {/* Tarjetas de Resumen */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border-border/50 bg-gradient-to-b from-primary/5 to-transparent">
+            <Card className="bg-card border-border shadow-sm bg-gradient-to-b from-primary/5 to-transparent">
               <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">INGRESOS TOTALES</CardTitle>
                 <TrendingUp className="w-4 h-4 text-primary" />
@@ -151,7 +155,7 @@ export default function ReportesPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/50">
+            <Card className="bg-card border-border shadow-sm">
               <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">PRODUCTOS VENDIDOS</CardTitle>
                 <ShoppingBag className="w-4 h-4 text-primary" />
@@ -162,7 +166,7 @@ export default function ReportesPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/50">
+            <Card className="bg-card border-border shadow-sm">
               <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">CLIENTES REGISTRADOS</CardTitle>
                 <Users className="w-4 h-4 text-primary" />
@@ -191,7 +195,7 @@ export default function ReportesPage() {
                     <YAxis allowDecimals={false} fontSize={11} tickLine={false} />
                     <Tooltip
                       cursor={{ fill: "rgba(255, 255, 255, 0.05)" }}
-                      contentStyle={{ background: "#1e1e2a", border: "1px solid #333", borderRadius: "8px", color: "#fff" }}
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", color: "hsl(var(--foreground))" }}
                     />
                     <Bar dataKey="ventas" fill="#8884d8" radius={[4, 4, 0, 0]}>
                       {hourlyHeatmap.map((entry, index) => (
@@ -226,12 +230,12 @@ export default function ReportesPage() {
                           </Badge>
                           <div>
                             <div className="font-medium text-sm">{cust.name}</div>
-                            <div className="text-2xs text-muted-foreground font-mono">{cust.code}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{cust.code}</div>
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-sm font-mono">{formatCurrency(cust.totalSpent)}</div>
-                          <div className="text-2xs text-muted-foreground">{cust.sessions} visitas</div>
+                          <div className="text-xs text-muted-foreground">{cust.sessions} visitas</div>
                         </div>
                       </div>
                     ))}
@@ -259,7 +263,7 @@ export default function ReportesPage() {
                         <XAxis type="number" allowDecimals={false} fontSize={11} />
                         <YAxis type="category" dataKey="name" fontSize={11} width={100} />
                         <Tooltip
-                          contentStyle={{ background: "#1e1e2a", border: "1px solid #333", borderRadius: "8px", color: "#fff" }}
+                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", color: "hsl(var(--foreground))" }}
                         />
                         <Bar dataKey="qty" radius={[0, 4, 4, 0]}>
                           {topProducts.map((entry, index) => (

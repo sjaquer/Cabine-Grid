@@ -222,41 +222,40 @@ export default function AdminPage() {
 
   return (
     <RoleGuard requiredRoles={["admin", "manager"]}>
-      <div className="min-h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col">
+      <div className="min-h-screen w-full bg-background text-foreground flex flex-col">
         
         {/* Hero KPI Command Bar */}
-        <header className="w-full border-b border-zinc-800 bg-zinc-900/40 backdrop-blur-xl px-6 py-4">
+        <header className="w-full border-b border-border bg-card/40 backdrop-blur-xl px-6 py-4">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
-              <h1 className="text-xl font-headline font-bold tracking-tight">Panel de Control de Dueño</h1>
-              <p className="text-xs text-zinc-400">Gestión táctica completa • Local Único</p>
+              <h1 className="text-xl font-headline font-bold tracking-tight">Panel de Administración</h1>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto flex-shrink-0">
-              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
-                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Caja Hoy</span>
-                <span className="text-sm font-black font-mono text-emerald-500 mt-0.5">
+              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Caja Hoy</span>
+                <span className="text-sm font-black font-mono text-primary mt-0.5">
                   {formatCurrency(todayRevenue)}
                 </span>
               </div>
               
-              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
-                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Ventas</span>
-                <span className="text-sm font-black font-mono text-primary mt-0.5">
+              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ventas</span>
+                <span className="text-sm font-black font-mono text-foreground mt-0.5">
                   {sales.length} ops
                 </span>
               </div>
 
-              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
-                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Cabinas</span>
-                <span className="text-sm font-black font-mono text-blue-400 mt-0.5">
+              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cabinas</span>
+                <span className="text-sm font-black font-mono text-info mt-0.5">
                   {machines.length} pcs
                 </span>
               </div>
 
-              <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 flex flex-col">
-                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Comunidad</span>
-                <span className="text-sm font-black font-mono text-amber-500 mt-0.5">
+              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Comunidad</span>
+                <span className="text-sm font-black font-mono text-status-warning mt-0.5">
                   {customers.length} users
                 </span>
               </div>
@@ -265,9 +264,32 @@ export default function AdminPage() {
         </header>
 
         {/* Workspace: Sidebar + Content Area */}
-        <div className="flex-1 flex overflow-hidden w-full">
-          {/* Internal Sidebar */}
-          <aside className="w-52 border-r border-zinc-900 bg-zinc-950 flex flex-col gap-1 p-3 shrink-0 hidden md:flex">
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden w-full">
+          {/* Mobile Navigation */}
+          <nav className="w-full border-b border-border bg-card/30 flex overflow-x-auto p-2 gap-1 shrink-0 md:hidden no-scrollbar">
+            {sidebarItems.map((item) => {
+              if (item.adminOnly && userProfile?.role !== 'admin') return null;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={`mob-${item.id}`}
+                  onClick={() => setActiveSection(item.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
+                    activeSection === item.id
+                      ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Internal Sidebar (Desktop) */}
+          <aside className="w-52 border-r border-border bg-card/30 flex flex-col gap-1 p-3 shrink-0 hidden md:flex">
             {sidebarItems.map((item) => {
               if (item.adminOnly && userProfile?.role !== 'admin') return null;
               const Icon = item.icon;
@@ -278,8 +300,8 @@ export default function AdminPage() {
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
                     activeSection === item.id
-                      ? "bg-zinc-900 text-primary shadow-[inset_0_0_10px_rgba(234,88,12,0.15)] border border-zinc-800/40"
-                      : "text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200"
+                      ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
                   )}
                 >
                   <Icon className="w-4 h-4" />
@@ -290,7 +312,7 @@ export default function AdminPage() {
           </aside>
 
           {/* Workspace Content Section */}
-          <main className="flex-1 p-6 overflow-y-auto bg-zinc-950">
+          <main className="flex-1 p-6 overflow-y-auto bg-background">
             {activeSection === 'machines' && (
               <MachineManager
                 machines={machines}

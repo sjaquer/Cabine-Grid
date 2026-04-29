@@ -277,7 +277,7 @@ export default function InventoryPage() {
     if (stock <= 3)
       return {
         label: "Crítico",
-        className: "bg-rose-500/10 text-rose-500 border-rose-500/50 animate-pulse",
+        className: "bg-destructive/10 text-destructive border-destructive/50 animate-pulse",
       };
     if (stock <= 10)
       return {
@@ -286,7 +286,7 @@ export default function InventoryPage() {
       };
     return {
       label: "Estable",
-      className: "text-zinc-400 border-transparent",
+      className: "text-muted-foreground border-transparent",
     };
   };
 
@@ -662,7 +662,7 @@ export default function InventoryPage() {
               </div>
               
               <div className="relative w-full sm:w-[260px]">
-                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
                   ref={scannerInputRef}
                   value={searchTerm}
@@ -678,8 +678,8 @@ export default function InventoryPage() {
                 onClick={() => setIsScannerMode(!isScannerMode)}
                 className={`h-10 text-xs gap-2 ${
                   isScannerMode
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
-                    : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                    ? "bg-primary hover:bg-primary/90 text-primary-foreground border-transparent shadow-[0_0_15px_hsl(var(--primary)/0.3)]"
+                    : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
               >
                 <Boxes className="w-4 h-4" />
@@ -692,7 +692,7 @@ export default function InventoryPage() {
                 variant={selectedCategory === "all" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory("all")}
-                className={`h-9 text-xs ${selectedCategory === "all" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+                className={`h-9 text-xs ${selectedCategory === "all" ? "bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
               >
                 Todos
               </Button>
@@ -700,7 +700,7 @@ export default function InventoryPage() {
                 variant={selectedCategory === "snack" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory("snack")}
-                className={`h-9 text-xs ${selectedCategory === "snack" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+                className={`h-9 text-xs ${selectedCategory === "snack" ? "bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
               >
                 Snacks
               </Button>
@@ -708,7 +708,7 @@ export default function InventoryPage() {
                 variant={selectedCategory === "drink" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory("drink")}
-                className={`h-9 text-xs ${selectedCategory === "drink" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+                className={`h-9 text-xs ${selectedCategory === "drink" ? "bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
               >
                 Bebidas
               </Button>
@@ -716,7 +716,7 @@ export default function InventoryPage() {
                 variant={selectedCategory === "hardware" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory("hardware")}
-                className={`h-9 text-xs ${selectedCategory === "hardware" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+                className={`h-9 text-xs ${selectedCategory === "hardware" ? "bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
               >
                 Hardware
               </Button>
@@ -724,7 +724,7 @@ export default function InventoryPage() {
                 variant={selectedCategory === "other" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory("other")}
-                className={`h-9 text-xs ${selectedCategory === "other" ? "bg-primary text-primary-foreground" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+                className={`h-9 text-xs ${selectedCategory === "other" ? "bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
               >
                 Servicios
               </Button>
@@ -742,7 +742,7 @@ export default function InventoryPage() {
           </div>
 
           {selectedLocationId && priorityRows.length > 0 && (
-            <Card className="bg-zinc-950 border-zinc-800">
+            <Card className="bg-background border-border">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm font-bold text-amber-500">
                   <AlertTriangle className="w-4 h-4 animate-pulse" /> Alertas de Reposición Crítica
@@ -755,15 +755,15 @@ export default function InventoryPage() {
                     return (
                       <div
                         key={`priority-${row.productId}`}
-                        className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 flex flex-col justify-between gap-2"
+                        className="rounded-lg border border-border bg-card p-3 flex flex-col justify-between gap-2"
                       >
                         <div>
-                          <p className="text-xs font-bold text-zinc-200 truncate">{row.productName}</p>
+                          <p className="text-xs font-bold text-foreground truncate">{row.productName}</p>
                           <Badge className={`mt-1 text-[10px] ${status.className}`}>{status.label}</Badge>
                         </div>
-                        <div className="flex items-center justify-between mt-2 border-t border-zinc-800/50 pt-2">
-                          <span className="text-[10px] text-zinc-500">Stock</span>
-                          <span className="font-mono text-xs font-bold text-zinc-200">{row.stock} / {row.minStock}</span>
+                        <div className="flex items-center justify-between mt-2 border-t border-border/50 pt-2">
+                          <span className="text-[10px] text-muted-foreground">Stock</span>
+                          <span className="font-mono text-xs font-bold text-foreground">{row.stock} / {row.minStock}</span>
                         </div>
                       </div>
                     );
@@ -776,40 +776,40 @@ export default function InventoryPage() {
 
 
           {/* Tabla de Inventario */}
-          <Card className="border-zinc-800 bg-zinc-900 overflow-hidden">
-            <CardHeader className="border-b border-zinc-800 pb-4">
-              <CardTitle className="flex items-center gap-2 text-zinc-200 text-base font-headline">
+          <Card className="border-border bg-card overflow-hidden">
+            <CardHeader className="border-b border-border pb-4">
+              <CardTitle className="flex items-center gap-2 text-foreground text-base font-headline">
                 <Boxes className="w-4 h-4 text-primary" /> 
-                Control de Stock {selectedLocation ? <Badge variant="secondary" className="bg-zinc-800 text-zinc-300 border-zinc-700">{selectedLocation.name}</Badge> : null}
+                Control de Stock {selectedLocation ? <Badge variant="secondary" className="bg-secondary text-secondary-foreground border-border">{selectedLocation.name}</Badge> : null}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {!selectedLocationId ? (
                 <div className="py-16 text-center">
                   <Package className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
-                  <p className="text-sm text-zinc-500">Selecciona un local para auditar existencias</p>
+                  <p className="text-sm text-muted-foreground">Selecciona un local para auditar existencias</p>
                 </div>
               ) : rows.length === 0 ? (
                 <div className="py-16 text-center">
                   <AlertCircle className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
-                  <p className="text-sm text-zinc-500">Sin coincidencias para este filtro.</p>
+                  <p className="text-sm text-muted-foreground">Sin coincidencias para este filtro.</p>
                 </div>
               ) : (
                 <>
                   <div className="hidden md:block overflow-x-auto">
                     <Table>
-                    <TableHeader className="bg-zinc-950 border-b border-zinc-800">
-                      <TableRow className="border-none hover:bg-zinc-950">
-                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Producto</TableHead>
-                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Categoría</TableHead>
-                        <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Stock</TableHead>
-                        <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Mín.</TableHead>
+                    <TableHeader className="bg-background border-b border-border">
+                      <TableRow className="border-none hover:bg-background">
+                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Producto</TableHead>
+                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Categoría</TableHead>
+                        <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Stock</TableHead>
+                        <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Mín.</TableHead>
                         {userProfile?.role === "admin" && (
-                          <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Margen</TableHead>
+                          <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Margen</TableHead>
                         )}
-                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Estado</TableHead>
-                        <TableHead className="text-zinc-400 font-semibold px-2 py-2 text-xs">Ajuste Rápido</TableHead>
-                        <TableHead className="text-right text-zinc-400 font-semibold px-2 py-2 text-xs">Acciones</TableHead>
+                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Estado</TableHead>
+                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Ajuste Rápido</TableHead>
+                        <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -821,19 +821,19 @@ export default function InventoryPage() {
                           <TableRow 
                             key={row.productId} 
                             className={cn(
-                              "border-zinc-800 transition-colors duration-150 border-b cursor-pointer",
-                              isSelected ? "bg-zinc-800/60 text-zinc-100 ring-1 ring-emerald-500/40 border-emerald-500/50" : "hover:bg-zinc-800/20 text-zinc-300"
+                              "border-border transition-colors duration-150 border-b cursor-pointer",
+                              isSelected ? "bg-secondary/60 text-foreground ring-1 ring-emerald-500/40 border-emerald-500/50" : "hover:bg-secondary/20 text-secondary-foreground"
                             )}
                             onClick={() => setSelectedRowIndex(index)}
                           >
-                            <TableCell className="font-medium text-zinc-200 px-2 py-1 text-xs max-w-[200px] truncate">{row.productName}</TableCell>
+                            <TableCell className="font-medium text-foreground px-2 py-1 text-xs max-w-[200px] truncate">{row.productName}</TableCell>
                             <TableCell className="px-2 py-1 text-xs">
-                              <Badge className={`${categoryStyles[row.category] || "bg-zinc-800 text-zinc-300"} text-[10px] px-1.5 py-0.5 border`}>
+                              <Badge className={`${categoryStyles[row.category] || "bg-secondary text-secondary-foreground"} text-[10px] px-1.5 py-0.5 border`}>
                                 {row.categoryLabel}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right font-mono font-semibold text-zinc-200 px-2 py-1 text-xs">{row.stock}</TableCell>
-                            <TableCell className="text-right font-mono text-zinc-500 px-2 py-1 text-xs">{row.minStock}</TableCell>
+                            <TableCell className="text-right font-mono font-semibold text-foreground px-2 py-1 text-xs">{row.stock}</TableCell>
+                            <TableCell className="text-right font-mono text-muted-foreground px-2 py-1 text-xs">{row.minStock}</TableCell>
                             {userProfile?.role === "admin" && (
                               <TableCell className="text-right font-mono font-bold text-emerald-400 px-2 py-1 text-xs">
                                 S/ {margin.toFixed(2)}
@@ -858,7 +858,7 @@ export default function InventoryPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-6 w-6 text-rose-500 hover:bg-rose-500/20 hover:text-rose-400"
+                                  className="h-6 w-6 text-destructive hover:bg-rose-500/20 hover:text-rose-400"
                                   disabled={!canManage || !selectedLocationId || row.stock <= 0 || busyActionKey !== null}
                                   onClick={() => applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1")}
                                 >
@@ -871,7 +871,7 @@ export default function InventoryPage() {
                                 <Button
                                   variant="secondary"
                                   size="sm"
-                                  className="gap-1 h-7 text-xs bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700"
+                                  className="gap-1 h-7 text-xs bg-secondary text-secondary-foreground hover:bg-zinc-700 border-border"
                                   disabled={!canManage || !selectedLocationId}
                                   onClick={() => openAdjustDialog(row)}
                                 >
@@ -881,7 +881,7 @@ export default function InventoryPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="gap-1 h-7 text-xs border-zinc-800 hover:bg-zinc-800 text-zinc-400"
+                                  className="gap-1 h-7 text-xs border-border hover:bg-secondary text-muted-foreground"
                                   onClick={() => openDiscrepancyDialog(row)}
                                   disabled={!canManage}
                                   title="Auditar diferencia"
@@ -906,28 +906,28 @@ export default function InventoryPage() {
                         <div
                           key={`card-${row.productId}`}
                           className={cn(
-                            "p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col justify-between gap-4 shadow-sm transition-all duration-150",
-                            isSelected ? "ring-2 ring-emerald-500 border-emerald-500/50 bg-zinc-800/40" : "hover:bg-zinc-900/60"
+                            "p-4 bg-card border border-border rounded-xl flex flex-col justify-between gap-4 shadow-sm transition-all duration-150",
+                            isSelected ? "ring-2 ring-emerald-500 border-emerald-500/50 bg-secondary/40" : "hover:bg-card/60"
                           )}
                           onClick={() => setSelectedRowIndex(index)}
                         >
                           <div className="flex justify-between items-start gap-2">
                             <div>
-                              <h4 className="font-headline text-zinc-100 text-sm font-bold tracking-wide">{row.productName}</h4>
-                              <Badge className={`${categoryStyles[row.category] || "bg-zinc-800 text-zinc-300"} text-[10px] mt-1 px-1.5 py-0.5 border`}>
+                              <h4 className="font-headline text-foreground text-sm font-bold tracking-wide">{row.productName}</h4>
+                              <Badge className={`${categoryStyles[row.category] || "bg-secondary text-secondary-foreground"} text-[10px] mt-1 px-1.5 py-0.5 border`}>
                                 {row.categoryLabel}
                               </Badge>
                             </div>
                             <div className="text-right">
-                              <span className="text-zinc-400 text-xs block">Stock actual</span>
-                              <span className="font-mono font-bold text-base text-zinc-100">{row.stock}</span>
+                              <span className="text-muted-foreground text-xs block">Stock actual</span>
+                              <span className="font-mono font-bold text-base text-foreground">{row.stock}</span>
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between border-t border-zinc-800/50 pt-3 mt-1">
+                          <div className="flex items-center justify-between border-t border-border/50 pt-3 mt-1">
                             <div className="flex flex-col gap-0.5">
-                              <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Precio</span>
-                              <span className="text-zinc-200 font-semibold text-sm font-mono font-bold">S/ {row.price.toFixed(2)}</span>
+                              <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Precio</span>
+                              <span className="text-foreground font-semibold text-sm font-mono font-bold">S/ {row.price.toFixed(2)}</span>
                             </div>
 
                             <Badge className={`${status.className} text-[10px] px-2 py-0.5 border`}>
@@ -938,7 +938,7 @@ export default function InventoryPage() {
                           <div className="grid grid-cols-2 gap-2 mt-2">
                             <Button
                               variant="ghost"
-                              className="h-12 text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:border-rose-500/40 font-bold text-lg rounded-xl"
+                              className="h-12 text-destructive bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:border-rose-500/40 font-bold text-lg rounded-xl"
                               disabled={!canManage || !selectedLocationId || row.stock <= 0}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -964,7 +964,7 @@ export default function InventoryPage() {
                             <Button
                               variant="secondary"
                               size="sm"
-                              className="flex-1 h-9 text-xs bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700"
+                              className="flex-1 h-9 text-xs bg-secondary text-secondary-foreground hover:bg-zinc-700 border-border"
                               disabled={!canManage || !selectedLocationId}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -976,7 +976,7 @@ export default function InventoryPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-9 px-3 border-zinc-800 hover:bg-zinc-800 text-zinc-400"
+                              className="h-9 px-3 border-border hover:bg-secondary text-muted-foreground"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openDiscrepancyDialog(row);
@@ -1099,45 +1099,45 @@ export default function InventoryPage() {
       </Dialog>
 
       <Dialog open={isNewProductOpen} onOpenChange={setIsNewProductOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
+        <DialogContent className="bg-card border-border text-foreground">
           <DialogHeader>
-            <DialogTitle className="text-zinc-100 font-headline">Crear Nuevo Producto</DialogTitle>
-            <DialogDescription className="text-zinc-400 text-xs">
+            <DialogTitle className="text-foreground font-headline">Crear Nuevo Producto</DialogTitle>
+            <DialogDescription className="text-muted-foreground text-xs">
               Ingresa los parámetros iniciales para registrar existencias.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 mt-2">
             <div className="space-y-1">
-              <Label className="text-xs text-zinc-400">Nombre del Producto</Label>
+              <Label className="text-xs text-muted-foreground">Nombre del Producto</Label>
               <Input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                className="h-9 bg-background border-border text-foreground"
                 placeholder="Ej: Coca Cola 500ml"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-zinc-400">Precio Venta (S/)</Label>
+                <Label className="text-xs text-muted-foreground">Precio Venta (S/)</Label>
                 <Input
                   type="number"
                   step="0.1"
                   value={newPrice}
                   onChange={(e) => setNewPrice(e.target.value)}
-                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  className="h-9 bg-background border-border text-foreground"
                   placeholder="0.00"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-zinc-400">Precio Costo (S/)</Label>
+                <Label className="text-xs text-muted-foreground">Precio Costo (S/)</Label>
                 <Input
                   type="number"
                   step="0.1"
                   value={newCostPrice}
                   onChange={(e) => setNewCostPrice(e.target.value)}
-                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  className="h-9 bg-background border-border text-foreground"
                   placeholder="0.00"
                 />
               </div>
@@ -1145,32 +1145,32 @@ export default function InventoryPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-zinc-400">Stock Inicial</Label>
+                <Label className="text-xs text-muted-foreground">Stock Inicial</Label>
                 <Input
                   type="number"
                   value={newStock}
                   onChange={(e) => setNewStock(e.target.value)}
-                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  className="h-9 bg-background border-border text-foreground"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-zinc-400">Stock Mínimo</Label>
+                <Label className="text-xs text-muted-foreground">Stock Mínimo</Label>
                 <Input
                   type="number"
                   value={newMinStock}
                   onChange={(e) => setNewMinStock(e.target.value)}
-                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                  className="h-9 bg-background border-border text-foreground"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-zinc-400">Categoría</Label>
+              <Label className="text-xs text-muted-foreground">Categoría</Label>
               <Select value={newCategory} onValueChange={setNewCategory}>
-                <SelectTrigger className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200">
+                <SelectTrigger className="h-9 bg-background border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-zinc-950 border-zinc-800 text-zinc-200">
+                <SelectContent className="bg-background border-border text-foreground">
                   <SelectItem value="snack">Snacks</SelectItem>
                   <SelectItem value="drink">Bebidas</SelectItem>
                   <SelectItem value="hardware">Hardware</SelectItem>
@@ -1180,24 +1180,24 @@ export default function InventoryPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-zinc-400">Proveedor (Opcional)</Label>
+              <Label className="text-xs text-muted-foreground">Proveedor (Opcional)</Label>
               <Input
                 value={newSupplierInfo}
                 onChange={(e) => setNewSupplierInfo(e.target.value)}
-                className="h-9 bg-zinc-950 border-zinc-800 text-zinc-200"
+                className="h-9 bg-background border-border text-foreground"
                 placeholder="Ej: Makro"
               />
             </div>
           </div>
 
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setIsNewProductOpen(false)} className="border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
+            <Button variant="outline" onClick={() => setIsNewProductOpen(false)} className="border-border text-muted-foreground hover:bg-secondary hover:text-foreground">
               Cancelar
             </Button>
             <Button
               onClick={handleCreateProduct}
               disabled={isCreatingProduct || !canManage}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
             >
               {isCreatingProduct ? "Creando..." : "Crear"}
             </Button>

@@ -280,16 +280,16 @@ export default function AssignPCDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden max-h-[100dvh] flex flex-col">
-        <div className="bg-gradient-to-r from-primary/20 via-transparent to-accent/20 p-5 sm:p-6 border-b shrink-0">
-          <DialogHeader className="space-y-1">
-            <DialogTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/30">
-                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+        <div className="p-5 sm:p-6 border-b border-border bg-card shrink-0 flex items-center justify-between shadow-sm z-10 relative">
+          <DialogHeader className="space-y-1 text-left w-full">
+            <DialogTitle className="font-headline text-xl sm:text-2xl flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 shadow-inner">
+                <Clock className="w-5 h-5 text-primary" />
               </div>
-              Asignar {machine?.name}
+              Asignar <span className="text-primary font-black tracking-tight">{machine?.name}</span>
             </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Configura la sesión del cliente
+            <DialogDescription className="text-sm font-medium tracking-wide">
+              Configura la sesión y modalidad de uso para el cliente.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -632,53 +632,41 @@ export default function AssignPCDialog({
               name="usageMode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-semibold">Modo de Uso</FormLabel>
+                  <FormLabel className="text-sm font-semibold text-foreground tracking-wide">Modalidad de Uso</FormLabel>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div 
-                      className={`surface-interactive transition-all p-4 border-2 ${field.value === 'free' ? 'ring-2 ring-primary border-primary' : 'border-border'}`}
+                      className={`group relative overflow-hidden transition-all duration-300 p-4 rounded-xl border-2 cursor-pointer flex flex-col justify-between h-full ${field.value === 'free' ? 'border-primary bg-primary/5 shadow-[0_0_15px_hsl(var(--primary)/0.12)] ring-1 ring-primary/20' : 'border-border/60 bg-card hover:bg-secondary/40 hover:border-border'}`}
                       onClick={() => field.onChange('free')}
                     >
-                      <div className="space-y-3">
-                        <div>
-                          <h3 className="font-semibold text-base">Pago por Uso</h3>
-                          <p className="text-xs text-muted-foreground">Cobro según tiempo real</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input 
-                            type="radio" 
-                            id="free" 
-                            name="usageMode"
-                            value="free"
-                            checked={field.value === 'free'}
-                            onChange={() => field.onChange('free')}
-                            className="cursor-pointer"
-                          />
-                          <label htmlFor="free" className="font-normal cursor-pointer text-sm">Activar</label>
-                        </div>
+                      <div className="flex justify-between items-start mb-3">
+                          <div className={`p-2 rounded-lg ${field.value === 'free' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground group-hover:text-foreground'}`}>
+                              <Clock className="w-5 h-5" />
+                          </div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${field.value === 'free' ? 'border-primary' : 'border-muted-foreground/30'}`}>
+                              {field.value === 'free' && <div className="w-2 h-2 bg-primary rounded-full" />}
+                          </div>
+                      </div>
+                      <div>
+                          <h3 className={`font-bold text-base tracking-tight ${field.value === 'free' ? 'text-primary' : 'text-foreground'}`}>Pago por Uso</h3>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Cobro dinámico según el tiempo real utilizado. Pago al finalizar.</p>
                       </div>
                     </div>
 
                     <div 
-                      className={`surface-interactive transition-all p-4 border-2 ${field.value === 'prepaid' ? 'ring-2 ring-primary border-primary' : 'border-border'}`}
+                      className={`group relative overflow-hidden transition-all duration-300 p-4 rounded-xl border-2 cursor-pointer flex flex-col justify-between h-full ${field.value === 'prepaid' ? 'border-primary bg-primary/5 shadow-[0_0_15px_hsl(var(--primary)/0.12)] ring-1 ring-primary/20' : 'border-border/60 bg-card hover:bg-secondary/40 hover:border-border'}`}
                       onClick={() => field.onChange('prepaid')}
                     >
-                      <div className="space-y-3">
-                        <div>
-                          <h3 className="font-semibold text-base">Prepagado</h3>
-                          <p className="text-xs text-muted-foreground">Horas compradas por adelantado</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input 
-                            type="radio" 
-                            id="prepaid" 
-                            name="usageMode"
-                            value="prepaid"
-                            checked={field.value === 'prepaid'}
-                            onChange={() => field.onChange('prepaid')}
-                            className="cursor-pointer"
-                          />
-                          <label htmlFor="prepaid" className="font-normal cursor-pointer text-sm">Activar</label>
-                        </div>
+                      <div className="flex justify-between items-start mb-3">
+                          <div className={`p-2 rounded-lg ${field.value === 'prepaid' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground group-hover:text-foreground'}`}>
+                              <Search className="w-5 h-5" />
+                          </div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${field.value === 'prepaid' ? 'border-primary' : 'border-muted-foreground/30'}`}>
+                              {field.value === 'prepaid' && <div className="w-2 h-2 bg-primary rounded-full" />}
+                          </div>
+                      </div>
+                      <div>
+                          <h3 className={`font-bold text-base tracking-tight ${field.value === 'prepaid' ? 'text-primary' : 'text-foreground'}`}>Prepagado</h3>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Horas compradas por adelantado. La sesión detiene la PC al agotar el tiempo.</p>
                       </div>
                     </div>
                   </div>
@@ -693,22 +681,21 @@ export default function AssignPCDialog({
                 control={form.control}
                 name="prepaidHours"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-semibold">Horas a Prepagar</FormLabel>
+                  <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <FormLabel className="text-sm font-semibold text-primary">Horas a Prepagar</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        placeholder="Ej: 2" 
-                        min="0.5" 
-                        step="0.5"
-                        {...field}
-                      />
+                      <div className="relative">
+                        <Input 
+                          type="number" 
+                          placeholder="Ej: 2" 
+                          min="0.5" 
+                          step="0.5"
+                          {...field}
+                          className="h-12 text-lg font-mono pl-4 pr-12 bg-background border-primary/40 focus-visible:ring-primary shadow-sm"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">hrs</span>
+                      </div>
                     </FormControl>
-                    {effectiveRate && field.value && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Total: S/. {(effectiveRate.pricePerHour * field.value).toFixed(2)}
-                      </p>
-                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -716,24 +703,26 @@ export default function AssignPCDialog({
             )}
 
             {/* Información de la máquina y tarifa */}
-            <div className="p-4 rounded-lg bg-secondary/30 border border-border/50 space-y-3">
-              <div className="text-sm">
-                <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Máquina asignada</p>
-                <p className="text-lg font-bold text-foreground">{machine?.name}</p>
+            <div className="p-4 rounded-xl bg-card border border-border shadow-sm space-y-4">
+              <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Estación Asignada</p>
+                <p className="text-sm font-bold text-foreground bg-secondary/50 px-2.5 py-1 rounded-md">{machine?.name}</p>
               </div>
+              
               {effectiveRate && (
-                <div className="text-sm">
-                  <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Tarifa a aplicar</p>
-                  <p className="text-lg font-bold text-accent font-mono">
-                    {effectiveRate.name} - S/. {effectiveRate.pricePerHour.toFixed(2)}/hora
+                <div className="flex justify-between items-center pb-3 border-b border-border/50">
+                  <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Tarifa Aplicada</p>
+                  <p className="text-sm font-bold text-primary font-mono bg-primary/10 px-2.5 py-1 rounded-md border border-primary/20">
+                    {effectiveRate.name} <span className="opacity-60">(S/ {effectiveRate.pricePerHour.toFixed(2)}/h)</span>
                   </p>
                 </div>
               )}
+              
               {currentMode === 'prepaid' && form.watch('prepaidHours') && effectiveRate && (
-                <div className="text-sm">
-                  <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Total a cobrar</p>
-                  <p className="text-sm md:text-lg font-bold text-green-500 font-mono">
-                    S/. {(effectiveRate.pricePerHour * (Number(form.watch('prepaidHours')) || 0)).toFixed(2)}
+                <div className="flex justify-between items-center pt-1">
+                  <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Total Prepagado</p>
+                  <p className="text-2xl font-black text-status-success font-mono">
+                    S/ {(effectiveRate.pricePerHour * (Number(form.watch('prepaidHours')) || 0)).toFixed(2)}
                   </p>
                 </div>
               )}
