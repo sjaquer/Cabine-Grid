@@ -4,70 +4,82 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 224 71% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71% 4%;
-    --primary: 24 95% 56%;
-    --primary-foreground: 24 40% 98%;
-    --secondary: 220 14% 95%;
-    --secondary-foreground: 224 71% 4%;
-    --muted: 220 14% 93%;
-    --muted-foreground: 220 9% 40%;
-    --accent: 180 62% 38%;
-    --accent-foreground: 180 40% 98%;
+    --background: 224 18% 5%;
+    --foreground: 224 12% 93%;
+    --card: 224 16% 7.5%;
+    --card-foreground: 224 12% 93%;
+    --popover: 224 16% 10%;
+    --popover-foreground: 224 12% 93%;
+    --primary: 152 60% 52%;
+    --primary-foreground: 224 18% 5%;
+    --secondary: 224 14% 11%;
+    --secondary-foreground: 224 10% 84%;
+    --muted: 224 12% 15%;
+    --muted-foreground: 224 10% 55%;
+    --accent: 210 80% 55%;
+    --accent-foreground: 224 18% 5%;
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 24 95% 56%;
+    --destructive-foreground: 224 12% 96%;
+    --border: 224 12% 16%;
+    --input: 224 12% 16%;
+    --ring: 152 60% 52%;
     --radius: 0.8rem;
-    --chart-1: 24 95% 56%;
-    --chart-2: 180 62% 38%;
-    --chart-3: 213 84% 53%;
-    --chart-4: 48 96% 53%;
-    --chart-5: 8 82% 58%;
-    --status-available: 142 76% 42%;
+    --chart-1: 152 60% 45%;
+    --chart-2: 210 80% 55%;
+    --chart-3: 262 70% 58%;
+    --chart-4: 38 92% 60%;
+    --chart-5: 0 72% 60%;
+    --status-available: 152 60% 45%;
     --status-occupied: 0 84% 60%;
     --status-warning: 48 96% 53%;
-    --surface-elevated: 0 0% 100%;
-    --surface-soft: 220 14% 95%;
-    --brand-glow: 24 95% 56%;
+    --surface-elevated: 224 16% 9.5%;
+    --surface-soft: 224 14% 11%;
+    --surface-hover: 224 14% 12%;
+    --surface-active: 224 14% 14%;
+    --text-tertiary: 224 8% 40%;
+    --success: 152 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --info: 210 80% 55%;
+    --info-foreground: 0 0% 100%;
+    --brand-glow: 152 60% 52%;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 5.9% 10%;
-    --card-foreground: 240 5% 96%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 240 5% 96%;
-    --primary: 24 95% 56%;
-    --primary-foreground: 24 40% 98%;
-    --secondary: 240 5.9% 10%;
-    --secondary-foreground: 240 5% 96%;
-    --muted: 240 5.9% 16%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 180 62% 42%;
-    --accent-foreground: 180 40% 98%;
-    --destructive: 0 63% 40%;
-    --destructive-foreground: 240 5% 96%;
-    --border: 240 5.9% 16%;
-    --input: 240 5.9% 16%;
-    --ring: 24 95% 56%;
-    --chart-1: 24 95% 56%;
-    --chart-2: 180 62% 42%;
-    --chart-3: 213 84% 62%;
-    --chart-4: 48 96% 53%;
-    --chart-5: 8 82% 58%;
-    --status-available: 142 70% 48%;
-    --status-occupied: 350 78% 62%;
-    --status-warning: 45 92% 58%;
-    --surface-elevated: 240 5.9% 10%;
-    --surface-soft: 240 5.9% 16%;
-    --brand-glow: 24 95% 56%;
+    color-scheme: dark;
+  }
+
+  :root[data-mode='light'],
+  .light {
+    color-scheme: light;
+    --background: 220 20% 98%;
+    --foreground: 224 22% 12%;
+    --card: 220 20% 100%;
+    --card-foreground: 224 22% 12%;
+    --popover: 220 20% 100%;
+    --popover-foreground: 224 22% 12%;
+    --primary: 152 55% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 18% 94%;
+    --secondary-foreground: 220 15% 30%;
+    --muted: 220 15% 92%;
+    --muted-foreground: 220 10% 42%;
+    --accent: 210 80% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 54%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 86%;
+    --input: 220 15% 92%;
+    --ring: 152 55% 42%;
+    --surface-elevated: 220 20% 100%;
+    --surface-soft: 220 18% 96%;
+    --surface-hover: 220 16% 92%;
+    --surface-active: 220 16% 89%;
+    --text-tertiary: 220 8% 48%;
+    --success: 152 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --info: 210 80% 45%;
+    --info-foreground: 0 0% 100%;
+    --brand-glow: 152 55% 42%;
   }
 
   [data-color="emerald"] {
@@ -119,8 +131,8 @@
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(circle at 12% 0%, hsl(var(--primary) / 0.17) 0, transparent 33%),
-      radial-gradient(circle at 88% 100%, hsl(var(--accent) / 0.2) 0, transparent 36%),
+      radial-gradient(circle at 12% 0%, hsl(var(--primary) / 0.13) 0, transparent 34%),
+      radial-gradient(circle at 88% 100%, hsl(var(--accent) / 0.14) 0, transparent 36%),
       linear-gradient(155deg, hsl(var(--background)), hsl(var(--secondary) / 0.6));
     background-attachment: fixed;
     font-feature-settings: "rlig" 1, "calt" 1;
@@ -153,7 +165,7 @@
   }
 
   .surface-card {
-    @apply rounded-xl border border-border/50 bg-card/85 shadow-sm;
+    @apply rounded-xl border border-border/60 bg-card/90 shadow-sm;
   }
 
   .surface-soft {
@@ -161,7 +173,33 @@
   }
 
   .surface-stat {
-    @apply flex items-center gap-2 rounded-md border border-border/30 bg-background/50 px-3 py-2 transition-colors hover:border-border/60;
+    @apply flex items-center gap-2 rounded-md border border-border/40 bg-background/50 px-3 py-2 transition-colors hover:border-border/70;
+  }
+
+  .surface-interactive {
+    @apply cursor-pointer rounded-xl border border-border/60 bg-card/60 transition-all duration-150;
+    background-color: hsl(var(--card) / 0.6);
+  }
+
+  .surface-interactive:hover {
+    background-color: hsl(var(--surface-hover));
+    border-color: hsl(var(--border));
+  }
+
+  .surface-interactive:active {
+    background-color: hsl(var(--surface-active));
+  }
+
+  .badge-status {
+    @apply rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  .kpi-value {
+    @apply font-code text-2xl font-black leading-none;
+  }
+
+  .kpi-label {
+    @apply text-xs font-medium uppercase tracking-wide text-muted-foreground;
   }
 
   .kpi-strip {
@@ -190,6 +228,27 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes app-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px hsl(var(--primary) / 0.15);
   }
 }
 

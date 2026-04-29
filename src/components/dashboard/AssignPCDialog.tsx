@@ -33,7 +33,8 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Clock, Search, X } from "lucide-react";
+import { Clock, Search, X, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const OCCASIONAL_CLIENT_VALUE = "__ocasional__";
 
@@ -143,6 +144,8 @@ export default function AssignPCDialog({
   });
 
   const [showQuickCustomer, setShowQuickCustomer] = useState(false);
+  const [showCustomerDetail, setShowCustomerDetail] = useState(false);
+  const [showQuickMoreFields, setShowQuickMoreFields] = useState(false);
 
   const sortedCustomers = useMemo(
     () => [...customers].filter((customer) => customer.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
@@ -169,6 +172,8 @@ export default function AssignPCDialog({
   useEffect(() => {
     if (isOpen) {
       setShowQuickCustomer(false);
+      setShowCustomerDetail(false);
+      setShowQuickMoreFields(false);
       form.reset({
         customerId: undefined,
         usageMode: 'free',
@@ -305,7 +310,7 @@ export default function AssignPCDialog({
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowQuickCustomer(!showQuickCustomer)}
-                      className="text-xs h-7 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                      className="text-xs h-7 px-2 text-primary hover:text-primary hover:bg-primary/10"
                     >
                       {showQuickCustomer ? "Ocultar Registro" : "¿Cliente nuevo?"}
                     </Button>
@@ -336,18 +341,18 @@ export default function AssignPCDialog({
                       )}
                       
                       {customerSearch && filteredCustomers.length > 0 && (
-                        <div className="absolute z-50 w-full bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl mt-1.5 max-h-[300px] overflow-y-auto divide-y divide-zinc-800/50">
+                        <div className="absolute z-50 w-full bg-card border border-border rounded-xl shadow-2xl mt-1.5 max-h-[300px] overflow-y-auto divide-y divide-border/50">
                           {filteredCustomers.map((customer) => (
                             <div
                               key={customer.id}
-                              className="p-4 hover:bg-zinc-800 cursor-pointer text-base flex justify-between items-center transition-all active:bg-zinc-800/50"
+                              className="p-4 hover:bg-secondary cursor-pointer text-base flex justify-between items-center transition-all active:bg-secondary/70"
                               onClick={() => {
                                 field.onChange(customer.id);
                                 setCustomerSearch(customer.fullName);
                               }}
                             >
-                              <span className="font-semibold text-zinc-100 tracking-tight">{customer.fullName}</span>
-                              <span className="text-xs font-bold font-mono bg-zinc-950 text-emerald-400 py-1 px-2 rounded-md border border-zinc-800">
+                              <span className="font-semibold text-foreground tracking-tight">{customer.fullName}</span>
+                              <span className="text-xs font-bold font-mono bg-background text-primary py-1 px-2 rounded-md border border-border">
                                 {customer.customerCode}
                               </span>
                             </div>
@@ -396,7 +401,30 @@ export default function AssignPCDialog({
                     {selectedCustomer.fullName} - Codigo {selectedCustomer.customerCode}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                <CardContent className="space-y-3 text-sm">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Sesiones</p>
+                      <p className="font-semibold">{selectedCustomer.metrics?.totalSessions ?? 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Gasto total</p>
+                      <p className="font-semibold">S/. {(selectedCustomer.metrics?.totalSpent ?? 0).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Horas</p>
+                      <p className="font-semibold">{(((selectedCustomer.metrics?.totalMinutesRented ?? 0) / 60)).toFixed(1)} h</p>
+                    </div>
+                  </div>
+                  <Collapsible open={showCustomerDetail} onOpenChange={setShowCustomerDetail}>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-full justify-between text-xs">
+                        Más detalle del cliente
+                        <ChevronDown className={`h-4 w-4 transition-transform ${showCustomerDetail ? "rotate-180" : ""}`} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                   {(() => {
                     const metrics = selectedCustomer.metrics;
                     const totalSessions = metrics?.totalSessions ?? 0;
@@ -407,10 +435,6 @@ export default function AssignPCDialog({
 
                     return (
                       <>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Sesiones</p>
-                    <p className="font-semibold">{totalSessions}</p>
-                  </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Horas acumuladas</p>
                     <p className="font-semibold">{((metrics?.totalMinutesRented ?? 0) / 60).toFixed(1)} h</p>
@@ -460,15 +484,18 @@ export default function AssignPCDialog({
                       </>
                     );
                   })()}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 </CardContent>
               </Card>
             )}
 
             {showQuickCustomer && (
-              <Card className="border border-zinc-800 bg-zinc-950/50">
+              <Card className="border border-border bg-card/50">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Crear cliente rápido</CardTitle>
-                  <CardDescription className="text-xs text-zinc-400">Registra un cliente sin salir de esta asignación.</CardDescription>
+                  <CardDescription className="text-xs text-muted-foreground">Registra un cliente sin salir de esta asignación.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Form {...quickCustomerForm}>
@@ -478,11 +505,11 @@ export default function AssignPCDialog({
                         name="customerCode"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs text-zinc-300 font-semibold">Código</FormLabel>
+                            <FormLabel className="text-xs text-foreground font-semibold">Código</FormLabel>
                             <FormControl>
-                              <Input placeholder="CLI-001" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                              <Input placeholder="CLI-001" {...field} className="h-9 text-xs bg-background border-border text-foreground focus-visible:ring-primary" />
                             </FormControl>
-                            <FormMessage className="text-[10px]" />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -491,27 +518,37 @@ export default function AssignPCDialog({
                         name="fullName"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs text-zinc-300 font-semibold">Nombre completo</FormLabel>
+                            <FormLabel className="text-xs text-foreground font-semibold">Nombre completo</FormLabel>
                             <FormControl>
-                              <Input placeholder="Cliente" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                              <Input placeholder="Cliente" {...field} className="h-9 text-xs bg-background border-border text-foreground focus-visible:ring-primary" />
                             </FormControl>
-                            <FormMessage className="text-[10px]" />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
+                      <div className="sm:col-span-2">
+                        <Collapsible open={showQuickMoreFields} onOpenChange={setShowQuickMoreFields}>
+                          <CollapsibleTrigger asChild>
+                            <Button type="button" variant="ghost" size="sm" className="h-8 justify-between w-full text-xs">
+                              Más datos del cliente
+                              <ChevronDown className={`h-4 w-4 transition-transform ${showQuickMoreFields ? "rotate-180" : ""}`} />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="pt-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <FormField
                         control={quickCustomerForm.control}
                         name="age"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs text-zinc-300 font-semibold">Edad</FormLabel>
+                            <FormLabel className="text-xs text-foreground font-semibold">Edad</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
                                 min="5"
                                 max="110"
                                 placeholder="18"
-                                className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500"
+                                className="h-9 text-xs bg-background border-border text-foreground focus-visible:ring-primary"
                                 value={field.value ?? ""}
                                 onChange={(event) => {
                                   const next = event.target.value;
@@ -519,7 +556,7 @@ export default function AssignPCDialog({
                                 }}
                               />
                             </FormControl>
-                            <FormMessage className="text-[10px]" />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -528,11 +565,11 @@ export default function AssignPCDialog({
                         name="phone"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs text-zinc-300 font-semibold">Número de celular</FormLabel>
+                            <FormLabel className="text-xs text-foreground font-semibold">Número de celular</FormLabel>
                             <FormControl>
-                              <Input placeholder="+51 900 123 456" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                              <Input placeholder="+51 900 123 456" {...field} className="h-9 text-xs bg-background border-border text-foreground focus-visible:ring-primary" />
                             </FormControl>
-                            <FormMessage className="text-[10px]" />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -541,11 +578,11 @@ export default function AssignPCDialog({
                         name="email"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs text-zinc-300 font-semibold">Correo electrónico</FormLabel>
+                            <FormLabel className="text-xs text-foreground font-semibold">Correo electrónico</FormLabel>
                             <FormControl>
-                              <Input type="email" placeholder="cliente@email.com" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                              <Input type="email" placeholder="cliente@email.com" {...field} className="h-9 text-xs bg-background border-border text-foreground focus-visible:ring-primary" />
                             </FormControl>
-                            <FormMessage className="text-[10px]" />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -554,14 +591,18 @@ export default function AssignPCDialog({
                         name="favoriteGamesText"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs text-zinc-300 font-semibold">Juegos favoritos</FormLabel>
+                            <FormLabel className="text-xs text-foreground font-semibold">Juegos favoritos</FormLabel>
                             <FormControl>
-                              <Input placeholder="Valorant, Dota 2" {...field} className="h-9 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 focus-visible:ring-emerald-500" />
+                              <Input placeholder="Valorant, Dota 2" {...field} className="h-9 text-xs bg-background border-border text-foreground focus-visible:ring-primary" />
                             </FormControl>
-                            <FormMessage className="text-[10px]" />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </div>
                       {quickCustomerForm.formState.errors.root?.message && (
                         <p className="sm:col-span-2 text-xs text-destructive">
                           {quickCustomerForm.formState.errors.root.message}
@@ -572,7 +613,7 @@ export default function AssignPCDialog({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 rounded-lg shadow-[0_0_10px_rgba(16,185,129,0.2)] transition-all"
+                          className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-3 rounded-lg transition-all"
                           disabled={isCreatingCustomer}
                           onClick={quickCustomerForm.handleSubmit(handleQuickCreateCustomer)}
                         >
@@ -594,7 +635,7 @@ export default function AssignPCDialog({
                   <FormLabel className="text-sm font-semibold">Modo de Uso</FormLabel>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div 
-                      className={`cursor-pointer transition-all p-4 rounded-lg border-2 ${field.value === 'free' ? 'ring-2 ring-primary border-primary' : 'border-muted'}`}
+                      className={`surface-interactive transition-all p-4 border-2 ${field.value === 'free' ? 'ring-2 ring-primary border-primary' : 'border-border'}`}
                       onClick={() => field.onChange('free')}
                     >
                       <div className="space-y-3">
@@ -618,7 +659,7 @@ export default function AssignPCDialog({
                     </div>
 
                     <div 
-                      className={`cursor-pointer transition-all p-4 rounded-lg border-2 ${field.value === 'prepaid' ? 'ring-2 ring-primary border-primary' : 'border-muted'}`}
+                      className={`surface-interactive transition-all p-4 border-2 ${field.value === 'prepaid' ? 'ring-2 ring-primary border-primary' : 'border-border'}`}
                       onClick={() => field.onChange('prepaid')}
                     >
                       <div className="space-y-3">

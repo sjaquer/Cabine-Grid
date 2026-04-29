@@ -26,30 +26,37 @@ export default function PCCard({ machine: station, onAction, onMove }: PCCardPro
   const timeIsUp = isPrepaid && remainingSeconds !== undefined && remainingSeconds <= 0;
   const timeToShow = isPrepaid ? (timeIsUp ? elapsedSeconds - prepaidSeconds! : remainingSeconds!) : elapsedSeconds;
   const isWarning = remainingSeconds !== undefined && remainingSeconds > 0 && remainingSeconds <= 300;
+  const visualState = status === "maintenance" ? "maintenance" : isWarning ? "warning" : status;
 
-  // 1. Lógica de Colores de Estado (Glow Effect - True Dark Mode)
   const stateStyle = {
-    available: "border-border bg-card/40 text-muted-foreground hover:border-border/80 hover:text-foreground shadow-sm",
-    occupied: "border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.08)] hover:border-emerald-500",
-    warning: "border-amber-500 bg-amber-500/5 text-amber-600 dark:text-amber-400 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.15)]",
-    maintenance: "border-border/40 bg-muted/20 opacity-40 cursor-not-allowed text-muted-foreground",
-  }[status === 'maintenance' ? 'maintenance' : (isWarning ? 'warning' : status)];
+    available: "border-border bg-card/70 hover:border-border/90",
+    occupied: "border-2 border-success/50 bg-card/85 shadow-[0_0_14px_hsl(var(--success)/0.12)]",
+    warning: "border-2 border-status-warning/70 bg-card/85 shadow-[0_0_14px_hsl(var(--status-warning)/0.15)]",
+    maintenance: "border-border/50 bg-muted/30 opacity-60 cursor-not-allowed",
+  }[visualState];
 
-  // LED indicador de estado
+  const stateRail = {
+    available: "bg-transparent",
+    occupied: "bg-success",
+    warning: "bg-status-warning",
+    maintenance: "bg-destructive",
+  }[visualState];
+
   const ledColor = {
-    available: "bg-zinc-700",
-    occupied: "bg-emerald-500 animate-pulse",
-    warning: "bg-amber-500 animate-pulse",
-    maintenance: "bg-red-500",
-  }[status === 'maintenance' ? 'maintenance' : (isWarning ? 'warning' : status)];
+    available: "bg-muted-foreground/60",
+    occupied: "bg-success animate-pulse-glow",
+    warning: "bg-status-warning animate-pulse",
+    maintenance: "bg-destructive",
+  }[visualState];
 
   const isPC = type === 'PC' || !type;
 
   return (
     <div
       tabIndex={0}
+      title={`${name} - ${status === 'occupied' || status === 'warning' ? sanitizeString(session?.client) || 'Invitado' : 'Sin sesión'} - ${status === 'occupied' || status === 'warning' ? formatTime(Math.floor(timeToShow)) : 'Sin tiempo activo'} - ${rate?.name || 'Tarifa estándar'}`}
       className={cn(
-        "aspect-square flex flex-col justify-between p-3 rounded-xl border transition-all duration-200 select-none cursor-pointer overflow-hidden font-body focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none",
+        "relative aspect-[4/3] md:aspect-auto md:min-h-[140px] flex flex-col justify-between p-3.5 sm:p-4 rounded-xl transition-all duration-200 select-none cursor-pointer overflow-hidden font-body focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         stateStyle
       )}
       onClick={() => status !== "maintenance" && onAction(station)}
@@ -59,32 +66,31 @@ export default function PCCard({ machine: station, onAction, onMove }: PCCardPro
         }
       }}
     >
-      {/* Cabecera (Top) */}
+      <span className={cn("absolute inset-y-0 left-0 w-1", stateRail)} aria-hidden="true" />
+
       <div className="flex items-center justify-between w-full">
-        <div className="flex items-center gap-1.5">
-          {isPC ? <Monitor size={14} /> : <Gamepad2 size={14} />}
-          <span className="text-xs md:text-sm font-bold tracking-wide text-foreground">{name}</span>
+        <div className="flex items-center gap-2 pl-1">
+          {isPC ? <Monitor size={16} /> : <Gamepad2 size={16} />}
+          <span className="text-sm font-bold tracking-normal text-foreground">{name}</span>
         </div>
-        <div className={cn("w-2 h-2 rounded-full", ledColor)} />
+        <div className={cn("h-2.5 w-2.5 rounded-full", ledColor)} />
       </div>
 
-      {/* Centro (Middle) */}
       <div className="flex flex-1 flex-col items-center justify-center">
         {status === 'occupied' || status === 'warning' ? (
-          <span className="text-xl md:text-2xl font-black font-mono tracking-tighter leading-none text-foreground">
+          <span className="text-2xl md:text-3xl font-black font-mono tracking-tight leading-none text-foreground">
             {formatTime(Math.floor(timeToShow))}
           </span>
         ) : status === 'maintenance' ? (
-          <span className="text-[10px] md:text-xs font-bold tracking-wider uppercase text-muted-foreground">OFF</span>
+          <span className="text-xs font-bold tracking-wide uppercase text-muted-foreground">OFF</span>
         ) : (
-          <span className="text-[11px] md:text-xs font-black tracking-wider text-muted-foreground">LIBRE</span>
+          <span className="text-xs font-black tracking-wide text-muted-foreground">LIBRE</span>
         )}
       </div>
 
-      {/* Pie (Bottom) */}
-      <div className="w-full bg-card/50 border border-border/40 rounded-lg px-2 py-1 flex items-center gap-1.5 mt-1">
-        <User size={12} className="text-muted-foreground flex-shrink-0" />
-        <span className="text-[10px] md:text-xs text-muted-foreground truncate font-medium">
+      <div className="mt-1 flex w-full items-center gap-1.5 rounded-lg border border-border/50 bg-secondary/40 px-2.5 py-1.5">
+        <User size={13} className="flex-shrink-0 text-muted-foreground" />
+        <span className="truncate text-xs font-medium text-muted-foreground">
           {status === 'occupied' || status === 'warning' 
             ? (sanitizeString(session?.client) || 'Invitado') 
             : '---'}
@@ -97,14 +103,15 @@ export default function PCCard({ machine: station, onAction, onMove }: PCCardPro
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[10px]"
+            className="h-8 px-2.5 text-xs md:px-3"
             onClick={(e) => {
               e.stopPropagation();
               onMove(station);
             }}
+            aria-label={`Mover sesión de ${name}`}
           >
-            <ArrowLeftRight className="w-3 h-3 mr-1" />
-            Mover
+            <ArrowLeftRight className="mr-0 h-3.5 w-3.5 md:mr-1" />
+            <span className="hidden md:inline">Mover</span>
           </Button>
         </div>
       )}

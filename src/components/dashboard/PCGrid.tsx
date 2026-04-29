@@ -16,8 +16,8 @@ export default function PCGrid({ machines: stations, onCardAction, onMoveSession
       <div className="flex-1 p-3 sm:p-4 lg:p-6">
         <div className="space-y-4">
           <div className="h-11 bg-background/50 rounded-lg animate-pulse" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3.5 w-full pb-10">
-            {Array.from({length: 12}).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl bg-zinc-900/50 border border-zinc-800/40" />)}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 w-full pb-10">
+            {Array.from({length: 12}).map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-xl bg-card/50 border border-border/40" />)}
           </div>
         </div>
       </div>
@@ -48,15 +48,15 @@ export default function PCGrid({ machines: stations, onCardAction, onMoveSession
     if (list.length === 0) return null;
     
     return (
-      <div className="space-y-3 border-b border-border/30 pb-6 last:border-b-0">
+      <div className="space-y-3 border-b border-border/50 pb-6 last:border-b-0">
         <div className="flex items-center gap-2 px-1">
           <span className="text-xl">{icon}</span>
           <h3 className="text-base font-bold tracking-tight font-headline text-foreground">{title}</h3>
-          <span className="text-xs font-mono bg-secondary/70 text-muted-foreground px-1.5 py-0.5 rounded">
+          <span className="rounded-full border border-border/50 bg-secondary/70 px-2 py-0.5 text-xs font-mono text-muted-foreground">
             {list.length}
           </span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3.5 w-full pb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 w-full pb-10">
           {list.map((station) => (
             <PCCard
               key={station.id}

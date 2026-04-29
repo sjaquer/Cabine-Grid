@@ -14,6 +14,14 @@ export default {
         headline: ['Sora', 'sans-serif'],
         code: ['monospace'],
       },
+      fontSize: {
+        display: ['2rem', { lineHeight: '1.2', fontWeight: '700' }],
+        title: ['1.25rem', { lineHeight: '1.3', fontWeight: '600' }],
+        'body-lg': ['0.9375rem', { lineHeight: '1.6' }],
+        body: ['0.8125rem', { lineHeight: '1.5' }],
+        caption: ['0.75rem', { lineHeight: '1.4' }],
+        micro: ['0.6875rem', { lineHeight: '1.3' }],
+      },
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
@@ -83,10 +91,30 @@ export default {
             height: '0',
           },
         },
+        'app-scale-in': {
+          from: {
+            opacity: '0',
+            transform: 'scale(0.95)',
+          },
+          to: {
+            opacity: '1',
+            transform: 'scale(1)',
+          },
+        },
+        'pulse-glow': {
+          '0%, 100%': {
+            boxShadow: '0 0 0 0 hsl(var(--primary) / 0.3)',
+          },
+          '50%': {
+            boxShadow: '0 0 12px 4px hsl(var(--primary) / 0.15)',
+          },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'scale-in': 'app-scale-in 200ms ease-out',
+        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
       },
     },
   },

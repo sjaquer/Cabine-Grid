@@ -21,7 +21,7 @@ import { useHotkeys } from "@/hooks/useHotkeys";
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Building2, Settings, SlidersHorizontal, Search, Zap } from "lucide-react";
+import { AlertTriangle, Settings, Search, Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -539,6 +539,7 @@ export default function Dashboard() {
     [availableLocations, selectedLocationId]
   );
 
+
   const operationPanel = (
     <div className="space-y-4">
       <div className="space-y-2 rounded-xl border border-border/50 bg-card/60 p-3.5">
@@ -548,7 +549,7 @@ export default function Dashboard() {
             <p className="text-sm font-semibold">Gestor de cabinas</p>
             <p className="text-xs text-muted-foreground">Monitoreo en tiempo real</p>
           </div>
-          {selectedLocationName && <Badge variant="secondary" className="h-7 rounded-full px-2.5 text-[11px]">{selectedLocationName}</Badge>}
+          {selectedLocationName && <Badge variant="secondary" className="h-7 rounded-full px-2.5 text-xs">{selectedLocationName}</Badge>}
         </div>
       </div>
 
@@ -561,19 +562,19 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="surface-soft p-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Libres</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Libres</p>
           <p className="text-2xl font-bold leading-none">{availableMachines}</p>
         </div>
         <div className="surface-soft p-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Activas</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Activas</p>
           <p className="text-2xl font-bold leading-none">{activeMachines}</p>
         </div>
         <div className="surface-soft p-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Mantenimiento</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Mantenimiento</p>
           <p className="text-2xl font-bold leading-none">{maintenanceMachines}</p>
         </div>
         <div className="surface-soft p-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Alertas</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Alertas</p>
           <p className="text-2xl font-bold leading-none">{inventoryAlerts.length}</p>
         </div>
       </div>
@@ -612,11 +613,10 @@ export default function Dashboard() {
     <>
       <div className="flex flex-col h-full w-full p-4 lg:p-6 gap-6 bg-transparent">
       {/* Barra de Control Omnibar Superior */}
-      <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-card/40 border border-border/60 rounded-xl p-3">
-        
-        {/* Lado Izquierdo: Buscador */}
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+      <header className="rounded-xl border border-border/60 bg-card/40 p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="relative w-full md:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="omnibar-search"
             ref={searchInputRef}
@@ -624,23 +624,23 @@ export default function Dashboard() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar Estación o Jugador..."
-            className="pl-9 h-9 bg-card/50 border-border focus-visible:ring-primary/80 text-foreground text-xs rounded-lg"
+            className="h-9 rounded-lg border-border bg-card/50 pl-9 text-xs text-foreground focus-visible:ring-primary/80"
           />
         </div>
 
-        {/* Lado Derecho: Hero Metrics */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-card/60 border border-border/50 rounded-lg px-3 py-1.5">
-            <Zap className="w-4 h-4 text-emerald-400 animate-pulse" />
-            <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase">En Uso:</span>
-            <span className="text-xs font-black font-mono text-foreground">{activeMachines}/{visibleMachines.length}</span>
+        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
+          <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/60 px-3 py-1.5">
+            <Zap className="h-4 w-4 text-primary" />
+            <span className="kpi-label">En uso</span>
+            <span className="kpi-value text-base">{activeMachines}/{visibleMachines.length}</span>
           </div>
 
-          <div className="flex items-center gap-2 bg-card/60 border border-border/50 rounded-lg px-3 py-1.5">
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
-            <span className="text-[11px] font-bold text-muted-foreground tracking-wider uppercase">Alertas:</span>
-            <span className="text-xs font-black font-mono text-foreground">{inventoryAlerts.length}</span>
+          <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/60 px-3 py-1.5">
+            <AlertTriangle className="h-4 w-4 text-status-warning" />
+            <span className="kpi-label">Alertas</span>
+            <span className="kpi-value text-base">{inventoryAlerts.length}</span>
           </div>
+        </div>
         </div>
       </header>
 
