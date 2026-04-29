@@ -105,6 +105,10 @@ export function useDashboardData() {
       .then((snap) => setCustomersData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Customer))));
   }, [firestore]);
 
+  const appendCustomer = useCallback((customer: Customer) => {
+    setCustomersData((prev) => prev ? [...prev, customer] : [customer]);
+  }, []);
+
   // ─── INVENTORY: Real-time listener filtered by location ──────────
   const inventoryQuery = useMemoFirebase(() => {
     if (!firestore || !debouncedLocationId) return null;
@@ -299,7 +303,7 @@ export function useDashboardData() {
     inventoryByProduct,
     visibleSales,
     dailySales,
-    isLoading: stationsLoading || locationsLoading || productsLoading || customersLoading,
+    isLoading: stationsLoading || locationsLoading,
     stationViewFilter,
     setStationViewFilter,
     firestore,
@@ -310,5 +314,6 @@ export function useDashboardData() {
     refreshSales,
     refreshCustomers,
     refreshStaticData,
+    appendCustomer,
   };
 }

@@ -188,7 +188,7 @@ export function CustomerProfileDrawer({
         value: card.value ?? undefined,
         description: card.description ?? undefined,
         isUsed: false,
-        createdAt: serverTimestamp(),
+        createdAt: Timestamp.now(),
       };
 
       const currentCards = Array.isArray(customer.inventoryCards) ? customer.inventoryCards : [];

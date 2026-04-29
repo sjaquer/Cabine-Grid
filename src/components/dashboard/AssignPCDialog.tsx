@@ -61,15 +61,16 @@ const quickCustomerSchema = z.object({
     .union([z.coerce.number().int().min(5, "Edad minima 5").max(110, "Edad maxima 110"), z.nan()])
     .optional()
     .transform((value) => (typeof value === "number" && Number.isFinite(value) ? value : undefined)),
-  phone: z.string().trim().optional(),
+  whatsapp: z.string().trim().optional(),
   email: z.string().trim().email("Email invalido").optional().or(z.literal("")),
   favoriteGamesText: z.string().trim().optional(),
 });
 
 type QuickCustomerFormValues = z.infer<typeof quickCustomerSchema>;
 
-function normalizeText(value: string): string {
-  return value
+function normalizeText(value: string | undefined | null): string {
+  if (!value) return "";
+  return String(value)
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -137,7 +138,7 @@ export default function AssignPCDialog({
       customerCode: "",
       fullName: "",
       age: undefined,
-      phone: "",
+      whatsapp: "",
       email: "",
       favoriteGamesText: "",
     },
@@ -183,7 +184,7 @@ export default function AssignPCDialog({
         customerCode: "",
         fullName: "",
         age: undefined,
-        phone: "",
+        whatsapp: "",
         email: "",
         favoriteGamesText: "",
       });
@@ -247,7 +248,7 @@ export default function AssignPCDialog({
         customerCode: values.customerCode.trim().toUpperCase(),
         fullName: values.fullName.trim(),
         ...(typeof values.age === "number" ? { age: values.age } : {}),
-        ...(values.phone?.trim() ? { phone: values.phone.trim() } : {}),
+        ...(values.whatsapp?.trim() ? { whatsapp: values.whatsapp.trim() } : {}),
         ...(values.email?.trim() ? { email: values.email.trim() } : {}),
         favoriteGames: (values.favoriteGamesText || "")
           .split(",")
@@ -562,10 +563,10 @@ export default function AssignPCDialog({
                       />
                       <FormField
                         control={quickCustomerForm.control}
-                        name="phone"
+                        name="whatsapp"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs text-foreground font-semibold">Número de celular</FormLabel>
+                            <FormLabel className="text-xs text-foreground font-semibold">WhatsApp</FormLabel>
                             <FormControl>
                               <Input placeholder="+51 900 123 456" {...field} className="h-9 text-xs bg-background border-border text-foreground focus-visible:ring-primary" />
                             </FormControl>

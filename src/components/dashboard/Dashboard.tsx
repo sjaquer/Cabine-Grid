@@ -63,6 +63,7 @@ export default function Dashboard() {
     firestore,
     user,
     userProfile,
+    appendCustomer,
   } = useDashboardData();
 
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -83,8 +84,8 @@ export default function Dashboard() {
     if (!searchQuery.trim()) return filteredMachines;
     const q = searchQuery.toLowerCase().trim();
     return filteredMachines.filter((m) => {
-      const matchesName = m.name.toLowerCase().includes(q);
-      const matchesClient = m.session?.client?.toLowerCase().includes(q);
+      const matchesName = (m.name || "").toLowerCase().includes(q);
+      const matchesClient = (m.session?.client || "").toLowerCase().includes(q);
       return matchesName || matchesClient;
     });
   }, [filteredMachines, searchQuery]);
@@ -244,7 +245,7 @@ export default function Dashboard() {
       customerCode: normalizedCode,
       fullName: normalizedName,
       ...(typeof payload.age === "number" ? { age: payload.age } : {}),
-      ...(payload.phone ? { phone: payload.phone } : {}),
+      ...(payload.whatsapp ? { whatsapp: payload.whatsapp } : {}),
       ...(payload.email ? { email: payload.email } : {}),
       favoriteGames: payload.favoriteGames ?? [],
       isActive: payload.isActive ?? true,
@@ -270,7 +271,7 @@ export default function Dashboard() {
       customerCode: normalizedCode,
       fullName: normalizedName,
       ...(typeof payload.age === "number" ? { age: payload.age } : {}),
-      ...(payload.phone ? { phone: payload.phone } : {}),
+      ...(payload.whatsapp ? { whatsapp: payload.whatsapp } : {}),
       ...(payload.email ? { email: payload.email } : {}),
       favoriteGames: payload.favoriteGames ?? [],
       isActive: true,
@@ -301,8 +302,9 @@ export default function Dashboard() {
       description: `${normalizedName} ya esta disponible para asignar.`,
     });
 
+    appendCustomer(created);
     return created;
-  }, [firestore, customers, user?.uid, user?.email, userProfile?.role, toast]);
+  }, [firestore, customers, user?.uid, user?.email, userProfile?.role, toast, appendCustomer]);
 
   const handleConfirmPayment = useCallback(async (
     machineId: string,
