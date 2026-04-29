@@ -10,7 +10,7 @@ import PCGrid from "./PCGrid";
 import AssignPCDialog, { type AssignPCFormValues } from "./AssignPCDialog";
 import ProductsPOSDialog from "./ProductsPOSDialog";
 import SalesHistorySheet from "./SalesHistorySheet";
-import { doc, Timestamp, addDoc, collection, serverTimestamp, runTransaction } from "firebase/firestore";
+import { doc, Timestamp, addDoc, collection, serverTimestamp, runTransaction, setDoc } from "firebase/firestore";
 import { rates } from "@/lib/data";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getShiftStart } from "@/lib/shift-session";
@@ -180,6 +180,7 @@ export default function Dashboard() {
     };
 
     try {
+        handleAssignDialogChange(false);
         await startMachineSession(
           firestore,
           machineToAssign.id,
@@ -209,7 +210,6 @@ export default function Dashboard() {
             title: "Sesión Iniciada",
             description: `${machineToAssign.name} asignada a ${selectedCustomer?.fullName || 'un cliente ocasional'} en modo ${values.usageMode === 'prepaid' ? 'prepagado' : 'pago por uso'}.`,
         });
-        handleAssignDialogChange(false);
     } catch(error) {
          console.error("Error starting session: ", error);
           await logAuditFailure(firestore, {
@@ -241,7 +241,10 @@ export default function Dashboard() {
       throw new Error("Ya existe un cliente con ese codigo");
     }
 
-    const docRef = await addDoc(collection(firestore, "customers"), {
+    const docRef = doc(collection(firestore, "customers"));
+    const createdId = docRef.id;
+
+    const customerData = {
       customerCode: normalizedCode,
       fullName: normalizedName,
       ...(typeof payload.age === "number" ? { age: payload.age } : {}),
@@ -264,10 +267,10 @@ export default function Dashboard() {
         visitsByWeekday: {},
         visitHours: {},
       },
-    });
+    };
 
     const created: Customer = {
-      id: docRef.id,
+      id: createdId,
       customerCode: normalizedCode,
       fullName: normalizedName,
       ...(typeof payload.age === "number" ? { age: payload.age } : {}),
@@ -286,23 +289,26 @@ export default function Dashboard() {
       },
     };
 
-    await logAuditAction(firestore, {
-      action: 'customer.create.quick',
-      target: 'customers',
-      targetId: created.id,
-      actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
-      details: {
-        customerCode: normalizedCode,
-        fullName: normalizedName,
-      },
-    });
-
     toast({
       title: "Cliente creado",
       description: `${normalizedName} ya esta disponible para asignar.`,
     });
 
     appendCustomer(created);
+
+    setDoc(docRef, customerData).then(() => {
+      logAuditAction(firestore, {
+        action: 'customer.create.quick',
+        target: 'customers',
+        targetId: createdId,
+        actor: { id: user?.uid, email: user?.email, role: userProfile?.role },
+        details: {
+          customerCode: normalizedCode,
+          fullName: normalizedName,
+        },
+      });
+    }).catch(console.error);
+
     return created;
   }, [firestore, customers, user?.uid, user?.email, userProfile?.role, toast, appendCustomer]);
 
@@ -359,6 +365,7 @@ export default function Dashboard() {
     const soldProducts = machine.session?.soldProducts ?? [];
 
     try {
+      handlePosDialogChange(false);
       setProcessingPayment(true);
       
       // Use the new transactional closeSession function
@@ -389,7 +396,6 @@ export default function Dashboard() {
           description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${result.receiptNumber}.`,
         });
       }
-      handlePosDialogChange(false);
 
     } catch (error) {
       console.error("Error confirming payment: ", error);
@@ -450,7 +456,11 @@ export default function Dashboard() {
     if (!destinationMachine) return;
 
     try {
+      setMoveDialogOpen(false);
+      setMachineToMove(null);
+      setDestinationMachineId("");
       setIsMovingSession(true);
+      
       await moveStationSession(firestore, machineToMove.id, destinationMachineId);
 
       await logAuditAction(firestore, {
@@ -474,9 +484,6 @@ export default function Dashboard() {
         description: `${machineToMove.name} fue movida a ${destinationMachine.name} sin perder la sesión.`,
       });
 
-      setMoveDialogOpen(false);
-      setMachineToMove(null);
-      setDestinationMachineId("");
     } catch (error) {
       console.error("Error moving session:", error);
       await logAuditFailure(firestore, {

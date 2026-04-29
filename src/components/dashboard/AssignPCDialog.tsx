@@ -262,11 +262,13 @@ export default function AssignPCDialog({
         shouldDirty: true,
       });
 
+      setCustomerSearch(created.fullName);
+
       quickCustomerForm.reset({
         customerCode: "",
         fullName: "",
         age: undefined,
-        phone: "",
+        whatsapp: "",
         email: "",
         favoriteGamesText: "",
       });
