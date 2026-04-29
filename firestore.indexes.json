@@ -4,8 +4,8 @@
       "collectionGroup": "sales",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "endTime", "order": "ASCENDING" },
-        { "fieldPath": "locationId", "order": "ASCENDING" }
+        { "fieldPath": "locationId", "order": "ASCENDING" },
+        { "fieldPath": "endTime", "order": "ASCENDING" }
       ]
     },
     {
