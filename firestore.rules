@@ -14,8 +14,12 @@ service cloud.firestore {
       return isSignedIn() && exists(userDocPath());
     }
 
+    // Phase 3: Try custom claims first (set by onUserProfileWrite Cloud Function),
+    // fallback to Firestore document read for backward compatibility
     function getRole() {
-      return hasUserProfile() ? get(userDocPath()).data.role : null;
+      return request.auth.token.role != null
+        ? request.auth.token.role
+        : (hasUserProfile() ? get(userDocPath()).data.role : null);
     }
 
     function isAdmin() {
@@ -68,12 +72,16 @@ service cloud.firestore {
              request.resource.data.paymentMethod is string;
     }
 
+    // Phase 3: Use custom claims for location check when available
     function userCanAccessLocation(locationId) {
       return isAdminOrManager() || (
         isOperator() && (
-          locationId != null &&
-          get(userDocPath()).data.locationIds is list &&
-          get(userDocPath()).data.locationIds.hasAny([locationId])
+          locationId != null && (
+            // Try custom claims first (no extra read)
+            (request.auth.token.locationIds is list && request.auth.token.locationIds.hasAny([locationId])) ||
+            // Fallback to Firestore read
+            (get(userDocPath()).data.locationIds is list && get(userDocPath()).data.locationIds.hasAny([locationId]))
+          )
         )
       );
     }
@@ -183,11 +191,7 @@ service cloud.firestore {
       allow delete: if isAdmin() && userCanAccessLocation(resource.data.locationId);
     }
 
-    match /inventoryMovements/{movementId} {
-      allow read: if isSignedIn() && userCanAccessLocation(resource.data.locationId);
-      allow create, update: if canOperate() && userCanAccessLocation(request.resource.data.locationId);
-      allow delete: if isAdmin() && userCanAccessLocation(resource.data.locationId);
-    }
+    // NOTE: inventoryMovements (camelCase) removed — use inventory_movements (snake_case) only.
 
     match /shiftClosures/{closureId} {
       allow read: if isAdminOrManager() && userCanAccessLocation(resource.data.locationId);
@@ -213,6 +217,32 @@ service cloud.firestore {
     }
 
     // Bloquea cualquier colección no prevista.
+    // Phase 2: Customer cards subcollection
+    match /customers/{customerId}/cards/{cardId} {
+      allow read: if isSignedIn();
+      allow create: if isAdminOrManager();
+      allow update: if canOperate();
+      allow delete: if isAdmin();
+    }
+
+    // Phase 3: Archive collections — read-only for admin
+    match /sales_archive/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // Only Cloud Functions can write
+    }
+    match /auditLogs_archive/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /stockMovements_archive/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /inventory_movements_archive/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

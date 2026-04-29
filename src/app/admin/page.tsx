@@ -38,30 +38,43 @@ export default function AdminPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [activeSection, setActiveSection] = useState<AdminSection>("machines");
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Load data
-  const machinesQuery = useMemoFirebase(() => query(collection(firestore, "stations")), [firestore]);
-  const productsQuery = useMemoFirebase(() => query(collection(firestore, "products")), [firestore]);
-  const usersQuery = useMemoFirebase(() => query(collection(firestore, "users")), [firestore]);
-  const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
+  // Load data — lazy: only activate queries for the active section
+  const machinesQuery = useMemoFirebase(() => {
+    if (activeSection !== 'machines') return null;
+    return query(collection(firestore, "stations"));
+  }, [firestore, activeSection]);
+  const productsQuery = useMemoFirebase(() => {
+    if (activeSection !== 'products') return null;
+    return query(collection(firestore, "products"));
+  }, [firestore, activeSection]);
+  const usersQuery = useMemoFirebase(() => {
+    if (activeSection !== 'staff') return null;
+    return query(collection(firestore, "users"));
+  }, [firestore, activeSection]);
+  const customersQuery = useMemoFirebase(() => {
+    if (activeSection !== 'customers') return null;
+    return query(collection(firestore, "customers"));
+  }, [firestore, activeSection]);
   const locationsQuery = useMemoFirebase(() => query(collection(firestore, "locations")), [firestore]);
   
   const closuresQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || activeSection !== 'closures') return null;
     return query(collection(firestore, "shiftClosures"), limit(50));
-  }, [firestore]);
+  }, [firestore, activeSection]);
 
   const salesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || activeSection !== 'finance') return null;
     return query(collection(firestore, "sales"), limit(50));
-  }, [firestore]);
+  }, [firestore, activeSection]);
 
   const auditLogsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || (activeSection !== 'logs' && activeSection !== 'finance')) return null;
     return query(collection(firestore, "auditLogs"), limit(50));
-  }, [firestore]);
+  }, [firestore, activeSection]);
 
   const { data: machinesData } = useCollection<Omit<Station, "id">>(machinesQuery);
   const { data: productsData } = useCollection<Omit<Product, "id">>(productsQuery);
@@ -97,6 +110,14 @@ export default function AdminPage() {
     }
     return list;
   }, [locationsData]);
+
+  // Auto-select first location if none selected
+  const activeLocationId = useMemo(() => {
+    if (selectedLocationId && locations.some(l => l.id === selectedLocationId)) {
+      return selectedLocationId;
+    }
+    return locations[0]?.id || 'local-01';
+  }, [selectedLocationId, locations]);
 
   // Financial calculations
   const todayRevenue = useMemo(() => {
@@ -160,12 +181,13 @@ export default function AdminPage() {
 
   // Operations
   const handleAddMachine = async (machine: Omit<Station, 'id'>) => {
-    await addDoc(collection(firestore, "stations"), { ...machine, locationId: "local-01" });
+    const locationId = machine.locationId || activeLocationId;
+    await addDoc(collection(firestore, "stations"), { ...machine, locationId });
     await logAuditAction(firestore, {
       action: 'machine.create',
       target: 'machines',
       targetId: machine.name,
-      locationId: 'local-01',
+      locationId,
       actor: auditActor,
       details: { machine },
     });
@@ -178,7 +200,7 @@ export default function AdminPage() {
       action: 'machine.update',
       target: 'machines',
       targetId: id,
-      locationId: 'local-01',
+      locationId: updates.locationId || activeLocationId,
       actor: auditActor,
       details: { updates },
     });
@@ -186,16 +208,18 @@ export default function AdminPage() {
   };
 
   const handleDeleteMachine = async (id: string) => {
-    await deleteDoc(doc(firestore, "stations", id));
+    // Soft-delete: mark as inactive instead of permanent deletion
+    await updateDoc(doc(firestore, "stations", id), { isActive: false, status: 'maintenance' });
     await logAuditAction(firestore, {
       action: 'machine.delete',
       target: 'machines',
       targetId: id,
+      locationId: activeLocationId,
       actor: auditActor,
       severity: 'high',
       riskTags: ['destructive-action'],
     });
-    toast({ title: "Estación eliminada exitosamente" });
+    toast({ title: "Estación desactivada exitosamente" });
   };
 
   const handleToggleMachineStatus = async (id: string, status: Station["status"]) => {
@@ -316,7 +340,7 @@ export default function AdminPage() {
             {activeSection === 'machines' && (
               <MachineManager
                 machines={machines}
-                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                locations={locations}
                 onAdd={handleAddMachine}
                 onEdit={handleEditMachine}
                 onDelete={handleDeleteMachine}
@@ -345,7 +369,7 @@ export default function AdminPage() {
             {activeSection === 'staff' && userProfile?.role === 'admin' && (
               <UserManager
                 users={users}
-                locations={[{ id: 'local-01', name: 'Local 01', address: '-', fractionMinutes: 60, createdAt: null as any, isActive: true }]}
+                locations={locations}
                 onCreateUser={async (u: any) => {
                   toast({ title: "Crear staff mediante consola de seguridad" });
                 }}

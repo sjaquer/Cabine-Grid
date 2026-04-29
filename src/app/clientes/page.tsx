@@ -6,7 +6,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import RoleGuard from "@/components/auth/RoleGuard";
 import type { Customer } from "@/lib/types";
-import { collection, query, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, addDoc, serverTimestamp, where, limit } from "firebase/firestore";
 import { CustomerProfileDrawer } from "@/components/admin/CustomerProfileDrawer";
 import { logAuditAction } from "@/lib/audit-log";
 import { Button } from "@/components/ui/button";
@@ -45,10 +45,28 @@ export default function ClientesPage() {
   const [newCustomerCode, setNewCustomerCode] = useState("");
   const [isSavingClient, setIsSavingClient] = useState(false);
 
-  const customersQuery = useMemoFirebase(() => query(collection(firestore, "customers")), [firestore]);
+  // Phase 2: Paginated query with limit — reduces Firestore reads for large datasets
+  const PAGE_SIZE = 100;
+  const customersQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    // When filtering by loyalty, use server-side filter
+    if (selectedFilter !== 'all') {
+      return query(
+        collection(firestore, "customers"),
+        where("loyaltyLevel", "==", selectedFilter),
+        limit(PAGE_SIZE)
+      );
+    }
+    return query(collection(firestore, "customers"), limit(PAGE_SIZE));
+  }, [firestore, selectedFilter]);
+
   const { data: customersData } = useCollection<Omit<Customer, "id">>(customersQuery);
 
   const customers = useMemo(() => (customersData ?? []) as Customer[], [customersData]);
+
+  // Segment filter state (from Phase 3 RFM segmentation)
+  type SegmentFilter = 'all' | 'champion' | 'loyal' | 'potential' | 'new' | 'at-risk' | 'hibernating' | 'lost';
+  const [selectedSegment, setSelectedSegment] = useState<SegmentFilter>('all');
 
   const filteredCustomers = useMemo(() => {
     let result = customers;
@@ -64,13 +82,13 @@ export default function ClientesPage() {
       });
     }
 
-    // Quick filters
-    if (selectedFilter !== 'all') {
-      result = result.filter(c => (c.loyaltyLevel || 'bronze') === selectedFilter);
+    // Segment filter (Phase 3 RFM-based)
+    if (selectedSegment !== 'all') {
+      result = result.filter(c => (c as any).segment === selectedSegment);
     }
 
     return result;
-  }, [customers, searchTerm, selectedFilter]);
+  }, [customers, searchTerm, selectedSegment]);
 
   // Autofocus Search on Mount
   useEffect(() => {

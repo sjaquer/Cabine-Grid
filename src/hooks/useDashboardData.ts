@@ -9,10 +9,15 @@ export function useDashboardData() {
   const { user, userProfile } = useAuth();
   const firestore = useFirestore();
 
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+
   const stationsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
+    if (selectedLocationId) {
+      return query(collection(firestore, "stations"), where("locationId", "==", selectedLocationId));
+    }
     return query(collection(firestore, "stations"));
-  }, [firestore]);
+  }, [firestore, selectedLocationId]);
   
   const { data: stationsData, isLoading: stationsLoading } = useCollection<Omit<Station, 'id'>>(stationsQuery);
 
@@ -36,8 +41,6 @@ export function useDashboardData() {
   }, [firestore]);
 
   const { data: customersData, isLoading: customersLoading } = useCollection<Omit<Customer, "id">>(customersQuery);
-
-  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   
   const inventoryQuery = useMemoFirebase(() => {
     if (!firestore || !selectedLocationId) return null;
@@ -144,8 +147,15 @@ export function useDashboardData() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfToday = Timestamp.fromDate(today);
+    if (selectedLocationId) {
+      return query(
+        collection(firestore, "sales"),
+        where("endTime", ">=", startOfToday),
+        where("locationId", "==", selectedLocationId)
+      );
+    }
     return query(collection(firestore, "sales"), where("endTime", ">=", startOfToday));
-  }, [firestore, user]);
+  }, [firestore, user, selectedLocationId]);
 
   const { data: sales } = useCollection<Sale>(salesQuery);
   

@@ -201,6 +201,16 @@ export const applyCardToSession = async (
       if (!card) throw new Error('Card not found in customer inventory');
       if (card.isUsed) throw new Error('Card already used');
 
+      // Validate card expiration
+      if (card.expiresAt) {
+        const expiresAtMs = typeof card.expiresAt.toMillis === 'function'
+          ? card.expiresAt.toMillis()
+          : typeof card.expiresAt === 'number' ? card.expiresAt : 0;
+        if (expiresAtMs > 0 && Date.now() > expiresAtMs) {
+          throw new Error('Esta carta ha expirado y no puede ser utilizada.');
+        }
+      }
+
       // Calculate current gross total using session-cost helper
       const calc = calculateSessionCost(session, 5);
       const grossTotal = calc.finalCost;
@@ -212,9 +222,10 @@ export const applyCardToSession = async (
       };
 
       if (card.type === 'discount' && typeof card.value === 'number') {
-        // treat value as percentage
-        discountAmount = Math.round((grossTotal * (card.value / 100)) * 100) / 100;
-        updatedSession.discount = { amount: discountAmount, reason: `Carta: ${card.name}` };
+        // treat value as percentage, capped at 50% to prevent abuse
+        const cappedPercent = Math.min(card.value, 50);
+        discountAmount = Math.round((grossTotal * (cappedPercent / 100)) * 100) / 100;
+        updatedSession.discount = { amount: discountAmount, reason: `Carta: ${card.name} (${cappedPercent}%)` };
       }
 
       if (card.type === 'time' && typeof card.value === 'number') {

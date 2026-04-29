@@ -16,8 +16,10 @@ import type { Station, Sale, UserProfile } from '@/lib/types';
 import { useMemoFirebase } from '../provider';
 import { useDoc } from '../firestore/use-doc';
 import { buildShiftReportPdf } from '@/lib/shift-report';
-import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftId, getShiftLocation, getShiftStart } from '@/lib/shift-session';
+import { clearShiftLocation, clearShiftStart, ensureShiftStart, getShiftLocation, getShiftStart, setShiftLocation } from '@/lib/shift-session';
 import { logAuditAction, logAuditFailure } from '@/lib/audit-log';
+import { aggregateShiftSales } from '@/lib/shift-aggregation';
+import { createShift, closeShift as closeFirestoreShift, getActiveShiftsForOperator } from '@/lib/shift-management';
 
 export interface AuthContextValue {
   user: User | null;
@@ -75,12 +77,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Use the useDoc hook to get the user profile in real-time
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
+  // Phase 2: Create Firestore shift on login (source of truth)
+  const shiftCreatedRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!user || !userProfile) return;
-    if (userProfile.role === 'operator' || userProfile.role === 'manager') {
-      ensureShiftStart(user.uid);
-    }
-  }, [user, userProfile]);
+    if (!user || !userProfile || !firestore) return;
+    if (!(userProfile.role === 'operator' || userProfile.role === 'manager')) return;
+    if (shiftCreatedRef.current === user.uid) return;
+
+    shiftCreatedRef.current = user.uid;
+
+    // Keep localStorage for backward compat
+    ensureShiftStart(user.uid);
+
+    // Create Firestore shift (or reuse existing active one)
+    const initShift = async () => {
+      try {
+        const locationId = getShiftLocation(user.uid) || userProfile.locationIds?.[0] || 'default';
+        const existingShifts = await getActiveShiftsForOperator(firestore, user.uid);
+        if (existingShifts.length === 0) {
+          const newShiftId = await createShift(
+            firestore,
+            user.uid,
+            user.email || '',
+            locationId,
+          );
+          // Store the Firestore shift ID in localStorage as bridge
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(`cabine-grid.shift.firestoreId.${user.uid}`, newShiftId);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create Firestore shift:', e);
+      }
+    };
+    void initShift();
+  }, [user, userProfile, firestore]);
 
   useEffect(() => {
     if (!user || !userProfile || !firestore) return;
@@ -126,47 +158,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        // Get shift info from localStorage (for now, until we fully migrate)
-        const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
-        const shiftLocationId = getShiftLocation(user.uid);
-        const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
-
-        // Get sales for this shift
-        const salesRef = collection(firestore, 'sales');
-        const salesQuery = query(
-          salesRef,
-          where('endTime', '>=', Timestamp.fromMillis(shiftStartMs)),
-          where('endTime', '<=', Timestamp.fromMillis(Date.now()))
-        );
-        const salesSnap = await getDocs(salesQuery);
-        const allShiftSales: Sale[] = salesSnap.docs.map((snapshot) => ({
-          id: snapshot.id,
-          ...(snapshot.data() as Omit<Sale, 'id'>),
-        }));
-
-        // Filter sales by operator and location
-        const operatorShiftSales = allShiftSales.filter((sale) => {
-          if (sale.operator?.id !== user.uid) return false;
-          if (!shiftLocationId) return true;
-          return sale.locationId === shiftLocationId;
-        });
-
-        const paidShiftSales = operatorShiftSales.filter((sale) => !sale.isUnpaid && sale.paymentMethod !== 'deuda');
-
-        const expectedCash = paidShiftSales
-          .filter((sale) => sale.paymentMethod === 'efectivo')
-          .reduce((sum, sale) => sum + sale.amount, 0);
-        const expectedYape = paidShiftSales
-          .filter((sale) => sale.paymentMethod === 'yape')
-          .reduce((sum, sale) => sum + sale.amount, 0);
-        const expectedOther = paidShiftSales
-          .filter((sale) => sale.paymentMethod === 'otro')
-          .reduce((sum, sale) => sum + sale.amount, 0);
-        const debtsGenerated = operatorShiftSales
-          .filter((sale) => sale.isUnpaid || sale.paymentMethod === 'deuda')
-          .reduce((sum, sale) => sum + sale.amount, 0);
-        const grossSales = operatorShiftSales.reduce((sum, sale) => sum + sale.amount, 0);
-        const theoreticalIncome = Math.round((grossSales - debtsGenerated) * 100) / 100;
+        const agg = await aggregateShiftSales(firestore, user.uid);
+        const {
+          shiftId, shiftStartMs, shiftLocationId,
+          operatorShiftSales, expectedCash, expectedYape, expectedOther,
+          debtsGenerated, grossSales, theoreticalIncome, openMachines,
+        } = agg;
 
         const countedCash = Math.round(payload.countedCash * 100) / 100;
         const countedYape = Math.round(payload.countedYape * 100) / 100;
@@ -181,19 +178,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if ((cashDifference !== 0 || yapeDifference !== 0 || otherDifference !== 0) && !payload.discrepancyReason?.trim()) {
           throw new Error('Existe diferencia en caja. Debes ingresar un motivo para cerrar turno.');
         }
-
-        // Get open machines
-        const machinesRef = collection(firestore, 'stations');
-        const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
-        const machinesSnap = await getDocs(machinesQuery);
-        const allOpenMachines: Station[] = machinesSnap.docs.map((snapshot) => ({
-          id: snapshot.id,
-          ...(snapshot.data() as Omit<Station, 'id'>),
-        }));
-
-        const openMachines = shiftLocationId
-          ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
-          : allOpenMachines;
 
         // Create shift closure record
         await addDoc(collection(firestore, 'shiftClosures'), {
@@ -276,9 +260,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           openMachines,
         });
 
-        // Clear localStorage shift data
+        // Phase 2: Close Firestore shift
+        if (agg.firestoreShift?.id) {
+          try {
+            await closeFirestoreShift(firestore, agg.firestoreShift.id);
+          } catch (e) {
+            console.error('Failed to close Firestore shift:', e);
+          }
+        }
+
+        // Clear localStorage shift data (kept for backward compat)
         clearShiftLocation(user.uid);
         clearShiftStart(user.uid);
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(`cabine-grid.shift.firestoreId.${user.uid}`);
+        }
       } catch (error) {
         console.error('Error generando cierre de turno:', error);
         await logAuditFailure(firestore, {
@@ -301,70 +297,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user || !userProfile || !firestore) return null;
     if (!(userProfile.role === 'operator' || userProfile.role === 'manager')) return null;
 
-    const shiftStartMs = getShiftStart(user.uid) ?? Date.now();
-    const shiftLocationId = getShiftLocation(user.uid) || undefined;
-    const shiftId = getShiftId(user.uid) ?? `${shiftLocationId || 'global'}_${user.uid}_${shiftStartMs}`;
-
-    const salesRef = collection(firestore, 'sales');
-    const salesQuery = query(
-      salesRef,
-      where('endTime', '>=', Timestamp.fromMillis(shiftStartMs)),
-      where('endTime', '<=', Timestamp.fromMillis(Date.now())),
-    );
-    const salesSnap = await getDocs(salesQuery);
-    const allShiftSales: Sale[] = salesSnap.docs.map((snapshot) => ({
-      id: snapshot.id,
-      ...(snapshot.data() as Omit<Sale, 'id'>),
-    }));
-
-    const operatorShiftSales = allShiftSales.filter((sale) => {
-      if (sale.operator?.id !== user.uid) return false;
-      if (!shiftLocationId) return true;
-      return sale.locationId === shiftLocationId;
-    });
-
-    const paidShiftSales = operatorShiftSales.filter((sale) => !sale.isUnpaid && sale.paymentMethod !== 'deuda');
-
-    const expectedCash = paidShiftSales
-      .filter((sale) => sale.paymentMethod === 'efectivo')
-      .reduce((sum, sale) => sum + sale.amount, 0);
-    const expectedYape = paidShiftSales
-      .filter((sale) => sale.paymentMethod === 'yape')
-      .reduce((sum, sale) => sum + sale.amount, 0);
-    const expectedOther = paidShiftSales
-      .filter((sale) => sale.paymentMethod === 'otro')
-      .reduce((sum, sale) => sum + sale.amount, 0);
-    const debtsGenerated = operatorShiftSales
-      .filter((sale) => sale.isUnpaid || sale.paymentMethod === 'deuda')
-      .reduce((sum, sale) => sum + sale.amount, 0);
-    const grossSales = operatorShiftSales.reduce((sum, sale) => sum + sale.amount, 0);
-    const theoreticalIncome = Math.round((grossSales - debtsGenerated) * 100) / 100;
-    const totalExpected = Math.round((expectedCash + expectedYape + expectedOther) * 100) / 100;
-
-    const machinesRef = collection(firestore, 'stations');
-    const machinesQuery = query(machinesRef, where('status', 'in', ['occupied', 'warning']));
-    const machinesSnap = await getDocs(machinesQuery);
-    const allOpenMachines: Station[] = machinesSnap.docs.map((snapshot) => ({
-      id: snapshot.id,
-      ...(snapshot.data() as Omit<Station, 'id'>),
-    }));
-    const openMachines = shiftLocationId
-      ? allOpenMachines.filter((machine) => machine.locationId === shiftLocationId)
-      : allOpenMachines;
+    const agg = await aggregateShiftSales(firestore, user.uid);
 
     return {
-      shiftId,
-      shiftStartMs,
-      shiftLocationId,
-      salesCount: operatorShiftSales.length,
-      expectedCash: Math.round(expectedCash * 100) / 100,
-      expectedYape: Math.round(expectedYape * 100) / 100,
-      expectedOther: Math.round(expectedOther * 100) / 100,
-      totalExpected,
-      debtsGenerated: Math.round(debtsGenerated * 100) / 100,
-      grossSales: Math.round(grossSales * 100) / 100,
-      theoreticalIncome,
-      openMachinesCount: openMachines.length,
+      shiftId: agg.shiftId,
+      shiftStartMs: agg.shiftStartMs,
+      shiftLocationId: agg.shiftLocationId,
+      salesCount: agg.operatorShiftSales.length,
+      expectedCash: agg.expectedCash,
+      expectedYape: agg.expectedYape,
+      expectedOther: agg.expectedOther,
+      totalExpected: agg.totalExpected,
+      debtsGenerated: agg.debtsGenerated,
+      grossSales: agg.grossSales,
+      theoreticalIncome: agg.theoreticalIncome,
+      openMachinesCount: agg.openMachines.length,
     };
   };
 
