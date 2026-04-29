@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { query, collection, where, Timestamp, doc, writeBatch } from "firebase/firestore";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { query, collection, where, Timestamp, getDocs } from "firebase/firestore";
 import { useAuth, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { setShiftLocation } from "@/lib/shift-session";
 import { useAccessibleMachines } from "@/hooks/useMachineAccess";
@@ -11,44 +11,108 @@ export function useDashboardData() {
 
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
+  // ─── DEBOUNCED location for queries ───────────────────────────────
+  // Prevents rapid listener teardown/setup when location changes quickly,
+  // which causes Firestore SDK INTERNAL ASSERTION FAILED errors.
+  const [debouncedLocationId, setDebouncedLocationId] = useState<string>("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedLocationId(selectedLocationId);
+    }, 150); // 150ms debounce — fast enough to feel instant, slow enough to batch
+    return () => clearTimeout(timer);
+  }, [selectedLocationId]);
+
+  // ─── STATIONS: Real-time listener (critical) ─────────────────────
   const stationsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    if (selectedLocationId) {
-      return query(collection(firestore, "stations"), where("locationId", "==", selectedLocationId));
+    if (debouncedLocationId) {
+      return query(collection(firestore, "stations"), where("locationId", "==", debouncedLocationId));
     }
     return query(collection(firestore, "stations"));
-  }, [firestore, selectedLocationId]);
+  }, [firestore, debouncedLocationId]);
   
   const { data: stationsData, isLoading: stationsLoading } = useCollection<Omit<Station, 'id'>>(stationsQuery);
 
-  const locationsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "locations"));
+  // ─── LOCATIONS: Fetch once + cache (changes ~never) ──────────────
+  const [locationsData, setLocationsData] = useState<Location[] | null>(null);
+  const [locationsLoading, setLocationsLoading] = useState(true);
+  const locationsFetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!firestore || locationsFetchedRef.current) return;
+    locationsFetchedRef.current = true;
+
+    getDocs(query(collection(firestore, "locations")))
+      .then((snap) => {
+        const locs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Location));
+        setLocationsData(locs);
+      })
+      .catch((e) => console.error("Error fetching locations:", e))
+      .finally(() => setLocationsLoading(false));
   }, [firestore]);
 
-  const { data: locationsData, isLoading: locationsLoading } = useCollection<Omit<Location, "id">>(locationsQuery);
+  // ─── PRODUCTS: Fetch once + cache (changes ~rarely) ──────────────
+  const [productsData, setProductsData] = useState<Product[] | null>(null);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const productsFetchedRef = useRef(false);
 
-  const productsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "products"));
+  useEffect(() => {
+    if (!firestore || productsFetchedRef.current) return;
+    productsFetchedRef.current = true;
+
+    getDocs(query(collection(firestore, "products")))
+      .then((snap) => {
+        const prods = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product));
+        setProductsData(prods);
+      })
+      .catch((e) => console.error("Error fetching products:", e))
+      .finally(() => setProductsLoading(false));
   }, [firestore]);
 
-  const { data: productsData, isLoading: productsLoading } = useCollection<Omit<Product, "id">>(productsQuery);
-
-  const customersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "customers"));
+  // Expose a manual refresh for products/locations (for admin edits)
+  const refreshStaticData = useCallback(() => {
+    if (!firestore) return;
+    getDocs(query(collection(firestore, "locations")))
+      .then((snap) => setLocationsData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Location))));
+    getDocs(query(collection(firestore, "products")))
+      .then((snap) => setProductsData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product))));
   }, [firestore]);
 
-  const { data: customersData, isLoading: customersLoading } = useCollection<Omit<Customer, "id">>(customersQuery);
-  
+  // ─── CUSTOMERS: Fetch once + cache (NO real-time listener) ───────
+  // Customers change infrequently. The AssignPCDialog searches locally.
+  const [customersData, setCustomersData] = useState<Customer[] | null>(null);
+  const [customersLoading, setCustomersLoading] = useState(true);
+  const customersFetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!firestore || customersFetchedRef.current) return;
+    customersFetchedRef.current = true;
+
+    getDocs(query(collection(firestore, "customers")))
+      .then((snap) => {
+        const custs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Customer));
+        setCustomersData(custs);
+      })
+      .catch((e) => console.error("Error fetching customers:", e))
+      .finally(() => setCustomersLoading(false));
+  }, [firestore]);
+
+  // Expose refresh for customers (after create/edit)
+  const refreshCustomers = useCallback(() => {
+    if (!firestore) return;
+    getDocs(query(collection(firestore, "customers")))
+      .then((snap) => setCustomersData(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Customer))));
+  }, [firestore]);
+
+  // ─── INVENTORY: Real-time listener filtered by location ──────────
   const inventoryQuery = useMemoFirebase(() => {
-    if (!firestore || !selectedLocationId) return null;
+    if (!firestore || !debouncedLocationId) return null;
     return query(
       collection(firestore, "inventory"),
-      where("locationId", "==", selectedLocationId)
+      where("locationId", "==", debouncedLocationId)
     );
-  }, [firestore, selectedLocationId]);
+  }, [firestore, debouncedLocationId]);
 
   const { data: inventoryData, isLoading: inventoryLoading } = useCollection<Omit<Inventory, "id">>(inventoryQuery);
 
@@ -142,26 +206,67 @@ export function useDashboardData() {
     return visibleStations;
   }, [visibleStations, stationViewFilter]);
 
-  const salesQuery = useMemoFirebase(() => {
-    if (!user) return null;
+  // ─── SALES: Fetch once + manual append after closeSession ────────
+  const [salesData, setSalesData] = useState<Sale[] | null>(null);
+  const salesFetchedRef = useRef<string | null>(null); // Keyed by date+location
+
+  const salesCacheKey = `${new Date().toDateString()}_${debouncedLocationId}`;
+  
+  useEffect(() => {
+    if (!firestore || !user) return;
+    if (salesFetchedRef.current === salesCacheKey) return;
+    salesFetchedRef.current = salesCacheKey;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfToday = Timestamp.fromDate(today);
-    if (selectedLocationId) {
-      return query(
-        collection(firestore, "sales"),
-        where("endTime", ">=", startOfToday),
-        where("locationId", "==", selectedLocationId)
-      );
+    
+    const constraints = [where("endTime", ">=", startOfToday)];
+    if (debouncedLocationId) {
+      constraints.push(where("locationId", "==", debouncedLocationId));
     }
-    return query(collection(firestore, "sales"), where("endTime", ">=", startOfToday));
-  }, [firestore, user, selectedLocationId]);
 
-  const { data: sales } = useCollection<Sale>(salesQuery);
-  
+    getDocs(query(collection(firestore, "sales"), ...constraints))
+      .then((snap) => {
+        const sales = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Sale));
+        setSalesData(sales);
+      })
+      .catch((e) => console.error("Error fetching sales:", e));
+  }, [firestore, user, salesCacheKey, debouncedLocationId]);
+
+  // Called after closeSession to append the new sale without re-fetching
+  const appendSale = useCallback((sale: Sale) => {
+    setSalesData((prev) => prev ? [sale, ...prev] : [sale]);
+  }, []);
+
+  // Force-refresh sales (e.g. when another operator closes a session)
+  const refreshSales = useCallback(() => {
+    salesFetchedRef.current = null; // Invalidate cache
+    // Re-trigger by changing the ref
+    if (!firestore || !user) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfToday = Timestamp.fromDate(today);
+    
+    const constraints = [where("endTime", ">=", startOfToday)];
+    if (debouncedLocationId) {
+      constraints.push(where("locationId", "==", debouncedLocationId));
+    }
+
+    getDocs(query(collection(firestore, "sales"), ...constraints))
+      .then((snap) => {
+        const sales = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Sale));
+        setSalesData(sales);
+      });
+  }, [firestore, user, debouncedLocationId]);
+
   const sortedSales = useMemo(() => 
-    sales ? [...sales].sort((a, b) => (b.endTime as Timestamp).toMillis() - (a.endTime as Timestamp).toMillis()) : [], 
-    [sales]
+    salesData ? [...salesData].sort((a, b) => {
+      const aMs = (a.endTime as Timestamp)?.toMillis?.() || 0;
+      const bMs = (b.endTime as Timestamp)?.toMillis?.() || 0;
+      return bMs - aMs;
+    }) : [], 
+    [salesData]
   );
 
   const visibleSales = useMemo(() => {
@@ -173,35 +278,11 @@ export function useDashboardData() {
 
   const dailySales = visibleSales.reduce((sum, sale) => sum + sale.amount, 0);
 
-  // Prepaid station time warning interval
-  useEffect(() => {
-    if (stationsLoading || !firestore) return;
-    
-    const interval = setInterval(() => {
-      stations.forEach(s => {
-        if (s.session?.usageMode === 'prepaid' && (s.status === 'occupied' || s.status === 'warning')) {
-            const { startTime, prepaidHours } = s.session;
-            const prepaidSeconds = (prepaidHours || 0) * 3600;
-            const elapsedSeconds = (Date.now() - startTime) / 1000;
-            const remainingSeconds = prepaidSeconds - elapsedSeconds;
-
-            if (remainingSeconds <= 300 && remainingSeconds > 0 && s.status !== 'warning') {
-              const stationRef = doc(firestore, 'stations', s.id);
-              const batch = writeBatch(firestore);
-              batch.update(stationRef, { status: 'warning' });
-              batch.commit().catch(e => console.error("Error updating station status:", e));
-            } else if (remainingSeconds > 300 && s.status === 'warning') {
-              const stationRef = doc(firestore, 'stations', s.id);
-              const batch = writeBatch(firestore);
-              batch.update(stationRef, { status: 'occupied' });
-              batch.commit().catch(e => console.error("Error updating station status:", e));
-            }
-        }
-      });
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, [stations, firestore, stationsLoading]);
+  // ─── PREPAID WARNING: Removed Firestore writes ───────────────────
+  // The PCCard component already calculates warning state locally via useTimer.
+  // Writing status:'warning' to Firestore was 100% redundant — it caused
+  // unnecessary writes AND re-triggered the stations listener for all clients.
+  // NOW: Zero Firestore writes for prepaid warnings.
 
   return {
     stations,
@@ -218,11 +299,16 @@ export function useDashboardData() {
     inventoryByProduct,
     visibleSales,
     dailySales,
-    isLoading: stationsLoading || locationsLoading || productsLoading || customersLoading || inventoryLoading,
+    isLoading: stationsLoading || locationsLoading || productsLoading || customersLoading,
     stationViewFilter,
     setStationViewFilter,
     firestore,
     user,
     userProfile,
+    // New Phase 2 utilities
+    appendSale,
+    refreshSales,
+    refreshCustomers,
+    refreshStaticData,
   };
 }
