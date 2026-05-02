@@ -284,9 +284,9 @@ export default function AuditLogsManager({ logs, locations, users }: AuditLogsMa
 
       <Card>
         <CardHeader>
-          <CardTitle>Bitacora de actividad</CardTitle>
-          <CardDescription>
-            Vista cronologica para rastrear acciones, detectar patrones erraticos y auditar operaciones del personal.
+          <CardTitle>Auditoría</CardTitle>
+            <CardDescription>
+              Registro cronológico de acciones y operaciones
           </CardDescription>
         </CardHeader>
         <CardContent>

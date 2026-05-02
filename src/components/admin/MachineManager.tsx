@@ -151,8 +151,8 @@ export default function MachineManager({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Gestión de Estaciones</CardTitle>
-          <CardDescription>Administra todas las estaciones del negocio</CardDescription>
+          <CardTitle>Estaciones</CardTitle>
+            <CardDescription>Configura máquinas y tarifas por ubicación</CardDescription>
         </div>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>

@@ -163,8 +163,8 @@ export default function ProductManager({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Gestión de Productos</CardTitle>
-          <CardDescription>Administra productos disponibles para venta</CardDescription>
+          <CardTitle>Productos</CardTitle>
+          <CardDescription>Configura productos disponibles para venta</CardDescription>
         </div>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
@@ -185,7 +185,7 @@ export default function ProductManager({
                 {editingId ? "Editar Producto" : "Crear Nuevo Producto"}
               </DialogTitle>
               <DialogDescription>
-                Ingresa los datos del producto para la venta
+                Completa la información del producto
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>

@@ -69,7 +69,7 @@ export default function ShiftClosureManager({ closures, userProfile, onReopenShi
       <CardHeader>
         <CardTitle>Cierres de Turno</CardTitle>
         <CardDescription>
-          Historial de cierres con arqueo. Solo administrador puede reabrir un cierre finalizado.
+          Historial de cierres de turno con auditoría de caja
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -194,9 +194,9 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Gestión de Usuarios y Roles</CardTitle>
+          <CardTitle>Usuarios y Roles</CardTitle>
           <CardDescription>
-            Administra los permisos y roles de los operadores
+            Configura usuarios y asigna roles
           </CardDescription>
         </div>
       </CardHeader>

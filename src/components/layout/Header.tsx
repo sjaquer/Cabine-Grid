@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Cpu, History, CircleUser, LogOut, Settings, Package, Loader2, AlertTriangle, UserRound, BarChart3 } from "lucide-react";
+import { Cpu, History, CircleUser, LogOut, Settings, Package, Loader2, AlertTriangle, UserRound, BarChart3, ShoppingCart } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
@@ -24,10 +24,11 @@ type HeaderProps = {
   availableMachines: number;
   occupiedMachines: number;
   onHistoryClick: () => void;
+  onPosClick: () => void;
   userProfile: UserProfile | null;
 };
 
-export default function Header({ dailySales, availableMachines, occupiedMachines, onHistoryClick, userProfile }: HeaderProps) {
+export default function Header({ dailySales, availableMachines, occupiedMachines, onHistoryClick, onPosClick, userProfile }: HeaderProps) {
   const { logout, getShiftClosurePreview } = useAuth();
   const { toast } = useToast();
   const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
@@ -58,6 +59,16 @@ export default function Header({ dailySales, availableMachines, occupiedMachines
 
         {/* Botones de Acción */}
         <div className="flex items-center gap-1 sm:gap-2">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onPosClick} 
+            className="hidden h-8 gap-2 sm:flex"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            <span>POS</span>
+          </Button>
+
           <Button 
             variant="ghost" 
             size="sm" 

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { Customer, Station, Sale, PaymentMethod, SoldProduct, UserProfile, Session, Location, Product } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-import Header from "@/components/layout/Header";
 import PCGrid from "./PCGrid";
 import AssignPCDialog, { type AssignPCFormValues } from "./AssignPCDialog";
 import ProductsPOSDialog from "./ProductsPOSDialog";
@@ -21,12 +20,12 @@ import { useHotkeys } from "@/hooks/useHotkeys";
 import { useInventoryAlerts } from "@/hooks/useInventoryAlerts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Settings, Search, Zap } from "lucide-react";
+import { AlertTriangle, Settings, Search, Zap, ShoppingCart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import InventoryAlertsDisplay from "./InventoryAlertsDisplay";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useDashboardData } from "@/hooks/useDashboardData";
-import { updateSessionProducts, startMachineSession, moveStationSession } from "@/lib/services/sales";
+import { updateSessionProducts, startMachineSession, moveStationSession, createStandaloneSale } from "@/lib/services/sales";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -64,6 +63,8 @@ export default function Dashboard() {
     user,
     userProfile,
     appendCustomer,
+    refreshSales,
+    refreshCustomers,
   } = useDashboardData();
 
   const [isAssignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -95,6 +96,11 @@ export default function Dashboard() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const openStandalonePos = useCallback(() => {
+    setMachineToPos(null);
+    setPosDialogOpen(true);
+  }, []);
+
   useEffect(() => {
     if (searchInputRef.current) {
       searchInputRef.current.focus();
@@ -107,10 +113,7 @@ export default function Dashboard() {
   useHotkeys([
     {
       key: "f2",
-      callback: () => {
-        setMachineToPos(null);
-        setPosDialogOpen(true);
-      }
+      callback: openStandalonePos,
     }
   ]);
 
@@ -313,17 +316,39 @@ export default function Dashboard() {
   }, [firestore, customers, user?.uid, user?.email, userProfile?.role, toast, appendCustomer]);
 
   const handleConfirmPayment = useCallback(async (
-    machineId: string,
+    machineId: string | null,
     amount: number,
     paymentMethod: PaymentMethod,
-    options?: { markAsUnpaid?: boolean },
+    options?: {
+      markAsUnpaid?: boolean;
+      soldProducts?: SoldProduct[];
+      customerId?: string;
+      customerName?: string;
+      customerCode?: string;
+    },
   ) => {
     if (!firestore || isProcessingPayment) return;
-    const machine = accessibleMachines.find(m => m.id === machineId);
-    if (!machine || !machine.session) return;
-    
-    // Validate user has access to this machine
-    if (!canAccessMachine(machine, userProfile)) {
+    const machine = machineId ? accessibleMachines.find(m => m.id === machineId) ?? null : null;
+    const session = machine?.session ?? null;
+    const soldProducts = options?.soldProducts ?? session?.soldProducts ?? [];
+    const effectiveLocationId = machine?.locationId || selectedLocationId;
+    const shiftStartMs = user?.uid
+      ? (getShiftStart(user.uid) ?? (session?.startTime ?? Date.now()))
+      : (session?.startTime ?? Date.now());
+    const shiftId = `${effectiveLocationId || 'global'}_${user?.uid || 'anon'}_${shiftStartMs}`;
+    const activeCustomer = session
+      ? {
+          id: session.clientId,
+          name: session.client,
+          code: session.clientCode,
+        }
+      : {
+          id: options?.customerId,
+          name: options?.customerName,
+          code: options?.customerCode,
+        };
+
+    if (machine && session && !canAccessMachine(machine, userProfile)) {
       toast({
         variant: "destructive",
         title: "Acceso denegado",
@@ -331,11 +356,6 @@ export default function Dashboard() {
       });
       return;
     }
-    
-    const { session } = machine;
-    const effectiveLocationId = machine.locationId || selectedLocationId;
-    const shiftStartMs = user?.uid ? (getShiftStart(user.uid) ?? session.startTime) : session.startTime;
-    const shiftId = `${effectiveLocationId || 'global'}_${user?.uid || 'anon'}_${shiftStartMs}`;
 
     // Generate receipt number
     let receiptSequence = 1;
@@ -362,40 +382,69 @@ export default function Dashboard() {
       console.error("Error generating receipt counter:", error);
     }
 
-    const soldProducts = machine.session?.soldProducts ?? [];
-
     try {
       handlePosDialogChange(false);
       setProcessingPayment(true);
       
-      // Use the new transactional closeSession function
-      const result = await closeSession(firestore, {
-        stationId: machineId,
-        station: machine,
-        session,
-        amount,
-        paymentMethod,
-        markAsUnpaid: options?.markAsUnpaid,
-        locationId: effectiveLocationId,
-        operatorId: user?.uid,
-        operatorEmail: user?.email || undefined,
-        operatorRole: userProfile?.role,
-        shiftId,
-        receiptNumber,
-        soldProducts,
-      });
+      if (machine && session) {
+        const result = await closeSession(firestore, {
+          stationId: machine.id,
+          station: machine,
+          session,
+          amount,
+          paymentMethod,
+          markAsUnpaid: options?.markAsUnpaid,
+          locationId: effectiveLocationId,
+          operatorId: user?.uid,
+          operatorEmail: user?.email || undefined,
+          operatorRole: userProfile?.role,
+          shiftId,
+          receiptNumber,
+          soldProducts,
+        });
 
-      if (options?.markAsUnpaid) {
-        toast({
-          title: "Deuda Registrada",
-          description: `Se registró ${formatCurrency(amount)} como deuda para ${session.client || 'el cliente'} en ${machine.name}.`,
-        });
+        if (options?.markAsUnpaid) {
+          toast({
+            title: "Deuda Registrada",
+            description: `Se registró ${formatCurrency(amount)} como deuda para ${session.client || 'el cliente'} en ${machine.name}.`,
+          });
+        } else {
+          toast({
+            title: "Pago Confirmado",
+            description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${result.receiptNumber}.`,
+          });
+        }
       } else {
-        toast({
-          title: "Pago Confirmado",
-          description: `Se cobró ${formatCurrency(amount)} por la sesión en ${machine.name}. Boleta ${result.receiptNumber}.`,
+        const result = await createStandaloneSale(firestore, {
+          amount,
+          paymentMethod,
+          markAsUnpaid: options?.markAsUnpaid,
+          locationId: effectiveLocationId,
+          operatorId: user?.uid,
+          operatorEmail: user?.email || undefined,
+          operatorRole: userProfile?.role,
+          receiptNumber,
+          soldProducts,
+          customerId: activeCustomer.id,
+          customerName: activeCustomer.name,
+          customerCode: activeCustomer.code,
+          machineName: "Venta libre",
         });
+
+        if (options?.markAsUnpaid) {
+          toast({
+            title: "Deuda Registrada",
+            description: `Se registró ${formatCurrency(amount)} como deuda para ${activeCustomer.name || 'el cliente'} en venta libre.`,
+          });
+        } else {
+          toast({
+            title: "Venta Registrada",
+            description: `Se cobró ${formatCurrency(amount)} en POS independiente. Boleta ${result.receiptNumber}.`,
+          });
+        }
       }
+
+      await Promise.all([refreshSales(), refreshCustomers()]);
 
     } catch (error) {
       console.error("Error confirming payment: ", error);
@@ -408,13 +457,14 @@ export default function Dashboard() {
     } finally {
       setProcessingPayment(false);
     }
-  }, [accessibleMachines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handlePosDialogChange, userProfile]);
+  }, [accessibleMachines, firestore, isProcessingPayment, user?.uid, user?.email, selectedLocationId, toast, handlePosDialogChange, userProfile, refreshSales, refreshCustomers]);
 
   const handleSaveProducts = useCallback(async (
-    machineId: string,
+    machineId: string | null,
     products: SoldProduct[],
   ) => {
     if (!firestore) return;
+    if (!machineId) return;
     const machine = accessibleMachines.find((item) => item.id === machineId);
     if (!machine || !machine.session) return;
     
@@ -612,7 +662,12 @@ export default function Dashboard() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          <Button onClick={openStandalonePos} className="h-9 gap-2 rounded-lg px-3 text-xs font-semibold">
+            <ShoppingCart className="h-4 w-4" />
+            POS libre
+          </Button>
+
           <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/60 px-3 py-1.5">
             <Zap className="h-4 w-4 text-primary" />
             <span className="kpi-label">En uso</span>
@@ -713,6 +768,7 @@ export default function Dashboard() {
         onOpenChange={handlePosDialogChange}
         machine={machineToPos}
         products={products}
+        customers={customers}
         onSaveProducts={handleSaveProducts}
         onConfirmPayment={handleConfirmPayment}
         isProcessingPayment={isProcessingPayment}

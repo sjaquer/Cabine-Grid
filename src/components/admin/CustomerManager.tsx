@@ -194,10 +194,8 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>CRM de Clientes</CardTitle>
-          <CardDescription>
-            Crea fichas de cliente y revisa comportamiento: compras, horas, frecuencia y preferencia de cabina.
-          </CardDescription>
+          <CardTitle>Clientes</CardTitle>
+          <CardDescription>Gestiona información y preferencias de clientes</CardDescription>
         </div>
         <Dialog
           open={isOpen}
@@ -216,9 +214,9 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingId ? "Editar cliente" : "Crear cliente"}</DialogTitle>
+              <DialogTitle>{editingId ? "Editar cliente" : "Nuevo cliente"}</DialogTitle>
               <DialogDescription>
-                Ingresa datos base para fidelizacion y analitica comercial.
+                Completa la información del cliente
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>

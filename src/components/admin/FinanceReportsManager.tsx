@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { BrainCircuit, Download, FileText, Building2, TrendingUp, AlertTriangle } from "lucide-react";
+import { FinanceReportDisplay } from "./FinanceReportDisplay";
 
 type ShiftClosureLike = {
   id: string;
@@ -71,6 +72,9 @@ export default function FinanceReportsManager({ sales, machines, locations, user
     operatorId: "all",
     paymentMethod: "all",
   });
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [aiReport, setAiReport] = useState<string>("");
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const locationsMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -154,14 +158,27 @@ export default function FinanceReportsManager({ sales, machines, locations, user
     };
   }, [filteredRiskLogs]);
 
+  const topProducts = useMemo(() => {
+    const products = analytics.executiveByLocation.flatMap((location) => location.productsMix);
+    return products
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 6)
+      .map((item) => ({
+        name: item.productName,
+        quantity: item.quantity,
+        revenue: item.revenue,
+        ratio: Number.isFinite(item.ratio) ? Number(item.ratio.toFixed(3)) : 0,
+      }));
+  }, [analytics.executiveByLocation]);
+
   const financeInsights = useMemo(() => {
     const insights: Array<{ title: string; detail: string; action: string; tone: "good" | "warn" | "neutral" }> = [];
 
     if (financialForecast.projectedRevenue > 0) {
       insights.push({
-        title: "Proxima hora",
-        detail: `Proyeccion ${formatCurrency(financialForecast.projectedRevenue)} en ${financialForecast.projectedSalesCount} venta(s).`,
-        action: "Refuerza operador en hora pico y valida stock top.",
+        title: "Proyección próxima hora",
+        detail: `${formatCurrency(financialForecast.projectedRevenue)} esperado en ${financialForecast.projectedSalesCount} venta(s).`,
+        action: "Valida disponibilidad de operadores y stock de productos principales.",
         tone: "neutral",
       });
     }
@@ -169,33 +186,135 @@ export default function FinanceReportsManager({ sales, machines, locations, user
     const worstComparative = [...analytics.todayVsYesterday].sort((a, b) => a.variationPercent - b.variationPercent)[0];
     if (worstComparative && worstComparative.variationPercent < -8) {
       insights.push({
-        title: "Caida relevante",
-        detail: `${worstComparative.title} cae ${formatVariation(worstComparative.variationPercent)} vs ayer.`,
-        action: "Revisa operador, disponibilidad de cabinas y mix de productos en el turno actual.",
+        title: "Desempeño por debajo del promedio",
+        detail: `${worstComparative.title} cae ${formatVariation(worstComparative.variationPercent)} vs el día anterior.`,
+        action: "Verifica operadores, disponibilidad de cabinas y composición de productos.",
         tone: "warn",
       });
     }
 
     if (riskExposure.criticalOrHighCount > 0) {
       insights.push({
-        title: "Riesgo operativo",
-        detail: `${riskExposure.criticalOrHighCount} evento(s) de alto riesgo en auditoria para este filtro.`,
-        action: "Abrir modulo de auditoria y cerrar hallazgos antes del cierre de caja.",
+        title: "Alertas de riesgo",
+        detail: `${riskExposure.criticalOrHighCount} evento(s) crítico en auditoría.`,
+        action: "Revisa y cierra hallazgos antes del corte de caja.",
         tone: "warn",
       });
     }
 
     if (insights.length === 0) {
       insights.push({
-        title: "Operacion estable",
-        detail: "Indicadores sin desviaciones fuertes en el rango seleccionado.",
-        action: "Mantener ritmo y validar cumplimiento de cierres.",
+        title: "Operación normal",
+        detail: "Indicadores dentro de los parámetros esperados.",
+        action: "Continúa con la gestión estándar.",
         tone: "good",
       });
     }
 
     return insights.slice(0, 3);
   }, [financialForecast, analytics.todayVsYesterday, riskExposure]);
+
+  const aiPayload = useMemo(() => {
+    return {
+      filters,
+      totals: {
+        revenue: globalRevenue,
+        grossRevenue: globalGrossRevenue,
+        discounts: globalDiscounts,
+        salesCount: globalSalesCount,
+        avgTicket: globalAvgTicket,
+        estimatedMargin: weightedMargin,
+        estimatedMarginPercent: weightedMarginPercent,
+      },
+      forecast: {
+        projectedRevenue: financialForecast.projectedRevenue,
+        projectedSalesCount: financialForecast.projectedSalesCount,
+      },
+      risk: {
+        criticalOrHighCount: riskExposure.criticalOrHighCount,
+        averageRisk: riskExposure.averageRisk,
+        sample: filteredRiskLogs.slice(0, 5).map((log) => ({
+          action: log.action,
+          severity: log.severity,
+          anomalyScore: log.anomalyScore,
+          locationId: log.locationId || "sin-local",
+        })),
+      },
+      topLocation: topLocation
+        ? {
+            locationId: topLocation.locationId,
+            revenue: topLocation.revenue,
+            salesCount: topLocation.salesCount,
+            avgTicket: topLocation.avgTicket,
+            marginPercent: topLocation.estimatedMarginPercent,
+          }
+        : null,
+      topProducts,
+      operators: analytics.operatorProductivity.slice(0, 5).map((operator) => ({
+        operatorId: operator.operatorId,
+        operatorEmail: operator.operatorEmail,
+        revenue: operator.revenue,
+        salesCount: operator.salesCount,
+        avgAttentionMinutes: operator.averageAttentionMinutes,
+        errorsCount: operator.errorsCount,
+        inconsistenciesCount: operator.inconsistenciesCount,
+      })),
+      closures: analytics.consolidatedClosures.slice(0, 5).map((closure) => ({
+        locationId: closure.locationId,
+        totalSales: closure.totalSales,
+        expectedCash: closure.expectedCash,
+        countedCash: closure.countedCash,
+        cashDifference: closure.cashDifference,
+        salesCount: closure.salesCount,
+      })),
+      insightsSeed: financeInsights,
+    };
+  }, [
+    filters,
+    globalRevenue,
+    globalGrossRevenue,
+    globalDiscounts,
+    globalSalesCount,
+    globalAvgTicket,
+    weightedMargin,
+    weightedMarginPercent,
+    financialForecast.projectedRevenue,
+    financialForecast.projectedSalesCount,
+    riskExposure.criticalOrHighCount,
+    riskExposure.averageRisk,
+    filteredRiskLogs,
+    topLocation,
+    topProducts,
+    analytics.operatorProductivity,
+    analytics.consolidatedClosures,
+    financeInsights,
+  ]);
+
+  const handleGenerateReport = async () => {
+    setAiError(null);
+    setAiReport("");
+    setIsGeneratingReport(true);
+    try {
+      const response = await fetch("/api/ai/finance-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(aiPayload),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody?.error || "No se pudo generar el reporte IA.");
+      }
+
+      const data = await response.json();
+      setAiReport(data?.report || "Sin respuesta de IA.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Error al generar el reporte IA.";
+      setAiError(message);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   const exportPdf = () => {
     exportFinancePdf({
@@ -221,12 +340,12 @@ export default function FinanceReportsManager({ sales, machines, locations, user
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Filtros de Reporte</CardTitle>
+          <CardTitle>Filtros</CardTitle>
           <CardDescription>
-            Exporta PDF y Excel con rango de fechas, local, operador y metodo de pago.
+            Selecciona período, ubicación, operador y método de pago
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
           <div className="space-y-2">
             <Label>Fecha inicio</Label>
             <input
@@ -330,23 +449,47 @@ export default function FinanceReportsManager({ sales, machines, locations, user
             Recomendaciones automaticas por tendencia, riesgo y proyeccion de la proxima hora.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          {financeInsights.map((insight, index) => (
-            <div
-              key={`${insight.title}-${index}`}
-              className={`rounded-lg border p-3 space-y-2 ${
-                insight.tone === "warn"
-                  ? "border-amber-300/50 bg-amber-500/10"
-                  : insight.tone === "good"
-                    ? "border-green-300/50 bg-green-500/10"
-                    : "border-border/50 bg-background/70"
-              }`}
-            >
-              <p className="text-sm font-semibold">{insight.title}</p>
-              <p className="text-xs text-muted-foreground">{insight.detail}</p>
-              <p className="text-xs font-medium">{insight.action}</p>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {financeInsights.map((insight, index) => (
+              <div
+                key={`${insight.title}-${index}`}
+                className={`rounded-lg border p-3 space-y-2 ${
+                  insight.tone === "warn"
+                    ? "border-amber-300/50 bg-amber-500/10"
+                    : insight.tone === "good"
+                      ? "border-green-300/50 bg-green-500/10"
+                      : "border-border/50 bg-background/70"
+                }`}
+              >
+                <p className="text-sm font-semibold">{insight.title}</p>
+                <p className="text-xs text-muted-foreground">{insight.detail}</p>
+                <p className="text-xs font-medium">{insight.action}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-dashed border-border/70 bg-background/60 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Análisis con IA</p>
+                <p className="text-xs text-muted-foreground">
+                  Obtén recomendaciones estratégicas basadas en los datos seleccionados.
+                </p>
+              </div>
+              <Button onClick={handleGenerateReport} disabled={isGeneratingReport} className="h-9 shrink-0">
+                {isGeneratingReport ? "Analizando..." : "Generar análisis"}
+              </Button>
             </div>
-          ))}
+            {aiError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                Error: {aiError}
+              </div>
+            )}
+            {aiReport && (
+              <FinanceReportDisplay report={aiReport} />
+            )}
+          </div>
         </CardContent>
       </Card>
 

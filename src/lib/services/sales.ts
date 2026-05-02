@@ -1,7 +1,8 @@
-import { Firestore, doc, runTransaction, Timestamp } from "firebase/firestore";
-import type { Session, SoldProduct } from "@/lib/types";
+import { Firestore, doc, collection, runTransaction, Timestamp, serverTimestamp } from "firebase/firestore";
+import type { Session, SoldProduct, PaymentMethod, Sale, Customer, StockMovement } from "@/lib/types";
 import { calculateSessionCost } from "@/lib/session-cost";
 import { logAuditAction } from "@/lib/audit-log";
+import { logInventoryMovement } from "@/lib/services/inventory-log";
 
 /**
  * Updates the products attached to an active station session using a transaction.
@@ -107,6 +108,247 @@ export const processSale = async (
   } catch (error) {
     console.error("Fallo en la venta:", error);
     return false;
+  }
+};
+
+export interface StandaloneSalePayload {
+  amount: number;
+  paymentMethod: PaymentMethod;
+  soldProducts: SoldProduct[];
+  markAsUnpaid?: boolean;
+  locationId?: string;
+  operatorId?: string;
+  operatorEmail?: string;
+  operatorRole?: string;
+  receiptNumber?: string;
+  customerId?: string;
+  customerName?: string;
+  customerCode?: string;
+  machineName?: string;
+}
+
+/**
+ * Registers a standalone POS sale outside of an active station session.
+ */
+export const createStandaloneSale = async (
+  firestore: Firestore,
+  payload: StandaloneSalePayload,
+) => {
+  const {
+    amount,
+    paymentMethod,
+    soldProducts,
+    markAsUnpaid = false,
+    locationId,
+    operatorId,
+    operatorEmail,
+    operatorRole,
+    receiptNumber = "MANUAL",
+    customerId,
+    customerName,
+    customerCode,
+    machineName = "Venta libre",
+  } = payload;
+
+  const endTime = Date.now();
+  const isUnpaid = markAsUnpaid || paymentMethod === "deuda";
+  const effectivePaymentMethod: PaymentMethod = isUnpaid ? "deuda" : paymentMethod;
+  const totalProductsBought = soldProducts.reduce((sum, product) => sum + product.quantity, 0);
+  const operator = {
+    ...(operatorId ? { id: operatorId } : {}),
+    ...(operatorEmail ? { email: operatorEmail } : {}),
+  };
+
+  if (isUnpaid && !customerId) {
+    throw new Error("No se puede registrar deuda sin cliente asociado.");
+  }
+
+  const inventoryAdjustments: Array<{
+    productId: string;
+    productName: string;
+    quantity: number;
+    currentStock: number;
+    newStock: number;
+    inventoryDocId: string;
+  }> = [];
+
+  try {
+    const result = await runTransaction(firestore, async (transaction) => {
+      let customerRef = null;
+      let customerData: Customer | null = null;
+
+      if (customerId) {
+        customerRef = doc(firestore, "customers", customerId);
+        const customerSnap = await transaction.get(customerRef);
+        if (!customerSnap.exists()) {
+          throw new Error("El cliente seleccionado ya no existe.");
+        }
+        customerData = {
+          ...(customerSnap.data() as Customer),
+          id: customerSnap.id,
+        };
+      }
+
+      if (locationId && soldProducts.length > 0) {
+        const inventoryCollection = collection(firestore, "inventory");
+
+        for (const product of soldProducts) {
+          if (!product.productId) continue;
+
+          const inventoryDocId = `${locationId}_${product.productId}`;
+          const inventoryRef = doc(inventoryCollection, inventoryDocId);
+          const inventorySnap = await transaction.get(inventoryRef);
+
+          let currentStock = 0;
+          if (inventorySnap.exists()) {
+            currentStock = Number(inventorySnap.data().currentStock ?? 0);
+          } else {
+            const productRef = doc(firestore, "products", product.productId);
+            const productSnap = await transaction.get(productRef);
+            if (productSnap.exists()) {
+              currentStock = Number(productSnap.data().stock ?? 0);
+            }
+          }
+
+          const newStock = currentStock - product.quantity;
+          if (newStock < 0) {
+            throw new Error(`Stock insuficiente para ${product.productName}. Disponible: ${currentStock}, Solicitado: ${product.quantity}`);
+          }
+
+          inventoryAdjustments.push({
+            productId: product.productId,
+            productName: product.productName,
+            quantity: product.quantity,
+            currentStock,
+            newStock,
+            inventoryDocId,
+          });
+        }
+      }
+
+      const saleRef = doc(collection(firestore, "sales"));
+      const customerDisplayName = customerData?.fullName || customerName || "Ocasional";
+      const customerDisplayCode = customerData?.customerCode || customerCode || undefined;
+      const newSale: Omit<Sale, "id"> = {
+        machineName,
+        clientName: customerDisplayName,
+        ...(customerId ? { customerId } : {}),
+        ...(customerDisplayCode ? { customerCode: customerDisplayCode } : {}),
+        ...(locationId ? { locationId } : {}),
+        receiptNumber,
+        startTime: Timestamp.fromMillis(endTime),
+        endTime: Timestamp.fromMillis(endTime),
+        totalMinutes: 0,
+        grossAmount: amount,
+        discountAmount: 0,
+        netAmount: amount,
+        amount,
+        paymentMethod: effectivePaymentMethod,
+        isUnpaid,
+        soldProducts,
+        ...(Object.keys(operator).length > 0 ? { operator } : {}),
+      };
+
+      transaction.set(saleRef, newSale);
+
+      if (locationId && inventoryAdjustments.length > 0) {
+        const inventoryCollection = collection(firestore, "inventory");
+        const stockMovementsCollection = collection(firestore, "stockMovements");
+
+        for (const adjustment of inventoryAdjustments) {
+          const inventoryRef = doc(inventoryCollection, adjustment.inventoryDocId);
+          transaction.set(
+            inventoryRef,
+            {
+              locationId,
+              productId: adjustment.productId,
+              productName: adjustment.productName,
+              currentStock: adjustment.newStock,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+
+          const stockMovementRef = doc(stockMovementsCollection);
+          const stockMovement: Omit<StockMovement, "id"> = {
+            locationId,
+            productId: adjustment.productId,
+            productName: adjustment.productName,
+            type: "sale",
+            quantity: adjustment.quantity,
+            quantityBefore: adjustment.currentStock,
+            quantityAfter: adjustment.newStock,
+            reason: `Sale from standalone POS`,
+            saleId: saleRef.id,
+            approvedBy: {
+              id: operatorId,
+              email: operatorEmail,
+            },
+            createdAt: Timestamp.now(),
+          };
+          transaction.set(stockMovementRef, stockMovement);
+        }
+      }
+
+      if (customerRef && customerData && isUnpaid) {
+        const currentDebt = Number(customerData.debt ?? 0);
+        transaction.set(customerRef, {
+          debt: Math.round((currentDebt + amount) * 100) / 100,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      return {
+        saleId: saleRef.id,
+        receiptNumber,
+        stockMovements: inventoryAdjustments.map((adjustment) => adjustment.inventoryDocId),
+      };
+    });
+
+    if (locationId && inventoryAdjustments.length > 0) {
+      for (const adjustment of inventoryAdjustments) {
+        await logInventoryMovement(firestore, {
+          locationId,
+          locationName: `Local ${locationId}`,
+          productId: adjustment.productId,
+          productName: adjustment.productName,
+          type: "sale",
+          quantity: adjustment.quantity,
+          previousStock: adjustment.currentStock,
+          currentStock: adjustment.newStock,
+          note: `Venta POS independiente (${machineName})`,
+          operator: {
+            id: operatorId || null,
+            email: operatorEmail || null,
+            role: operatorRole || null,
+          },
+          source: "pos",
+        });
+      }
+    }
+
+    await logAuditAction(firestore, {
+      action: "sale.create",
+      target: "sales",
+      targetId: result.saleId,
+      locationId,
+      actor: { id: operatorId, email: operatorEmail, role: operatorRole },
+      details: {
+        machineName,
+        amount,
+        paymentMethod: effectivePaymentMethod,
+        isUnpaid,
+        receiptNumber: result.receiptNumber,
+        productsCount: soldProducts.length,
+        customerId: customerId ?? null,
+        customerName: customerName ?? null,
+      },
+    });
+
+    return result;
+  } catch (error) {
+    console.error("Failed to create standalone sale:", error);
+    throw error;
   }
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Station, Product, SoldProduct, PaymentMethod, Session } from "@/lib/types";
+import type { Station, Product, SoldProduct, PaymentMethod, Session, Customer } from "@/lib/types";
 import { sanitizeString } from "@/lib/sanitize";
 import { formatTime } from "@/lib/utils";
 import {
@@ -19,8 +19,9 @@ import { ShoppingCart, X } from "lucide-react";
   onOpenChange: (open: boolean) => void;
   machine: Station | null;
   products: Product[];
+    customers?: Customer[];
   onSaveProducts: (machineId: string, products: SoldProduct[]) => Promise<void>;
-  onConfirmPayment: (machineId: string, amount: number, paymentMethod: PaymentMethod, options?: { markAsUnpaid?: boolean }) => void;
+    onConfirmPayment: (machineId: string | null, amount: number, paymentMethod: PaymentMethod, options?: { markAsUnpaid?: boolean; soldProducts?: SoldProduct[]; customerId?: string; customerName?: string; customerCode?: string }) => void;
   isProcessingPayment?: boolean;
   inventoryByProduct?: Record<string, number>; // productId -> stock
   fractionMinutes?: number;
@@ -31,20 +32,22 @@ export default function ProductsPOSDialog({
   onOpenChange,
   machine,
   products,
+  customers,
   onSaveProducts,
   onConfirmPayment,
   isProcessingPayment = false,
   inventoryByProduct,
   fractionMinutes = 5,
 }: ProductsPOSDialogProps) {
-  if (!machine || !machine.session) return null;
-
-  const { session } = machine;
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - session.startTime) / 1000));
+  const session = machine?.session ?? null;
+  const elapsedSeconds = session ? Math.max(0, Math.floor((Date.now() - session.startTime) / 1000)) : 0;
 
   const handleSave = async (products: SoldProduct[]) => {
-    await onSaveProducts(machine.id, products);
+    await onSaveProducts(machine?.id ?? "", products);
   };
+
+  const machineTitle = machine?.name || "Venta libre";
+  const descriptionLabel = session ? (sanitizeString(session.client) || "Cliente Ocasional") : "Venta independiente";
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -59,15 +62,17 @@ export default function ProductsPOSDialog({
             </button>
             <SheetTitle className="text-lg font-bold tracking-tight flex items-center text-foreground">
               <ShoppingCart className="text-muted-foreground mr-2" size={18} />
-              Punto de Venta - <span className="text-primary ml-1">{machine.name}</span>
+              Punto de Venta - <span className="text-primary ml-1">{machineTitle}</span>
             </SheetTitle>
             <SheetDescription className="text-xs font-medium text-muted-foreground mt-1 flex items-center gap-2">
               <span className="bg-background px-2.5 py-1 rounded-md text-foreground font-semibold border border-border shadow-sm">
-                {sanitizeString(session.client) || "Cliente Ocasional"}
+                {descriptionLabel}
               </span>
-              <span className="bg-primary/15 text-primary px-2.5 py-1 rounded-md font-mono font-bold tracking-tight border border-primary/30 shadow-sm">
-                {formatTime(elapsedSeconds)}
-              </span>
+              {session && (
+                <span className="bg-primary/15 text-primary px-2.5 py-1 rounded-md font-mono font-bold tracking-tight border border-primary/30 shadow-sm">
+                  {formatTime(elapsedSeconds)}
+                </span>
+              )}
             </SheetDescription>
           </SheetHeader>
         </div>
@@ -75,16 +80,17 @@ export default function ProductsPOSDialog({
         <div className="flex-1 min-h-0 overflow-y-auto bg-background">
           <ProductsPOS
             availableProducts={products}
-            initialProducts={session.soldProducts}
+            initialProducts={session?.soldProducts}
             onSave={handleSave}
             onClose={() => onOpenChange(false)}
-            onConfirmPayment={(amount, paymentMethod, options) => onConfirmPayment(machine.id, amount, paymentMethod, options)}
+            onConfirmPayment={(amount, paymentMethod, options) => onConfirmPayment(machine?.id ?? null, amount, paymentMethod, options)}
             isProcessing={isProcessingPayment}
             inventoryByProduct={inventoryByProduct}
-            activeSession={session}
-              fractionMinutes={fractionMinutes}
-              machineName={machine.name}
-              machineId={machine.id}
+            activeSession={session ?? undefined}
+            fractionMinutes={fractionMinutes}
+            machineName={machineTitle}
+            machineId={machine?.id}
+            customerOptions={customers}
           />
         </div>
       </SheetContent>

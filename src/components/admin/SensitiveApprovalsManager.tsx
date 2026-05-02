@@ -34,7 +34,7 @@ export default function SensitiveApprovalsManager({ approvals, userProfile, onAp
       <CardHeader>
         <CardTitle>Aprobaciones Sensibles</CardTitle>
         <CardDescription>
-          Cambios de precio, ajustes grandes de inventario y correcciones quedan en cola para aprobación.
+          Solicitudes pendientes de aprobación
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -96,8 +96,8 @@ export default function LocationManager({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Gestión de Locales</CardTitle>
-          <CardDescription>Administra las reglas de cobro y parámetros del local</CardDescription>
+          <CardTitle>Locales</CardTitle>
+          <CardDescription>Configura parámetros y opciones de operación</CardDescription>
         </div>
       </CardHeader>
 

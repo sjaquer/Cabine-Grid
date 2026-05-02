@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useCartStore } from "@/store/useCartStore";
-import type { Product, SoldProduct, Session, PaymentMethod, CardItem } from "@/lib/types";
+import type { Product, SoldProduct, Session, PaymentMethod, CardItem, Customer } from "@/lib/types";
 import { formatCurrency, formatTime, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, MinusCircle, ShoppingCart } from "lucide-react";
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateSessionCost } from "@/lib/session-cost";
 import { useFirestore } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -26,10 +27,11 @@ interface ProductsPOSProps {
     inventoryByProduct?: Record<string, number>;
     activeSession?: Session;
     fractionMinutes?: number;
-    onConfirmPayment?: (amount: number, paymentMethod: PaymentMethod, options?: { markAsUnpaid?: boolean }) => void;
+    onConfirmPayment?: (amount: number, paymentMethod: PaymentMethod, options?: { markAsUnpaid?: boolean; soldProducts?: SoldProduct[]; customerId?: string; customerName?: string; customerCode?: string }) => void;
     isProcessing?: boolean;
     machineName?: string;
     machineId?: string;
+    customerOptions?: Customer[];
 }
 
 const categoryLabels = {
@@ -59,12 +61,15 @@ export default function ProductsPOS({
   isProcessing = false,
   machineName = "PC",
     machineId,
+    customerOptions = [],
 }: ProductsPOSProps) {
+    const OCCASIONAL_CUSTOMER = "__occasional__";
     const { quantities, updateQuantity, setQuantities, clearCart } = useCartStore();
     const [searchTerm, setSearchTerm] = useState("");
     const [onlyInStock, setOnlyInStock] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const posSearchRef = useRef<HTMLInputElement>(null);
+        const [selectedCustomerId, setSelectedCustomerId] = useState("");
 
     // Payment States
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo');
@@ -74,10 +79,17 @@ export default function ProductsPOS({
     const [tick, setTick] = useState(0);
     useEffect(() => {
         if (!activeSession) return;
+        setSelectedCustomerId(activeSession.clientId || "");
         const timer = setInterval(() => {
             setTick(t => t + 1);
         }, 1000);
         return () => clearInterval(timer);
+    }, [activeSession]);
+
+    useEffect(() => {
+        if (!activeSession) {
+            setSelectedCustomerId("");
+        }
     }, [activeSession]);
 
     useEffect(() => {
@@ -141,7 +153,8 @@ export default function ProductsPOS({
         const grossTotal = productsTotal + sessionCost;
         const appliedDiscount = Math.max(0, Math.round((activeSession?.discount?.amount ?? 0) * 100) / 100);
         const total = Math.max(0, Math.round((grossTotal - appliedDiscount) * 100) / 100);
-    const canRegisterDebt = Boolean(activeSession?.clientId);
+    const selectedCustomer = customerOptions.find((customer) => customer.id === selectedCustomerId) || null;
+    const canRegisterDebt = Boolean(activeSession?.clientId || selectedCustomerId);
             const sessionDiscount = appliedDiscount > 0
                 ? { amount: appliedDiscount, reason: activeSession?.discount?.reason || "PROMOCION" }
                 : undefined;
@@ -373,7 +386,7 @@ export default function ProductsPOS({
                     </RadioGroup>
                 )}
 
-                {activeSession && paymentMethod === 'efectivo' && (
+                {paymentMethod === 'efectivo' && (
                     <div className="flex items-center gap-2 p-1.5 px-3 bg-background border border-border/60 rounded-lg">
                         <Label htmlFor="amount-paid" className="text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">Recibido:</Label>
                         <Input
@@ -442,6 +455,33 @@ export default function ProductsPOS({
                     </div>
                 )}
 
+                {!activeSession && customerOptions.length > 0 && (
+                    <div className="space-y-1.5 p-2 rounded-lg border border-border bg-secondary/10">
+                        <Label className="text-[10px] font-semibold uppercase text-muted-foreground px-1">Cliente para CRM</Label>
+                        <Select
+                            value={selectedCustomerId || OCCASIONAL_CUSTOMER}
+                            onValueChange={(value) => setSelectedCustomerId(value === OCCASIONAL_CUSTOMER ? "" : value)}
+                        >
+                            <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Venta ocasional" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={OCCASIONAL_CUSTOMER}>Venta ocasional</SelectItem>
+                                {customerOptions.map((customer) => (
+                                    <SelectItem key={customer.id} value={customer.id}>
+                                        {customer.fullName} {customer.customerCode ? `• ${customer.customerCode}` : ''}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {selectedCustomer && (
+                            <p className="text-[10px] text-muted-foreground px-1">
+                                La venta quedará asociada a {selectedCustomer.fullName} para el CRM.
+                            </p>
+                        )}
+                    </div>
+                )}
+
                 <div className="flex items-center justify-between pt-1">
                     <span className="text-foreground text-sm uppercase tracking-wide font-bold">Total:</span>
                     <div className="flex items-center gap-2">
@@ -451,14 +491,19 @@ export default function ProductsPOS({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                    {activeSession && onConfirmPayment ? (
+                    {onConfirmPayment ? (
                         <>
                             <Button 
                                 onClick={async () => {
                                     try {
                                         setIsSaving(true);
                                         await onSave(soldProducts);
-                                        if (onConfirmPayment) onConfirmPayment(total, paymentMethod);
+                                        onConfirmPayment(total, paymentMethod, {
+                                            soldProducts,
+                                            customerId: activeSession?.clientId || selectedCustomerId || undefined,
+                                            customerName: activeSession?.client || selectedCustomer?.fullName || undefined,
+                                            customerCode: activeSession?.clientCode || selectedCustomer?.customerCode || undefined,
+                                        });
                                     } finally {
                                         setIsSaving(false);
                                     }
@@ -473,7 +518,13 @@ export default function ProductsPOS({
                                     try {
                                         setIsSaving(true);
                                         await onSave(soldProducts);
-                                        if (onConfirmPayment) onConfirmPayment(total, 'deuda', { markAsUnpaid: true });
+                                        onConfirmPayment(total, 'deuda', {
+                                            markAsUnpaid: true,
+                                            soldProducts,
+                                            customerId: activeSession?.clientId || selectedCustomerId || undefined,
+                                            customerName: activeSession?.client || selectedCustomer?.fullName || undefined,
+                                            customerCode: activeSession?.clientCode || selectedCustomer?.customerCode || undefined,
+                                        });
                                     } finally {
                                         setIsSaving(false);
                                     }
@@ -485,25 +536,7 @@ export default function ProductsPOS({
                                 {isProcessing ? "..." : "NO PAGÓ"}
                             </Button>
                         </>
-                    ) : (
-                        onGoToCharge && (
-                            <Button 
-                                onClick={async () => {
-                                    try {
-                                        setIsSaving(true);
-                                        await onSave(soldProducts);
-                                        if (onGoToCharge) onGoToCharge(soldProducts);
-                                    } finally {
-                                        setIsSaving(false);
-                                    }
-                                }} 
-                                disabled={isSaving}
-                                className="col-span-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs py-2 h-10 rounded-xl"
-                            >
-                                COBRAR
-                            </Button>
-                        )
-                    )}
+                    ) : null}
                 </div>
 
                 <div className="flex gap-2">
@@ -535,7 +568,7 @@ export default function ProductsPOS({
                     </Button>
                 </div>
                 
-                {activeSession && onConfirmPayment && !canRegisterDebt && (
+                {onConfirmPayment && !canRegisterDebt && (
                     <p className="text-[10px] text-center text-status-warning bg-status-warning/10 rounded px-1 py-0.5">Vincule cliente para registrar deuda.</p>
                 )}
             </div>
