@@ -40,11 +40,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 
 const productSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
@@ -97,6 +97,14 @@ export default function ProductManager({
   const { userProfile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -321,55 +329,152 @@ export default function ProductManager({
       </CardHeader>
 
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nombre</TableHead>
-              <TableHead>Categoría</TableHead>
-              <TableHead>Precio</TableHead>
-              {userProfile?.role === "admin" && <TableHead>Costo</TableHead>}
-              {userProfile?.role === "admin" && <TableHead>Margen</TableHead>}
-              <TableHead>Stock</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {products.map((product) => (
-              <TableRow key={product.id}>
-                <TableCell className="font-medium">{product.name}</TableCell>
-                <TableCell>
-                  <Badge className={categoryColors[product.category]}>
-                    {categoryLabels[product.category] || product.category}
-                  </Badge>
-                </TableCell>
-                <TableCell>{formatCurrency(product.price)}</TableCell>
-                {userProfile?.role === "admin" && (
-                  <TableCell className="text-muted-foreground">{formatCurrency(product.costPrice || 0)}</TableCell>
-                )}
-                {userProfile?.role === "admin" && (
-                  <TableCell className="font-bold text-emerald-400">
-                    {formatCurrency(product.price - (product.costPrice || 0))}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between mb-4 filter-bar">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar producto..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-background/50"
+            />
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {[{id: "all", label: "Todos"}, {id: "snack", label: "Snacks"}, {id: "drink", label: "Bebidas"}, {id: "food", label: "Comida"}, {id: "hardware", label: "Hardware"}, {id: "other", label: "Servicios"}].map(cat => (
+              <Button
+                key={cat.id}
+                variant={categoryFilter === cat.id ? "default" : "outline"}
+                size="sm"
+                className="rounded-full text-xs"
+                onClick={() => setCategoryFilter(cat.id)}
+              >
+                {cat.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <div className="data-table-wrapper">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead>Precio</TableHead>
+                {userProfile?.role === "admin" && <TableHead>Costo</TableHead>}
+                {userProfile?.role === "admin" && <TableHead>Margen</TableHead>}
+                <TableHead>Stock</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No se encontraron productos
                   </TableCell>
-                )}
-                <TableCell>{product.stock ?? "-"}</TableCell>
-                <TableCell>
-                  <Badge variant={product.isActive !== false ? "default" : "secondary"}>
+                </TableRow>
+              ) : (
+                filteredProducts.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell>
+                      <Badge className={categoryColors[product.category]}>
+                        {categoryLabels[product.category] || product.category}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{formatCurrency(product.price)}</TableCell>
+                    {userProfile?.role === "admin" && (
+                      <TableCell className="text-muted-foreground">{formatCurrency(product.costPrice || 0)}</TableCell>
+                    )}
+                    {userProfile?.role === "admin" && (
+                      <TableCell className="font-bold text-emerald-400">
+                        {formatCurrency(product.price - (product.costPrice || 0))}
+                      </TableCell>
+                    )}
+                    <TableCell>{product.stock ?? "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant={product.isActive !== false ? "default" : "secondary"}>
+                        {product.isActive !== false ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(product)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => onDelete(product.id)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="data-cards-wrapper mt-4">
+          {filteredProducts.map((product) => (
+            <Card key={`mob-${product.id}`} className="flex flex-col border-border/50 shadow-sm relative overflow-hidden">
+              <div className={cn("absolute left-0 top-0 bottom-0 w-1", categoryColors[product.category]?.split(' ')[0] || "bg-primary")} />
+              <CardContent className="p-4 pl-5">
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-bold text-sm leading-tight pr-2">{product.name}</h4>
+                  <Badge variant={product.isActive !== false ? "default" : "secondary"} className="text-[10px] whitespace-nowrap shrink-0">
                     {product.isActive !== false ? "Activo" : "Inactivo"}
                   </Badge>
-                </TableCell>
-                <TableCell className="text-right space-x-2">
-                  <Button variant="ghost" size="sm" onClick={() => handleEdit(product)}>
-                    <Pencil className="w-4 h-4" />
+                </div>
+                
+                <div className="flex items-center justify-between mb-3">
+                  <Badge className={cn("text-[10px]", categoryColors[product.category])}>
+                    {categoryLabels[product.category] || product.category}
+                  </Badge>
+                  <span className="font-mono font-bold text-primary">
+                    {formatCurrency(product.price)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-3 mb-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block mb-1">Stock Actual</span>
+                    <span className="font-medium">{product.stock ?? "-"}</span>
+                  </div>
+                  {userProfile?.role === "admin" && (
+                    <div>
+                      <span className="text-muted-foreground block mb-1">Margen</span>
+                      <span className="font-medium text-emerald-400">{formatCurrency(product.price - (product.costPrice || 0))}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-border/50">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => handleEdit(product)}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(product.id)}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => onDelete(product.id)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
                   </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          {filteredProducts.length === 0 && (
+             <div className="text-center py-8 text-muted-foreground border border-dashed rounded-xl">
+               No se encontraron productos
+             </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

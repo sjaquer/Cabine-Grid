@@ -35,6 +35,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { cn, formatCurrency } from "@/lib/utils";
 
 const customerSchema = z.object({
   customerCode: z.string().trim().min(1, "El codigo es obligatorio").max(30, "Maximo 30 caracteres"),
@@ -355,85 +356,121 @@ export default function CustomerManager({ customers, onAdd, onEdit, onDelete }: 
                 No se encontraron clientes con ese nombre o codigo.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Codigo</TableHead>
-                    <TableHead>Edad</TableHead>
-                    <TableHead>Juegos</TableHead>
-                    <TableHead>Sesiones</TableHead>
-                    <TableHead>Compras</TableHead>
-                    <TableHead>Horas</TableHead>
-                    <TableHead>Gasto</TableHead>
-                    <TableHead>Ticket prom.</TableHead>
-                    <TableHead>PC Frecuente</TableHead>
-                    <TableHead>Dias/Semana</TableHead>
-                    <TableHead>Hora frecuente</TableHead>
-                    <TableHead>Ultima visita</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <div className="space-y-4">
+                <div className="data-table-wrapper">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Sesiones</TableHead>
+                        <TableHead>Gasto Total</TableHead>
+                        <TableHead>Ticket Prom.</TableHead>
+                        <TableHead>Última Visita</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredCustomers.map((customer) => {
+                        const metrics = customer.metrics;
+                        const totalSessions = metrics?.totalSessions ?? 0;
+                        const totalSpent = metrics?.totalSpent ?? 0;
+                        const avgTicket = totalSessions > 0 ? totalSpent / totalSessions : 0;
+
+                        return (
+                          <TableRow key={customer.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <span className="p-1.5 rounded-md bg-primary/10 text-primary">
+                                  <UserRound className="w-3.5 h-3.5" />
+                                </span>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{customer.fullName}</span>
+                                  {customer.email && <span className="text-xs text-muted-foreground truncate max-w-[150px]">{customer.email}</span>}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">{customer.customerCode}</Badge>
+                            </TableCell>
+                            <TableCell>{totalSessions}</TableCell>
+                            <TableCell className="font-medium text-emerald-500">
+                              {formatCurrency(totalSpent)}
+                            </TableCell>
+                            <TableCell>{formatCurrency(avgTicket)}</TableCell>
+                            <TableCell>{formatCurrency(avgTicket) ? formatLastVisit(customer) : "-"}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="inline-flex items-center gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => onDelete(customer.id)}>
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="data-cards-wrapper">
                   {filteredCustomers.map((customer) => {
                     const metrics = customer.metrics;
-                    const favoritePc = getTopKey(metrics?.machineUsage, "-");
-                    const bestWeekday = getTopKey(metrics?.visitsByWeekday, "-");
-                    const frequentHour = getTopKey(metrics?.visitHours, "-");
-                    const weeklyDays = metrics?.visitsByWeekday
-                      ? Object.values(metrics.visitsByWeekday).filter((count) => count > 0).length
-                      : 0;
                     const totalSessions = metrics?.totalSessions ?? 0;
                     const totalSpent = metrics?.totalSpent ?? 0;
-                    const avgTicket = totalSessions > 0 ? totalSpent / totalSessions : 0;
-
-                    const weekdayText =
-                      bestWeekday !== "-" && weekdayLabels[Number(bestWeekday)]
-                        ? weekdayLabels[Number(bestWeekday)]
-                        : "-";
-
+                    
                     return (
-                      <TableRow key={customer.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="p-1.5 rounded-md bg-primary/10 text-primary">
-                              <UserRound className="w-3.5 h-3.5" />
-                            </span>
-                            <span className="font-medium">{customer.fullName}</span>
+                      <Card key={`mob-${customer.id}`} className="flex flex-col border-border/50 shadow-sm relative overflow-hidden">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                        <CardContent className="p-4 pl-5">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h4 className="font-bold text-sm leading-tight pr-2">{customer.fullName}</h4>
+                              <p className="text-xs text-muted-foreground mt-0.5">{customer.customerCode}</p>
+                            </div>
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {totalSessions} visitas
+                            </Badge>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{customer.customerCode}</Badge>
-                        </TableCell>
-                        <TableCell>{customer.age ?? "-"}</TableCell>
-                        <TableCell className="max-w-[220px] truncate">{toFavoriteGames(customer.favoriteGames)}</TableCell>
-                        <TableCell>{totalSessions}</TableCell>
-                        <TableCell>{metrics?.totalProductsBought ?? 0}</TableCell>
-                        <TableCell>{((metrics?.totalMinutesRented ?? 0) / 60).toFixed(1)}</TableCell>
-                        <TableCell>S/. {totalSpent.toFixed(2)}</TableCell>
-                        <TableCell>S/. {avgTicket.toFixed(2)}</TableCell>
-                        <TableCell>{favoritePc}</TableCell>
-                        <TableCell>{weeklyDays > 0 ? weeklyDays : "-"}</TableCell>
-                        <TableCell>
-                          {frequentHour !== "-" ? `${String(Number(frequentHour)).padStart(2, "0")}:00` : "-"}
-                          {weekdayText !== "-" ? ` (${weekdayText})` : ""}
-                        </TableCell>
-                        <TableCell>{formatLastVisit(customer)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex items-center gap-2">
-                            <Button variant="outline" size="icon" onClick={() => handleEdit(customer)}>
-                              <Pencil className="w-4 h-4" />
+                          
+                          <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+                            <div>
+                              <span className="text-muted-foreground block mb-1">Gasto Total</span>
+                              <span className="font-medium text-emerald-500">{formatCurrency(totalSpent)}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block mb-1">Última Visita</span>
+                              <span className="font-medium truncate block">{formatLastVisit(customer)}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-2 border-t border-border/50">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => handleEdit(customer)}
+                            >
+                              <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
                             </Button>
-                            <Button variant="destructive" size="icon" onClick={() => onDelete(customer.id)}>
-                              <Trash2 className="w-4 h-4" />
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => onDelete(customer.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
+                        </CardContent>
+                      </Card>
                     );
                   })}
-                </TableBody>
-              </Table>
+                </div>
+              </div>
             )}
           </div>
         )}

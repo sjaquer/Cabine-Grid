@@ -249,54 +249,51 @@ export default function AdminPage() {
       <div className="min-h-screen w-full bg-background text-foreground flex flex-col">
         
         {/* Hero KPI Command Bar */}
-        <header className="w-full border-b border-border bg-card/40 backdrop-blur-xl px-6 py-4">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-            <div>
-              <h1 className="text-xl font-headline font-bold tracking-tight">Panel de Administración</h1>
+        <header className="module-header flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+          <div>
+            <h1 className="text-xl font-headline font-bold tracking-tight">Panel de Administración</h1>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto flex-shrink-0">
+            <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Caja Hoy</span>
+              <span className="text-sm font-black font-mono text-primary mt-0.5">
+                {formatCurrency(todayRevenue)}
+              </span>
+            </div>
+            
+            <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ventas</span>
+              <span className="text-sm font-black font-mono text-foreground mt-0.5">
+                {sales.length} ops
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto flex-shrink-0">
-              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Caja Hoy</span>
-                <span className="text-sm font-black font-mono text-primary mt-0.5">
-                  {formatCurrency(todayRevenue)}
-                </span>
-              </div>
-              
-              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ventas</span>
-                <span className="text-sm font-black font-mono text-foreground mt-0.5">
-                  {sales.length} ops
-                </span>
-              </div>
+            <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cabinas</span>
+              <span className="text-sm font-black font-mono text-info mt-0.5">
+                {machines.length} pcs
+              </span>
+            </div>
 
-              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cabinas</span>
-                <span className="text-sm font-black font-mono text-info mt-0.5">
-                  {machines.length} pcs
-                </span>
-              </div>
-
-              <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Comunidad</span>
-                <span className="text-sm font-black font-mono text-status-warning mt-0.5">
-                  {customers.length} users
-                </span>
-              </div>
+            <div className="bg-card border border-border/50 rounded-xl px-4 py-2.5 flex flex-col shadow-sm">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Comunidad</span>
+              <span className="text-sm font-black font-mono text-status-warning mt-0.5">
+                {customers.length} users
+              </span>
             </div>
           </div>
         </header>
 
-        {/* Workspace: Sidebar + Content Area */}
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden w-full">
-          {/* Mobile Navigation */}
-          <nav className="w-full border-b border-border bg-card/30 flex overflow-x-auto p-2 gap-1 shrink-0 md:hidden no-scrollbar">
+        {/* Tabs de navegación — scroll horizontal en móvil */}
+        <div className="border-b border-border/40 bg-card/30 overflow-x-auto no-scrollbar">
+          <div className="flex gap-1 p-2 min-w-max">
             {sidebarItems.map((item) => {
               if (item.adminOnly && userProfile?.role !== 'admin') return null;
               const Icon = item.icon;
               return (
                 <button
-                  key={`mob-${item.id}`}
+                  key={item.id}
                   onClick={() => setActiveSection(item.id)}
                   className={cn(
                     "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
@@ -310,33 +307,11 @@ export default function AdminPage() {
                 </button>
               );
             })}
-          </nav>
+          </div>
+        </div>
 
-          {/* Internal Sidebar (Desktop) */}
-          <aside className="w-52 border-r border-border bg-card/30 flex flex-col gap-1 p-3 shrink-0 hidden md:flex">
-            {sidebarItems.map((item) => {
-              if (item.adminOnly && userProfile?.role !== 'admin') return null;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveSection(item.id)}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
-                    activeSection === item.id
-                      ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent"
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  {item.label}
-                </button>
-              );
-            })}
-          </aside>
-
-          {/* Workspace Content Section */}
-          <main className="flex-1 p-6 overflow-y-auto bg-background">
+        {/* Workspace Content Section */}
+        <main className="module-content flex flex-col w-full mx-auto">
             {activeSection === 'machines' && (
               <MachineManager
                 machines={machines}
@@ -371,7 +346,28 @@ export default function AdminPage() {
                 users={users}
                 locations={locations}
                 onCreateUser={async (u: any) => {
-                  toast({ title: "Crear staff mediante consola de seguridad" });
+                  try {
+                    const response = await fetch('/api/users', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(u),
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                      throw new Error(data.error || "Error al crear usuario");
+                    }
+                    
+                    toast({ title: "Usuario creado correctamente" });
+                  } catch (error: any) {
+                    toast({ 
+                      title: "Error al crear usuario", 
+                      description: error.message,
+                      variant: "destructive" 
+                    });
+                    throw error;
+                  }
                 }}
                 onChangeRole={async (id: string, role: any, locationIds: string[], permissions: string[]) => {
                   await updateDoc(doc(firestore, "users", id), { role, locationIds, permissions });
@@ -447,8 +443,6 @@ export default function AdminPage() {
               />
             )}
           </main>
-        </div>
-
       </div>
     </RoleGuard>
   );

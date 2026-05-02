@@ -40,10 +40,11 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Trash2, Shield, BarChart3, User } from "lucide-react";
+import { Pencil, Trash2, Shield, BarChart3, User, Plus, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { cn } from "@/lib/utils";
 
 const createUserSchema = z.object({
   name: z.string().trim().min(2, "Ingresa un nombre valido"),
@@ -192,118 +193,125 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Usuarios y Roles</CardTitle>
           <CardDescription>
             Configura usuarios y asigna roles
           </CardDescription>
         </div>
+        <Dialog open={isCreatingUser ? false : undefined}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="w-4 h-4" />
+              Nuevo Usuario
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Crear nuevo usuario</DialogTitle>
+              <DialogDescription>
+                Crea una cuenta nueva y asigna su rol inicial.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...createForm}>
+              <form onSubmit={createForm.handleSubmit(handleCreateUser)} className="space-y-4">
+                <FormField
+                  control={createForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ej. Juan Perez" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Correo</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="usuario@cabinegrid.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contraseña</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="Mínimo 6 caracteres" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Rol</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="manager">Gerente</SelectItem>
+                          <SelectItem value="operator">Operador</SelectItem>
+                          <SelectItem value="view-only">Lectura</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>{roleDescriptions[createForm.watch("role")]}</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {createForm.formState.errors.root?.message && (
+                  <p className="text-sm text-destructive">
+                    {createForm.formState.errors.root.message}
+                  </p>
+                )}
+                <DialogFooter>
+                  <Button type="submit" disabled={isCreatingUser}>
+                    {isCreatingUser ? "Creando..." : "Crear Usuario"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </CardHeader>
 
       <CardContent>
-        <div className="mb-6 rounded-lg border p-4 sm:p-5 bg-card">
-          <h3 className="font-semibold text-sm sm:text-base mb-1">Crear nuevo usuario</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground mb-4">
-            Crea cuentas nuevas y asigna su rol inicial.
-          </p>
-          <Form {...createForm}>
-            <form onSubmit={createForm.handleSubmit(handleCreateUser)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={createForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej. Juan Perez" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={createForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Correo</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="usuario@cabinegrid.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={createForm.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contrasena</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="Minimo 6 caracteres" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={createForm.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Rol</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="admin">Administrador</SelectItem>
-                        <SelectItem value="manager">Gerente</SelectItem>
-                        <SelectItem value="operator">Operador</SelectItem>
-                        <SelectItem value="view-only">Lectura</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>{roleDescriptions[createForm.watch("role")]}</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              {createForm.formState.errors.root?.message && (
-                <p className="md:col-span-2 text-sm text-destructive">
-                  {createForm.formState.errors.root.message}
-                </p>
-              )}
-              <div className="md:col-span-2 flex justify-end">
-                <Button type="submit" disabled={isCreatingUser}>
-                  {isCreatingUser ? "Creando..." : "Crear Usuario"}
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </div>
-
-        <div className="mb-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-          <h3 className="font-semibold text-sm mb-3">Roles Disponibles:</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {(Object.entries(roleDescriptions) as [UserRole, string][]).map(([role, desc]) => (
-              <div key={role} className="flex gap-2 text-sm">
-                <div className={`p-2 rounded flex-shrink-0 ${roleColors[role]}`}>
-                  {roleIcons[role]}
-                </div>
-                <div>
-                  <div className="font-medium capitalize">{role}</div>
-                  <div className="text-xs text-muted-foreground">{desc}</div>
-                </div>
-              </div>
-            ))}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between mb-4">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre o correo"
+              className="pl-9"
+              // Add search logic if needed, currently no search state is defined
+            />
           </div>
+          <p className="text-xs text-muted-foreground">
+            {users.length} usuario(s)
+          </p>
         </div>
 
-        <Table>
+        <div className="data-table-wrapper">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nombre/Email</TableHead>
@@ -375,7 +383,78 @@ export default function UserManager({ users, locations, onCreateUser, onChangeRo
             );
           })}
         </TableBody>
-        </Table>
+          </Table>
+        </div>
+
+        <div className="data-cards-wrapper mt-4">
+          {users.map((user) => {
+            const perms = user.permissions || [];
+            return (
+              <Card key={`mob-${user.uid}`} className="flex flex-col border-border/50 shadow-sm relative overflow-hidden">
+                {/* Indicator bar */}
+                <div className={cn("absolute left-0 top-0 bottom-0 w-1", roleColors[user.role].split(' ')[0])} />
+                
+                <CardContent className="p-4 pl-5">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h4 className="font-bold text-sm">{user.name || "Sin nombre"}</h4>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                    <Badge variant={user.isActive !== false ? "default" : "secondary"} className="text-[10px]">
+                      {user.isActive !== false ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 mt-3 mb-3 text-xs">
+                    <div>
+                      <span className="text-muted-foreground block mb-1">Rol</span>
+                      <div className="flex items-center gap-1 font-medium">
+                        {roleIcons[user.role]}
+                        <span className="capitalize">{user.role}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block mb-1">Local</span>
+                      <span className="font-medium truncate block">{getUserLocationText(user)}</span>
+                    </div>
+                  </div>
+
+                  {perms.length > 0 && (
+                    <div className="mb-4">
+                      <span className="text-[10px] text-muted-foreground block mb-1">Permisos</span>
+                      <div className="flex flex-wrap gap-1">
+                        {perms.includes("void_sales") && <Badge variant="outline" className="text-[9px]">Anular</Badge>}
+                        {perms.includes("free_time") && <Badge variant="outline" className="text-[9px]">Tiempo</Badge>}
+                        {perms.includes("cash_drawer") && <Badge variant="outline" className="text-[9px]">Caja</Badge>}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-border/50">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => handleEdit(user)}
+                      disabled={user.uid === "self"}
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => onDeactivate(user.uid)}
+                      disabled={user.uid === "self" || user.role === "admin"}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1" /> {user.isActive !== false ? "Desactivar" : "Eliminar"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent>

@@ -800,109 +800,105 @@ export default function InventoryPage() {
                 </div>
               ) : (
                 <>
-                  <div className="hidden md:block overflow-x-auto">
+                  <div className="data-table-wrapper rounded-xl border border-border/50 bg-card/30">
                     <Table>
-                    <TableHeader className="bg-background border-b border-border">
-                      <TableRow className="border-none hover:bg-background">
-                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Producto</TableHead>
-                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Categoría</TableHead>
-                        <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Stock</TableHead>
-                        <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Mín.</TableHead>
-                        {userProfile?.role === "admin" && (
-                          <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Margen</TableHead>
-                        )}
-                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Estado</TableHead>
-                        <TableHead className="text-muted-foreground font-semibold px-2 py-2 text-xs">Ajuste Rápido</TableHead>
-                        <TableHead className="text-right text-muted-foreground font-semibold px-2 py-2 text-xs">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rows.map((row, index) => {
-                        const status = indicator(row.stock, row.minStock);
-                        const margin = row.price - (row.costPrice || 0);
-                        const isSelected = index === selectedRowIndex;
-                        return (
-                          <TableRow 
-                            key={row.productId} 
-                            className={cn(
-                              "border-border transition-colors duration-150 border-b cursor-pointer",
-                              isSelected ? "bg-secondary/60 text-foreground ring-1 ring-emerald-500/40 border-emerald-500/50" : "hover:bg-secondary/20 text-secondary-foreground"
-                            )}
-                            onClick={() => setSelectedRowIndex(index)}
-                          >
-                            <TableCell className="font-medium text-foreground px-2 py-1 text-xs max-w-[200px] truncate">{row.productName}</TableCell>
-                            <TableCell className="px-2 py-1 text-xs">
-                              <Badge className={`${categoryStyles[row.category] || "bg-secondary text-secondary-foreground"} text-[10px] px-1.5 py-0.5 border`}>
-                                {row.categoryLabel}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-mono font-semibold text-foreground px-2 py-1 text-xs">{row.stock}</TableCell>
-                            <TableCell className="text-right font-mono text-muted-foreground px-2 py-1 text-xs">{row.minStock}</TableCell>
-                            {userProfile?.role === "admin" && (
-                              <TableCell className="text-right font-mono font-bold text-emerald-400 px-2 py-1 text-xs">
-                                S/ {margin.toFixed(2)}
+                      <TableHeader className="bg-muted/50">
+                        <TableRow>
+                          <TableHead className="w-[300px]">Producto</TableHead>
+                          <TableHead>Precio</TableHead>
+                          <TableHead>Stock actual</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Ajuste Rápido</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rows.map((row, index) => {
+                          const status = indicator(row.stock, row.minStock);
+                          const isSelected = index === selectedRowIndex;
+                          return (
+                            <TableRow 
+                              key={row.productId} 
+                              className={cn(
+                                "transition-colors",
+                                isSelected ? "bg-secondary/40" : "hover:bg-muted/30",
+                                row.stock <= 0 && "bg-red-500/5 hover:bg-red-500/10"
+                              )}
+                            >
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-headline font-bold text-sm">{row.productName}</span>
+                                  <Badge className={`${categoryStyles[row.category] || "bg-secondary text-secondary-foreground"} text-[10px] w-fit px-1.5 py-0 border`}>
+                                    {row.categoryLabel}
+                                  </Badge>
+                                </div>
                               </TableCell>
-                            )}
-                            <TableCell className="px-2 py-1 text-xs">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border text-[10px] ${status.className}`}>
-                                {status.label}
-                              </span>
-                            </TableCell>
-                            <TableCell className="px-2 py-1 text-xs">
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-400"
-                                  disabled={!canManage || !selectedLocationId || busyActionKey !== null}
-                                  onClick={() => applyInventoryAdjustment(row, "entry", 1, "Ajuste rápido +1")}
-                                >
-                                  <TrendingUp className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-destructive hover:bg-rose-500/20 hover:text-rose-400"
-                                  disabled={!canManage || !selectedLocationId || row.stock <= 0 || busyActionKey !== null}
-                                  onClick={() => applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1")}
-                                >
-                                  <TrendingDown className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right px-2 py-1">
-                              <div className="flex gap-1 justify-end">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  className="gap-1 h-7 text-xs bg-secondary text-secondary-foreground hover:bg-zinc-700 border-border"
-                                  disabled={!canManage || !selectedLocationId}
-                                  onClick={() => openAdjustDialog(row)}
-                                >
-                                  <PlusCircle className="w-3 h-3" />
-                                  <span className="hidden sm:inline">Ajustar</span>
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-1 h-7 text-xs border-border hover:bg-secondary text-muted-foreground"
-                                  onClick={() => openDiscrepancyDialog(row)}
-                                  disabled={!canManage}
-                                  title="Auditar diferencia"
-                                >
-                                  <AlertTriangle className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
+                              <TableCell className="font-mono text-sm font-semibold">S/ {row.price.toFixed(2)}</TableCell>
+                              <TableCell>
+                                <span className="font-mono text-lg font-bold">
+                                  {row.stock}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={`${status.className} text-[10px] px-2 py-0.5 border`}>
+                                  {status.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="px-2 py-1 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-400"
+                                    disabled={!canManage || !selectedLocationId || busyActionKey !== null}
+                                    onClick={() => applyInventoryAdjustment(row, "entry", 1, "Ajuste rápido +1")}
+                                  >
+                                    <TrendingUp className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-destructive hover:bg-rose-500/20 hover:text-rose-400"
+                                    disabled={!canManage || !selectedLocationId || row.stock <= 0 || busyActionKey !== null}
+                                    onClick={() => applyInventoryAdjustment(row, "exit", 1, "Ajuste rápido -1")}
+                                  >
+                                    <TrendingDown className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right px-2 py-1">
+                                <div className="flex gap-1 justify-end">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="gap-1 h-7 text-xs bg-secondary text-secondary-foreground hover:bg-zinc-700 border-border"
+                                    disabled={!canManage || !selectedLocationId}
+                                    onClick={() => openAdjustDialog(row)}
+                                  >
+                                    <PlusCircle className="w-3 h-3" />
+                                    <span className="hidden sm:inline">Ajustar</span>
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1 h-7 text-xs border-border hover:bg-secondary text-muted-foreground"
+                                    onClick={() => openDiscrepancyDialog(row)}
+                                    disabled={!canManage}
+                                    title="Auditar diferencia"
+                                  >
+                                    <AlertTriangle className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
                     </Table>
                   </div>
 
                   {/* Mobile Cards View */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 md:hidden">
+                  <div className="data-cards-wrapper mt-4 p-4 md:hidden">
                     {rows.map((row, index) => {
                       const status = indicator(row.stock, row.minStock);
                       const isSelected = index === selectedRowIndex;

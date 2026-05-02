@@ -50,11 +50,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Power, Computer, Gamepad } from "lucide-react";
+import { Plus, Pencil, Trash2, Power, Computer, Gamepad, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { Location } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const stationSchema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
@@ -89,6 +90,8 @@ export default function MachineManager({
 }: StationManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [locationFilter, setLocationFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const form = useForm<StationFormValues>({
     resolver: zodResolver(stationSchema),
@@ -99,6 +102,12 @@ export default function MachineManager({
       locationId: "",
       specs: {},
     },
+  });
+
+  const filteredStations = stations.filter(station => {
+    const matchesLocation = locationFilter === "all" || station.locationId === locationFilter;
+    const matchesSearch = station.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesLocation && matchesSearch;
   });
 
   const handleSubmit = async (values: StationFormValues) => {
@@ -335,57 +344,158 @@ export default function MachineManager({
       </CardHeader>
 
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nombre</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Local</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead>Tarifa</TableHead>
-              <TableHead>Especificaciones</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {stations.map((station) => (
-              <TableRow key={station.id}>
-                <TableCell className="font-medium">{station.name}</TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="gap-1">
-                    {station.type === 'PS5' || station.type === 'XBOX' ? <Gamepad className="w-3 h-3" /> : <Computer className="w-3 h-3" />}
-                    {station.type || 'PC'}
-                  </Badge>
-                </TableCell>
-                <TableCell>{locationMap.get(station.locationId || "") || "Sin local"}</TableCell>
-                <TableCell>
-                  <Badge className={statusBadgeColor[station.status]}>
-                    {station.status === "available"
-                      ? "Disponible"
-                      : station.status === "occupied"
-                      ? "En Uso"
-                      : station.status === "warning"
-                      ? "Alerta"
-                      : "Mantenimiento"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="font-mono font-semibold">
-                  S/. {(station.hourlyRate || 3.00).toFixed(2)}/hr
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {station.specs?.processor ? `${station.specs.processor} • ${station.specs.ram}` : "Sin especificaciones"}
-                </TableCell>
-                <TableCell className="text-right space-x-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between mb-4 filter-bar">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar estación..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-background/50"
+            />
+          </div>
+          <Select value={locationFilter} onValueChange={setLocationFilter}>
+            <SelectTrigger className="w-full sm:w-[200px] bg-background/50">
+              <SelectValue placeholder="Filtrar por local" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los locales</SelectItem>
+              {locations.map((loc) => (
+                <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="data-table-wrapper">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Local</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Tarifa</TableHead>
+                <TableHead>Especificaciones</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredStations.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    No se encontraron estaciones
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredStations.map((station) => (
+                  <TableRow key={station.id}>
+                    <TableCell className="font-medium">{station.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="gap-1">
+                        {station.type === 'PS5' || station.type === 'XBOX' ? <Gamepad className="w-3 h-3" /> : <Computer className="w-3 h-3" />}
+                        {station.type || 'PC'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{locationMap.get(station.locationId || "") || "Sin local"}</TableCell>
+                    <TableCell>
+                      <Badge className={statusBadgeColor[station.status]}>
+                        {station.status === "available"
+                          ? "Disponible"
+                          : station.status === "occupied"
+                          ? "En Uso"
+                          : station.status === "warning"
+                          ? "Alerta"
+                          : "Mantenimiento"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono font-semibold">
+                      S/. {(station.hourlyRate || 3.00).toFixed(2)}/hr
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {station.specs?.processor ? `${station.specs.processor} • ${station.specs.ram}` : "Sin especificaciones"}
+                    </TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(station)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          onToggleStatus(
+                            station.id,
+                            station.status === "maintenance" ? "available" : "maintenance"
+                          )
+                        }
+                      >
+                        <Power className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDelete(station.id)}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="data-cards-wrapper mt-4">
+          {filteredStations.map((station) => (
+            <Card key={`mob-${station.id}`} className="flex flex-col border-border/50 shadow-sm relative overflow-hidden">
+              <div className={cn("absolute left-0 top-0 bottom-0 w-1", statusBadgeColor[station.status].split(' ')[0])} />
+              <CardContent className="p-4 pl-5">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex items-center gap-2">
+                    {station.type === 'PS5' || station.type === 'XBOX' ? <Gamepad className="w-4 h-4 text-muted-foreground" /> : <Computer className="w-4 h-4 text-muted-foreground" />}
+                    <h4 className="font-bold text-sm">{station.name}</h4>
+                  </div>
+                  <span className="font-mono font-semibold text-primary text-xs">
+                    S/. {(station.hourlyRate || 3.00).toFixed(2)}/hr
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 mt-3 mb-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block mb-1">Local</span>
+                    <span className="font-medium truncate block">{locationMap.get(station.locationId || "") || "Sin local"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block mb-1">Tipo</span>
+                    <span className="font-medium truncate block">{station.type || 'PC'}</span>
+                  </div>
+                </div>
+
+                {station.specs?.processor && (
+                  <div className="mb-4 text-xs">
+                    <span className="text-muted-foreground block mb-1">Especificaciones</span>
+                    <span className="text-muted-foreground block truncate">{station.specs.processor} • {station.specs.ram}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-border/50">
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
+                    className="h-8 text-xs"
                     onClick={() => handleEdit(station)}
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
+                    className="h-8 text-xs"
                     onClick={() =>
                       onToggleStatus(
                         station.id,
@@ -393,20 +503,26 @@ export default function MachineManager({
                       )
                     }
                   >
-                    <Power className="w-4 h-4" />
+                    <Power className="w-3.5 h-3.5 mr-1" /> {station.status === "maintenance" ? "Habilitar" : "Mant."}
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="destructive"
                     size="sm"
+                    className="h-8 text-xs"
                     onClick={() => onDelete(station.id)}
                   >
-                    <Trash2 className="w-4 h-4 text-destructive" />
+                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
                   </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          {filteredStations.length === 0 && (
+             <div className="text-center py-8 text-muted-foreground border border-dashed rounded-xl">
+               No se encontraron estaciones
+             </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

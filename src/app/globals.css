@@ -218,6 +218,31 @@
   .app-stagger > *:nth-child(2) { animation-delay: 70ms; }
   .app-stagger > *:nth-child(3) { animation-delay: 110ms; }
   .app-stagger > *:nth-child(4) { animation-delay: 150ms; }
+
+  /* Sistema de layout responsivo para módulos admin/inventario */
+  .module-header {
+    @apply sticky top-0 z-30 border-b border-border/50 bg-card/85 backdrop-blur-xl px-4 py-3;
+  }
+
+  .module-content {
+    @apply flex-1 overflow-y-auto px-4 py-6;
+    /* Máximo ancho para legibilidad en pantallas ultra-wide */
+    max-width: 1600px;
+  }
+
+  /* Tabla adaptativa: tabla en desktop, cards en móvil */
+  .data-table-wrapper {
+    @apply hidden md:block overflow-x-auto;
+  }
+
+  .data-cards-wrapper {
+    @apply grid grid-cols-1 sm:grid-cols-2 gap-3 md:hidden;
+  }
+
+  /* Barra de filtros horizontal */
+  .filter-bar {
+    @apply flex flex-wrap items-center gap-2 p-3 bg-card/40 border border-border/50 rounded-xl;
+  }
 }
 
 @keyframes app-fade-up {
