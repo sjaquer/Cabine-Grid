@@ -1,152 +1,110 @@
-# Cabine Grid
+# Cabine Grid 🎮💼
 
-Cabine Grid es una aplicacion web privada para gestionar un negocio de cabinas de internet con ventas de productos, control de inventario, arqueo de caja y auditoria operativa.
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%26%20Firestore-orange?style=flat-square&logo=firebase)](https://firebase.google.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-## Objetivo del Sistema
+[**Español**](#español) | [**English**](#english)
 
-- Gestion de cabinas en tiempo real (asignar, monitorear, cobrar)
-- Punto de venta (TPV/POS) integrado por sesion
-- Control de inventario por local con movimientos de stock
-- Cierre de turno con validaciones y trazabilidad
-- Reportes y auditoria para administracion
+---
 
-## Stack Tecnologico
+<a name="english"></a>
+## 🇺🇸 English
 
-- Next.js 15 + React 19 + TypeScript
-- Firebase Auth + Firestore
-- Tailwind + componentes UI reutilizables
-- Reglas de seguridad Firestore por rol y local
+**Cabine Grid** is a comprehensive management system designed for internet cabins (LAN centers) and cyber-cafés. It provides real-time control over PC sessions, inventory management, sales tracking, and operational auditing.
 
-## Estructura Principal
+### ✨ Key Features
+- **Real-time Monitoring:** Assign, monitor, and charge sessions directly from a grid-based dashboard.
+- **Integrated POS:** Register product sales linked to active sessions or stand-alone sales.
+- **Inventory Control:** Manage stock across multiple locations with movement history and low-stock alerts.
+- **Shift Management:** Structured shift closure with automated reports and cash-flow reconciliation.
+- **Security:** Role-based access control (RBAC) via Firestore Security Rules.
+- **Auditing:** Complete logs of sensitive operations for administrative review.
 
-- `src/app/` rutas de la aplicacion
-- `src/components/dashboard/` operacion diaria (cabinas, TPV, cobro)
-- `src/components/admin/` gestion administrativa
-- `src/firebase/` proveedor Firebase y contexto de autenticacion
-- `src/lib/` logica de negocio (cierres, costos, auditoria, reportes)
-- `firestore.rules` politicas de acceso a datos
-- `next.config.ts` configuracion de build, headers y hardening HTTP
+### 🛠 Tech Stack
+- **Framework:** Next.js 15 (App Router) + React 19
+- **Language:** TypeScript
+- **Backend/Database:** Firebase (Authentication + Firestore)
+- **Styling:** Tailwind CSS + Radix UI (Shadcn/UI)
+- **State Management:** Zustand
 
-## Requisitos
+### 🚀 Getting Started
 
-- Node.js 20+
-- npm 10+
-- Proyecto Firebase con Auth + Firestore habilitado
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/your-username/cabine-grid.git
+   cd cabine-grid
+   ```
 
-## Variables de Entorno
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-Configura un archivo `.env.local` con:
+3. **Configure Environment Variables:**
+   Create a `.env.local` file based on `.env.example`:
+   ```bash
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+   NEXT_PUBLIC_FIREBASE_API_KEY=...
+   # ... add other variables from .env.example
+   ```
 
-```bash
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=
-NEXT_PUBLIC_FIREBASE_APP_ID=
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-```
+4. **Run development server:**
+   ```bash
+   npm run dev
+   ```
 
-Notas:
+---
 
-- Las variables `NEXT_PUBLIC_*` son usadas por el SDK cliente de Firebase.
-- La seguridad real depende de `firestore.rules` y de los permisos de Firebase Auth.
+<a name="español"></a>
+## 🇪🇸 Español
 
-## Instalacion y Ejecucion
+**Cabine Grid** es un sistema de gestión integral diseñado para cabinas de internet (LAN centers) y cyber-cafés. Proporciona control en tiempo real sobre las sesiones de PC, gestión de inventario, seguimiento de ventas y auditoría operativa.
 
-```bash
-npm install
-npm run dev
-```
+### ✨ Características Principales
+- **Monitoreo en Tiempo Real:** Asigne, monitoree y cobre sesiones directamente desde un panel en cuadrícula.
+- **Punto de Venta (POS) Integrado:** Registre ventas de productos vinculadas a sesiones activas o ventas independientes.
+- **Control de Inventario:** Gestione stock en múltiples locales con historial de movimientos y alertas de stock bajo.
+- **Gestión de Turnos:** Cierre de turno estructurado con reportes automáticos y conciliación de caja.
+- **Seguridad:** Control de acceso basado en roles (RBAC) mediante Reglas de Seguridad de Firestore.
+- **Auditoría:** Registros completos de operaciones sensibles para revisión administrativa.
 
-Scripts utiles:
+### 🛠 Tecnologías
+- **Framework:** Next.js 15 (App Router) + React 19
+- **Lenguaje:** TypeScript
+- **Backend/Base de Datos:** Firebase (Authentication + Firestore)
+- **Estilos:** Tailwind CSS + Radix UI (Shadcn/UI)
+- **Estado:** Zustand
 
-```bash
-npm run dev
-npm run typecheck
-npm run lint
-npm run build
-npm run start
-```
+### 🚀 Inicio Rápido
 
-## Roles y Accesos
+1. **Clonar el repositorio:**
+   ```bash
+   git clone https://github.com/tu-usuario/cabine-grid.git
+   cd cabine-grid
+   ```
 
-Roles soportados:
+2. **Instalar dependencias:**
+   ```bash
+   npm install
+   ```
 
-- `admin`
-- `manager`
-- `operator`
-- `view-only`
+3. **Configurar Variables de Entorno:**
+   Cree un archivo `.env.local` basado en `.env.example`:
+   ```bash
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+   NEXT_PUBLIC_FIREBASE_API_KEY=...
+   # ... completar con sus credenciales de Firebase
+   ```
 
-Reglas generales:
+4. **Ejecutar servidor de desarrollo:**
+   ```bash
+   npm run dev
+   ```
 
-- `admin/manager`: gestion global
-- `operator`: operacion diaria y acceso por local asignado
-- `view-only`: solo lectura segun reglas
+---
 
-## Modelo Operativo (Resumen)
-
-1. Asignar sesion a cabina
-2. Registrar productos consumidos en TPV
-3. Cobrar y cerrar sesion con transaccion atomica
-
-El cierre de sesion registra:
-
-- venta
-- rebaja de inventario
-- movimiento de stock
-- liberacion de cabina
-
-## Seguridad y Privacidad (Modo App Privada)
-
-El proyecto esta configurado para minimizar descubrimiento publico:
-
-- `public/robots.txt` con `Disallow: /`
-- metadata global con `robots: noindex, nofollow`
-- header `X-Robots-Tag` global noindex/nofollow/noarchive
-- headers de hardening HTTP (frame, sniffing, referrer, permissions)
-
-Importante:
-
-- Noindex reduce indexacion en buscadores, pero no reemplaza autenticacion.
-- Para acceso realmente privado: limitar acceso por red, dominios internos y controles de identidad fuertes.
-
-## Despliegue Recomendado (Privado)
-
-1. Publicar solo en dominio controlado
-2. Restringir usuarios autorizados en Firebase Auth
-3. Aplicar reglas Firestore en produccion
-4. Deshabilitar cuentas inactivas
-5. Revisar logs de auditoria regularmente
-
-## Checklist de Hardening
-
-- [x] Reglas Firestore por rol
-- [x] Controles por local para colecciones operativas
-- [x] Noindex global en metadata + headers + robots
-- [x] Bloqueo de iframe (clickjacking)
-- [x] `X-Content-Type-Options: nosniff`
-- [x] `Referrer-Policy: no-referrer`
-- [x] Build con typecheck/lint habilitado
-
-Recomendaciones adicionales:
-
-- Habilitar MFA para cuentas admin/manager
-- Configurar alertas de seguridad en Firebase
-- Rotar claves y credenciales operativas periodicamente
-- Implementar monitoreo de intentos de acceso inusual
-
-## Troubleshooting Rapido
-
-### Error en transacciones Firestore
-
-Si aparece `Firestore transactions require all reads to be executed before all writes`, revisar que dentro de cada transaccion todas las lecturas ocurran antes de cualquier escritura.
-
-### Sesiones que no cierran correctamente
-
-- Verificar permisos del rol
-- Validar `firestore.rules` desplegadas
-- Revisar logs de auditoria para errores de cierre
-
-## Estado del Proyecto
-
-Cabine Grid esta orientado a uso interno/privado para operacion de negocio y no como sitio publico indexable.
+## 📄 License | Licencia
+Distributed under the MIT License. See `LICENSE` for more information.
+Distribuido bajo la Licencia MIT. Vea el archivo `LICENSE` para más información.

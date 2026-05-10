@@ -1,7 +1,9 @@
 {
-  "name": "nextn",
-  "version": "0.1.0",
-  "private": true,
+  "name": "cabine-grid",
+  "version": "1.0.0",
+  "description": "A comprehensive management system for cyber-cafes and internet cabins built with Next.js and Firebase.",
+  "license": "MIT",
+  "private": false,
   "scripts": {
     "dev": "next dev --turbopack -p 9002",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
